@@ -1,0 +1,46 @@
+name: Promote release ZIP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/promote-release-asset.yml'
+      - 'release/**'
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find latest release and upload linked ZIP as asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_JSON="$(gh api "repos/$REPO/releases/latest")"
+          TAG="$(printf '%s' "$RELEASE_JSON" | jq -r '.tag_name')"
+          ASSET_COUNT="$(printf '%s' "$RELEASE_JSON" | jq '[.assets[] | select(.name | ascii_downcase | endswith(".zip"))] | length')"
+          if [ "$ASSET_COUNT" -gt 0 ]; then
+            echo "ZIP asset already exists for $TAG"
+            exit 0
+          fi
+
+          BODY="$(printf '%s' "$RELEASE_JSON" | jq -r '.body // ""')"
+          URL="$(printf '%s\n' "$BODY" | grep -Eo 'https://github\.com/user-attachments/files/[0-9]+/[^ )]+\.zip' | head -n 1 || true)"
+          if [ -z "$URL" ]; then
+            echo "No linked ZIP found in release body"
+            exit 0
+          fi
+
+          FILE="$(basename "$URL")"
+          echo "Downloading $FILE"
+          curl -fL --retry 3 "$URL" -o "$FILE"
+          echo "Uploading $FILE to release $TAG"
+          gh release upload "$TAG" "$FILE" --repo "$REPO" --clobber
