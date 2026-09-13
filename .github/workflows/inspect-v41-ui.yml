@@ -1,4 +1,4 @@
-name: Verify v28 attachment
+name: Inspect v46 baseline
 on:
   push:
     branches: [main]
@@ -12,13 +12,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download and verify v28 attachment
+      - name: Inspect v46 source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          URL='https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip'
-          curl -L --fail --retry 3 "$URL" -o /tmp/v28.zip
-          ls -lh /tmp/v28.zip
-          sha256sum /tmp/v28.zip
-          unzip -t /tmp/v28.zip >/dev/null
-          echo V28_ATTACHMENT_OK
+          rm -rf /tmp/v46 && mkdir -p /tmp/v46
+          gh release download v46 --repo "$REPO" --pattern 'CombinedFishingDungeon_v46_StabilityRemote.zip' --dir /tmp/v46
+          unzip -q /tmp/v46/CombinedFishingDungeon_v46_StabilityRemote.zip -d /tmp/v46/src
+          ROOT="$(find /tmp/v46/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          echo '=== FILE LIST ==='
+          find "$ROOT" -maxdepth 3 -type f | sort
+          echo '=== MAINFORM HEAD/UPDATE ==='
+          sed -n '1,220p' "$ROOT/FishingAutomation/MainForm.cs"
+          grep -n -A 120 -B 20 -E 'CheckForUpdates|UpdateManager|Watchdog|Shown \+=' "$ROOT/FishingAutomation/MainForm.cs" || true
+          echo '=== DASHBOARD ==='
+          cat "$ROOT/FishingAutomation/MainForm.Dashboard.cs"
+          echo '=== UPDATE MANAGER ==='
+          cat "$ROOT/FishingAutomation/UpdateManager.cs" || true
+          echo '=== WATCHDOG CLIENT ==='
+          cat "$ROOT/FishingAutomation/WatchdogClient.cs" || true
+          echo '=== ABYSS TARGETS/MONITORS ==='
+          cat "$ROOT/FishingAutomation/abyss/config/targets.json"
+          cat "$ROOT/FishingAutomation/abyss/config/scenario.json"
