@@ -12,20 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download v41 source and inspect UI
+      - name: Download v42 source and inspect exit state
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v41ui && mkdir -p /tmp/v41ui
-          gh release download v41 --repo "$REPO" --pattern 'CombinedFishingDungeon_v41_StabilityRemote.zip' --dir /tmp/v41ui
-          unzip -q /tmp/v41ui/CombinedFishingDungeon_v41_StabilityRemote.zip -d /tmp/v41ui/src
-          ROOT="$(find /tmp/v41ui/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          S="$ROOT/FishingAutomation/Dungeon/ScenarioEngine.cs"
-          M="$ROOT/FishingAutomation/Dungeon/Models.cs"
-          echo '=== SCENARIO ENGINE 190-520 ==='
-          nl -ba "$S" | sed -n '190,520p'
-          echo '=== MODEL FILES ==='
-          grep -RIn -C 6 --include='*.cs' -E 'class Monitor|record Monitor|ScenarioMonitor|ScanIntervalMs|TargetDefinition|Roi' "$ROOT/FishingAutomation/Dungeon" | head -n 400 || true
+          rm -rf /tmp/v42ui && mkdir -p /tmp/v42ui
+          gh release download v42 --repo "$REPO" --pattern 'CombinedFishingDungeon_v42_StabilityRemote.zip' --dir /tmp/v42ui
+          unzip -q /tmp/v42ui/CombinedFishingDungeon_v42_StabilityRemote.zip -d /tmp/v42ui/src
+          ROOT="$(find /tmp/v42ui/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          echo '=== EXIT STATUS ==='
+          grep -RIn -C 8 --include='*.cs' -E '퇴장|나가기|상태|Status' "$ROOT/FishingAutomation" | head -n 800 || true
