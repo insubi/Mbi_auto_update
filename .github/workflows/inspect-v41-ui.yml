@@ -23,9 +23,13 @@ jobs:
           gh release download v41 --repo "$REPO" --pattern 'CombinedFishingDungeon_v41_StabilityRemote.zip' --dir /tmp/v41ui
           unzip -q /tmp/v41ui/CombinedFishingDungeon_v41_StabilityRemote.zip -d /tmp/v41ui/src
           ROOT="$(find /tmp/v41ui/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== FILES ==='
-          find "$ROOT/FishingAutomation" -maxdepth 2 -type f | sed "s#$ROOT/##" | sort | grep -E 'MainForm|Dashboard|Abyss|UI' || true
-          echo '=== LIVE LOG HITS ==='
-          grep -RIn -C 10 --include='*.cs' -E '실시간 로그|로그' "$ROOT/FishingAutomation" | head -n 300 || true
-          echo '=== ABYSS LABEL HITS ==='
-          grep -RIn -C 14 --include='*.cs' -E '허상의 정박지|광기의 동굴|흩어진 물길|미니 모드|현재 던전 / 모드' "$ROOT/FishingAutomation" | head -n 500 || true
+          D="$ROOT/FishingAutomation/MainForm.Dashboard.cs"
+          M="$ROOT/FishingAutomation/MainForm.cs"
+          echo '=== DASHBOARD 1-180 ==='
+          nl -ba "$D" | sed -n '1,180p'
+          echo '=== DASHBOARD 180-390 ==='
+          nl -ba "$D" | sed -n '180,390p'
+          echo '=== DASHBOARD 390-540 ==='
+          nl -ba "$D" | sed -n '390,540p'
+          echo '=== MAINFORM 1-220 ==='
+          nl -ba "$M" | sed -n '1,220p'
