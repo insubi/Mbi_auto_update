@@ -47,64 +47,25 @@ jobs:
               $_.name -notmatch '(?i)Windows_Ready|Windows_Lite|Prebuilt'
             } |
             Select-Object -First 1
-
           if (-not $sourceAsset) { throw "No source ZIP asset found in release $tag." }
 
           Write-Host "Release: $tag"
           Write-Host "Source asset: $($sourceAsset.name)"
 
-          $sourceZip = Join-Path $PWD 'source.zip'
+          $sourceZip = Join-Path $PWD $sourceAsset.name
           Invoke-WebRequest -Uri $sourceAsset.browser_download_url -OutFile $sourceZip
           if ((Get-Item $sourceZip).Length -lt 1024) { throw 'Downloaded source ZIP is unexpectedly small.' }
 
           $work = Join-Path $PWD 'work'
-          if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $work | Out-Null
           tar -xf $sourceZip -C $work
           if ($LASTEXITCODE -ne 0) { throw 'Source ZIP extraction failed.' }
 
           $mainProj = Get-ChildItem -Path $work -Recurse -Filter 'FishingAutomation.csproj' | Select-Object -First 1
           if (-not $mainProj) { throw 'FishingAutomation.csproj not found in source ZIP.' }
-
           $appDir = $mainProj.Directory.FullName
           $packageRoot = Split-Path $appDir -Parent
-
-          # Build the executable so future in-app updates prefer the prebuilt Lite ZIP.
-          $updateFile = Join-Path $appDir 'UpdateManager.cs'
-          if (Test-Path $updateFile) {
-            $u = Get-Content -LiteralPath $updateFile -Raw
-            if ($u -notmatch 'Windows_Lite') {
-              $old = @'
-        var asset = assets.FirstOrDefault(a =>
-            a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-            (a.Name.Contains("CombinedFishingDungeon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("Mabi", StringComparison.OrdinalIgnoreCase)));
-        if (string.IsNullOrWhiteSpace(asset.Url))
-            asset = assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-'@
-              $new = @'
-        var asset = assets.FirstOrDefault(a =>
-            a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-            a.Name.Contains("Windows_Lite", StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(asset.Url))
-            asset = assets.FirstOrDefault(a =>
-                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                a.Name.Contains("Windows_Ready", StringComparison.OrdinalIgnoreCase));
-        if (string.IsNullOrWhiteSpace(asset.Url))
-            asset = assets.FirstOrDefault(a =>
-                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-                (a.Name.Contains("CombinedFishingDungeon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("Mabi", StringComparison.OrdinalIgnoreCase)));
-        if (string.IsNullOrWhiteSpace(asset.Url))
-            asset = assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
-'@
-              if ($u.Contains($old)) {
-                $u = $u.Replace($old, $new)
-                Set-Content -LiteralPath $updateFile -Value $u -Encoding UTF8
-                Write-Host 'UpdateManager patched to prefer Windows_Lite.'
-              } else {
-                Write-Warning 'UpdateManager asset-selection block not found; continuing without patch.'
-              }
-            }
-          }
 
           $publishMain = Join-Path $PWD 'publish-main'
           $publishWatch = Join-Path $PWD 'publish-watchdog'
@@ -153,11 +114,9 @@ jobs:
             $watchExe = Join-Path $publishWatch 'MacroWatchdog.exe'
             if (Test-Path $watchExe) { Copy-Item $watchExe (Join-Path $runtimeDir 'MacroWatchdog.exe') -Force }
           }
+          if (-not (Test-Path (Join-Path $runtimeDir 'FishingAutomation.exe'))) { throw 'FishingAutomation.exe was not created.' }
 
-          $mainExe = Join-Path $runtimeDir 'FishingAutomation.exe'
-          if (-not (Test-Path $mainExe)) { throw 'FishingAutomation.exe was not created.' }
-
-          # Keep only the small editable runtime assets needed by setup/template tools.
+          # Minimal editable copy for setup and template tools only; no C# source or build folders.
           $miniSource = Join-Path $liteRoot 'FishingAutomation'
           New-Item -ItemType Directory -Path $miniSource | Out-Null
           foreach ($name in @('config.json','notification.json','interception.dll')) {
@@ -175,77 +134,75 @@ jobs:
             $src = Join-Path (Join-Path $packageRoot 'tools') $tool
             if (Test-Path $src) { Copy-Item $src (Join-Path $toolsOut $tool) -Force }
           }
-
           foreach ($rootFile in @('1_INSTALL_INTERCEPTION.cmd','SETUP_PHONE_ALERT.cmd','SETUP_PHONE_ALERT_ALT.bat','ADD_TEMPLATES.cmd','OPEN_TEMPLATES.cmd','PHONE_ALERT_README.txt','AUTO_UPDATE_README.txt','START_HERE_v29.txt')) {
             $src = Join-Path $packageRoot $rootFile
             if (Test-Path $src) { Copy-Item $src (Join-Path $liteRoot $rootFile) -Force }
           }
 
-          # Prebuilt START: never builds locally and therefore needs no SDK.
-          @'
-@echo off
-setlocal EnableExtensions
-cd /d "%~dp0"
-set "EXE=%~dp0release\FishingAutomation.exe"
-if not exist "%EXE%" (
-  echo.
-  echo ERROR: release\FishingAutomation.exe is missing.
-  echo Download the Windows_Lite ZIP again and extract all files.
-  echo.
-  pause
-  exit /b 6
-)
-start "" /d "%~dp0release" "%EXE%"
-exit /b 0
-'@ | Set-Content -LiteralPath (Join-Path $liteRoot 'START.cmd') -Encoding ASCII
+          $startLines = @(
+            '@echo off',
+            'setlocal EnableExtensions',
+            'cd /d "%~dp0"',
+            'set "EXE=%~dp0release\FishingAutomation.exe"',
+            'if not exist "%EXE%" (',
+            '  echo.',
+            '  echo ERROR: release\FishingAutomation.exe is missing.',
+            '  echo Download the Windows_Lite ZIP again and extract all files.',
+            '  echo.',
+            '  pause',
+            '  exit /b 6',
+            ')',
+            'start "" /d "%~dp0release" "%EXE%"',
+            'exit /b 0'
+          )
+          Set-Content -LiteralPath (Join-Path $liteRoot 'START.cmd') -Value $startLines -Encoding ASCII
 
-          # Make the updater preserve user settings/templates and keep the incoming prebuilt release folder.
+          # Patch updater for prebuilt packages: preserve runtime settings/templates and never rebuild locally.
           $apply = Join-Path $toolsOut 'ApplyUpdate.ps1'
           if (Test-Path $apply) {
             $a = Get-Content -LiteralPath $apply -Raw
             $a = $a.Replace("        'release\notification.json'", "        'release\notification.json',`r`n        'release\config.json',`r`n        'release\interception.dll',`r`n        'release\templates',`r`n        'release\abyss\templates',`r`n        'release\dungeon\templates'")
-            $removeBuild = @'
-    $release = Join-Path $InstallRoot 'release'
-    if (Test-Path $release) { Remove-Item -LiteralPath $release -Recurse -Force }
-    $watchdogRelease = Join-Path $InstallRoot 'watchdog_release'
-    if (Test-Path $watchdogRelease) { Remove-Item -LiteralPath $watchdogRelease -Recurse -Force }
-
-    Log 'Files replaced. Starting BUILD/START.'
-'@
-            $prebuilt = @'
-    Log 'Files replaced. Starting prebuilt Windows package.'
-'@
-            if ($a.Contains($removeBuild)) { $a = $a.Replace($removeBuild, $prebuilt) }
+            $pattern = "(?ms)^\s*\$release = Join-Path \$InstallRoot 'release'.*?^\s*Log 'Files replaced\. Starting BUILD/START\.'"
+            $a = [regex]::Replace($a, $pattern, "    Log 'Files replaced. Starting prebuilt Windows package.'")
             Set-Content -LiteralPath $apply -Value $a -Encoding UTF8
           }
 
-          @"
-MABI AUTO $tag - Windows Lite
-
-- .NET SDK installation is NOT required.
-- Source code, bin/obj folders, build cache, and duplicate publish folders are excluded.
-- Main app and Watchdog are self-contained compressed Windows x64 executables.
-
-First use:
-1. Extract this ZIP completely.
-2. If Interception is not installed, run 1_INSTALL_INTERCEPTION.cmd once and reboot.
-3. Run START.cmd.
-
-For Telegram phone alerts, run SETUP_PHONE_ALERT.cmd.
-"@ | Set-Content -LiteralPath (Join-Path $liteRoot 'WINDOWS_LITE.txt') -Encoding UTF8
+          $infoLines = @(
+            "MABI AUTO $tag - Windows Lite",
+            '',
+            '- .NET SDK installation is NOT required.',
+            '- Source code, bin/obj folders, build cache, and duplicate publish folders are excluded.',
+            '- Main app and Watchdog are self-contained compressed Windows x64 executables.',
+            '',
+            'First use:',
+            '1. Extract this ZIP completely.',
+            '2. If Interception is not installed, run 1_INSTALL_INTERCEPTION.cmd once and reboot.',
+            '3. Run START.cmd.',
+            '',
+            'For Telegram phone alerts, run SETUP_PHONE_ALERT.cmd.'
+          )
+          Set-Content -LiteralPath (Join-Path $liteRoot 'WINDOWS_LITE.txt') -Value $infoLines -Encoding UTF8
 
           $liteName = "MabiAuto_${safeTag}_Windows_Lite.zip"
           $litePath = Join-Path $PWD $liteName
           Remove-Item $litePath,"$litePath.sha256" -Force -ErrorAction SilentlyContinue
           Compress-Archive -Path $liteRoot -DestinationPath $litePath -CompressionLevel Optimal
-
           $hash = (Get-FileHash -Algorithm SHA256 $litePath).Hash.ToLowerInvariant()
           "$hash  $liteName" | Set-Content -Path "$litePath.sha256" -Encoding ASCII
-
           $sizeMb = [Math]::Round((Get-Item $litePath).Length / 1MB, 1)
-          Write-Host "Lite package size: $sizeMb MB"
-          Write-Host "Uploading $liteName to release $tag"
+
+          Write-Host "Uploading $liteName ($sizeMb MB)"
           gh release upload $tag $litePath "$litePath.sha256" --repo $env:REPO --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Lite release upload failed.' }
+
+          # Remove the old oversized prebuilt asset. Keep source ZIP, but re-upload it after Lite
+          # so older v29 asset-selection logic sees Windows_Lite first.
+          foreach ($oldAsset in @("MabiAuto_${safeTag}_Windows_Ready.zip", "MabiAuto_${safeTag}_Windows_Ready.zip.sha256")) {
+            gh release delete-asset $tag $oldAsset --repo $env:REPO -y 2>$null
+          }
+          gh release delete-asset $tag $sourceAsset.name --repo $env:REPO -y
+          if ($LASTEXITCODE -ne 0) { throw 'Could not reorder source asset.' }
+          gh release upload $tag $sourceZip --repo $env:REPO
+          if ($LASTEXITCODE -ne 0) { throw 'Could not restore source asset.' }
 
           Write-Host "WINDOWS LITE BUILD OK: $liteName ($sizeMb MB)"
