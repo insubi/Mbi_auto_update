@@ -67,6 +67,46 @@ jobs:
           $appDir = $mainProj.Directory.FullName
           $packageRoot = Split-Path $appDir -Parent
 
+          # Patch updater selection in the executable being built: Windows_Lite first, then Ready, then source.
+          $updateFile = Join-Path $appDir 'UpdateManager.cs'
+          if (Test-Path $updateFile) {
+            $u = Get-Content -LiteralPath $updateFile -Raw
+            if ($u -notmatch 'Windows_Lite') {
+              $oldLines = @(
+                '        var asset = assets.FirstOrDefault(a =>',
+                '            a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
+                '            (a.Name.Contains("CombinedFishingDungeon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("Mabi", StringComparison.OrdinalIgnoreCase)));',
+                '        if (string.IsNullOrWhiteSpace(asset.Url))',
+                '            asset = assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));'
+              )
+              $newLines = @(
+                '        var asset = assets.FirstOrDefault(a =>',
+                '            a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
+                '            a.Name.Contains("Windows_Lite", StringComparison.OrdinalIgnoreCase));',
+                '        if (string.IsNullOrWhiteSpace(asset.Url))',
+                '            asset = assets.FirstOrDefault(a =>',
+                '                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
+                '                a.Name.Contains("Windows_Ready", StringComparison.OrdinalIgnoreCase));',
+                '        if (string.IsNullOrWhiteSpace(asset.Url))',
+                '            asset = assets.FirstOrDefault(a =>',
+                '                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
+                '                (a.Name.Contains("CombinedFishingDungeon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("Mabi", StringComparison.OrdinalIgnoreCase)));',
+                '        if (string.IsNullOrWhiteSpace(asset.Url))',
+                '            asset = assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));'
+              )
+              $normalized = $u.Replace("`r`n", "`n")
+              $old = $oldLines -join "`n"
+              $new = $newLines -join "`n"
+              if ($normalized.Contains($old)) {
+                $normalized = $normalized.Replace($old, $new)
+                Set-Content -LiteralPath $updateFile -Value $normalized -Encoding UTF8
+                Write-Host 'UpdateManager patched: Windows_Lite is preferred.'
+              } else {
+                throw 'UpdateManager asset selection block was not found.'
+              }
+            }
+          }
+
           $publishMain = Join-Path $PWD 'publish-main'
           $publishWatch = Join-Path $PWD 'publish-watchdog'
           Remove-Item $publishMain,$publishWatch -Recurse -Force -ErrorAction SilentlyContinue
@@ -116,7 +156,6 @@ jobs:
           }
           if (-not (Test-Path (Join-Path $runtimeDir 'FishingAutomation.exe'))) { throw 'FishingAutomation.exe was not created.' }
 
-          # Minimal editable copy for setup and template tools only; no C# source or build folders.
           $miniSource = Join-Path $liteRoot 'FishingAutomation'
           New-Item -ItemType Directory -Path $miniSource | Out-Null
           foreach ($name in @('config.json','notification.json','interception.dll')) {
@@ -157,7 +196,6 @@ jobs:
           )
           Set-Content -LiteralPath (Join-Path $liteRoot 'START.cmd') -Value $startLines -Encoding ASCII
 
-          # Patch updater for prebuilt packages: preserve runtime settings/templates and never rebuild locally.
           $apply = Join-Path $toolsOut 'ApplyUpdate.ps1'
           if (Test-Path $apply) {
             $a = Get-Content -LiteralPath $apply -Raw
@@ -195,14 +233,8 @@ jobs:
           gh release upload $tag $litePath "$litePath.sha256" --repo $env:REPO --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Lite release upload failed.' }
 
-          # Remove the old oversized prebuilt asset. Keep source ZIP, but re-upload it after Lite
-          # so older v29 asset-selection logic sees Windows_Lite first.
           foreach ($oldAsset in @("MabiAuto_${safeTag}_Windows_Ready.zip", "MabiAuto_${safeTag}_Windows_Ready.zip.sha256")) {
             gh release delete-asset $tag $oldAsset --repo $env:REPO -y 2>$null
           }
-          gh release delete-asset $tag $sourceAsset.name --repo $env:REPO -y
-          if ($LASTEXITCODE -ne 0) { throw 'Could not reorder source asset.' }
-          gh release upload $tag $sourceZip --repo $env:REPO
-          if ($LASTEXITCODE -ne 0) { throw 'Could not restore source asset.' }
 
           Write-Host "WINDOWS LITE BUILD OK: $liteName ($sizeMb MB)"
