@@ -1,0 +1,4 @@
+life-v33/overlay/** -text
+life-v33/*.py text eol=lf
+life-v33/*.json text eol=lf
+.github/workflows/validate-life-v33.yml text eol=lf

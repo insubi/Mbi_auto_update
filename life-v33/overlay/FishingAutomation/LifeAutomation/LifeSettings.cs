@@ -110,6 +110,14 @@ internal sealed class LifeProfile
         if (Targets.FirstOrDefault(t => t.Id == "confirm_green")?.ActiveColor != "green")
             errors.Add("초록색 확인 버튼 설정이 필요합니다.");
         if (QueueSlots.Count != 7 || QueueSlots.Any(r => !ValidRect(r.Rectangle))) errors.Add("대기열 7칸의 영역 설정이 필요합니다.");
+        else
+        {
+            if (!QueueSlots[6].Rectangle.Contains(Slot7Percent.Rectangle)) errors.Add("100% 인식 영역은 반드시 7번 슬롯 안에 있어야 합니다.");
+            if (QueueSlots.Take(4).Max(r => r.Rectangle.Bottom) > QueueSlots.Skip(4).Min(r => r.Y)
+                || Enumerable.Range(1, 3).Any(i => QueueSlots[i].X <= QueueSlots[i - 1].X)
+                || Enumerable.Range(5, 2).Any(i => QueueSlots[i].X <= QueueSlots[i - 1].X))
+                errors.Add("슬롯 순서를 위 1~4, 아래 5~7의 왼쪽부터 지정해야 합니다.");
+        }
         if (!ValidRect(Slot7Percent.Rectangle)) errors.Add("7번 슬롯 100% OCR 영역이 필요합니다.");
         if (!ValidRect(GatheringRoi.Rectangle)) errors.Add("중앙 채집 게이지 영역이 필요합니다.");
         if (!ValidRect(GoldenNameOffset.Rectangle) || !ValidRect(WoolNameOffset.Rectangle)

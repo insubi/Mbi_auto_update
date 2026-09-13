@@ -28,15 +28,21 @@ internal sealed class LifeVision : IDisposable
 
     public Rect? Find(Bitmap frame, string id)
     {
+        var search = ResolveSearch(frame, id);
+        return search is null ? null : FindAll(frame, id, search.Value, 1).Cast<Rect?>().FirstOrDefault();
+    }
+
+    private Rect? ResolveSearch(Bitmap frame, string id)
+    {
         var target = _targets[id];
-        Rect search = target.Search.Rectangle;
+        var search = target.Search.Rectangle;
         if (target.Anchor is { } anchor)
         {
             var a = Find(frame, anchor);
             if (a is null) return null;
             search.Offset(a.Value.Location);
         }
-        return FindAll(frame, id, search, 1).Cast<Rect?>().FirstOrDefault();
+        return search;
     }
 
     public List<Rect> FindAll(Bitmap frame, string id, Rect search, int max = 20)
@@ -84,7 +90,9 @@ internal sealed class LifeVision : IDisposable
     {
         var match = Find(frame, "materials_short");
         if (match is null) return false;
-        var lines = await ReadAsync(frame, _targets["materials_short"].Search.Rectangle, 2, ct);
+        var search = ResolveSearch(frame, "materials_short");
+        if (search is null) return false;
+        var lines = await ReadAsync(frame, search.Value, 2, ct);
         return lines.Any(x => LifeRules.NormalizeLabel(x.Text).TrimEnd('.', '。') == "재료가부족합니다");
     }
 

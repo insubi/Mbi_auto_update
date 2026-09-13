@@ -9,7 +9,7 @@
     },
     {
       "path": "FishingAutomation/LifeAutomation/LifeEngine.cs",
-      "sha256": "0f14dbe17b0e5161b1c02f7626a0e35b0157c8b6f94c0bf289f1026f7eafe63d",
+      "sha256": "be3aaffcc58ff506bdfc2063c800b225d9a4de41b714fb11c1ea562b2ee1b13f",
       "base_sha256": null
     },
     {
@@ -24,12 +24,12 @@
     },
     {
       "path": "FishingAutomation/LifeAutomation/LifeSettings.cs",
-      "sha256": "3c338abb1fdf500ed3f8beb9291fd5fe7a17f4ddbbcca2b8b1b8e85776998b55",
+      "sha256": "760eb6ce52a7116edc28fd5f435b3ee11177fb9f25faaedb1937c628f862177b",
       "base_sha256": null
     },
     {
       "path": "FishingAutomation/LifeAutomation/LifeVision.cs",
-      "sha256": "a14a91ce86a37c2bfdc7f4637419fbf96b32c23f39c18a6f4079961e09453939",
+      "sha256": "5405650dc34a8c8ce0425ace4f125cf7c6870f5319f6566ab7387219e47914f7",
       "base_sha256": null
     },
     {

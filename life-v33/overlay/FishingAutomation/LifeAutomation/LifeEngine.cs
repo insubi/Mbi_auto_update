@@ -22,7 +22,7 @@ internal sealed class LifeEngine : IDisposable
     private Rectangle? _avatar, _avatarHud;
     private bool _processing, _gatherNeeded;
     private string _stage = "준비";
-    private int _batches, _loops;
+    private int _batches, _loops, _recoveryFailures;
     public string InputName => _mouse.ModeName + $" · 생활 keyboard={_keyboard.Device}";
     public event Action<string, int, int, int?>? Progress;
 
@@ -46,7 +46,6 @@ internal sealed class LifeEngine : IDisposable
 
     public async Task RunAsync(CancellationToken ct)
     {
-        int recoveryFailures = 0;
         while (true)
         {
             ct.ThrowIfCancellationRequested();
@@ -58,15 +57,16 @@ internal sealed class LifeEngine : IDisposable
                     await GatherAsync(ct);
                     _gatherNeeded = false;
                     _loops++;
+                    _recoveryFailures = 0;
                 }
                 await ProcessingAsync(ct);
-                recoveryFailures = 0;
+                _recoveryFailures = 0;
             }
             catch (MaterialsShortException)
             {
                 _processing = false;
                 _gatherNeeded = true;
-                recoveryFailures = 0;
+                _recoveryFailures = 0;
                 Stage("재료 부족 · 가공창 닫기");
                 // Closing is performed by the next outer iteration with fresh frames.
             }
@@ -75,9 +75,9 @@ internal sealed class LifeEngine : IDisposable
                 _processing = false;
                 SaveDebug("recovery");
                 int max = _shared.AutoRecoveryEnabled ? Math.Max(1, _shared.AutoRecoveryMaxAttempts) : 0;
-                if (++recoveryFailures > max) throw new InvalidOperationException("생활 자동복구 한도 초과: " + ex.Message, ex);
+                if (++_recoveryFailures > max) throw new InvalidOperationException("생활 자동복구 한도 초과: " + ex.Message, ex);
                 _avatar = _avatarHud = null;
-                _log.Write($"[생활] [자동복구] {recoveryFailures}/{max} · {ex.Message}");
+                _log.Write($"[생활] [자동복구] {_recoveryFailures}/{max} · {ex.Message}");
                 Stage("자동복구 · 기본 필드 확인");
                 await DelayAsync(Math.Max(1, _shared.AutoRecoveryDelaySeconds) * 1000, ct);
             }
@@ -127,6 +127,7 @@ internal sealed class LifeEngine : IDisposable
             await WaitEmptyQueueAsync(ct);
             _queue.ReceivedAndEmpty();
             _batches++;
+            _recoveryFailures = 0;
             Stage("가공 수령 완료 · 다시 채우기");
         }
     }

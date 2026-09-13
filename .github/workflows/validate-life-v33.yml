@@ -5,6 +5,7 @@ on:
     branches: [codex/life-v33]
     paths:
       - 'life-v33/**'
+      - '.gitattributes'
       - '.github/workflows/validate-life-v33.yml'
   workflow_dispatch:
 
