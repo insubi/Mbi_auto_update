@@ -1,0 +1,37 @@
+name: Inspect v35 life cloth
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-life-v35.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect life cloth source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir work && cd work
+          gh release download v35 --repo "$REPO" --pattern 'CombinedFishingDungeon_v35_StabilityRemote.zip'
+          unzip -q CombinedFishingDungeon_v35_StabilityRemote.zip
+          ROOT="$(find . -maxdepth 2 -type d -name FishingAutomation | head -n1)"
+          echo "ROOT=$ROOT"
+          echo '===== life files ====='
+          find "$ROOT" -maxdepth 3 -type f | grep -Ei 'Life|cloth|processing|Program.cs|csproj|MainForm' | sort
+          echo '===== LifeAutomationEngine.cs ====='
+          L="$(find "$ROOT" -name 'LifeAutomationEngine.cs' -type f | head -n1)"; [ -n "$L" ] && cat "$L" || true
+          echo '===== MainForm life refs ====='
+          grep -R -n -B 25 -A 80 --include='*.cs' -E '생활|옷감|LifeAutomation|wool|양털' "$ROOT" | head -n 1400 || true
+          echo '===== Program.cs ====='
+          P="$(find "$ROOT" -maxdepth 2 -name Program.cs -type f | head -n1)"; [ -n "$P" ] && cat "$P" || true
+          echo '===== csproj ====='
+          C="$(find "$ROOT" -maxdepth 2 -name '*.csproj' -type f | head -n1)"; [ -n "$C" ] && cat "$C" || true
