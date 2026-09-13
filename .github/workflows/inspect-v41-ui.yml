@@ -1,4 +1,4 @@
-name: Inspect v46 abyss exit
+name: Inspect v46 dashboard source
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect exit flow
+      - name: Inspect dashboard source
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -24,9 +24,7 @@ jobs:
           gh release download v46 --repo "$REPO" --pattern 'CombinedFishingDungeon_v46_StabilityRemote.zip' --dir /tmp/v46inspect
           unzip -q /tmp/v46inspect/CombinedFishingDungeon_v46_StabilityRemote.zip -d /tmp/v46inspect/src
           ROOT="$(find /tmp/v46inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== ENGINE ==='
-          grep -n -A 80 -B 60 -E 'abyss_exit|WaitForAbyssHomeAfterNormalExitAsync|StepTimeout' "$ROOT/FishingAutomation/Dungeon/ScenarioEngine.cs" || true
-          echo '=== SCENARIO ==='
-          cat "$ROOT/FishingAutomation/abyss/config/scenario.json"
-          echo '=== TARGETS ==='
-          grep -n -A 18 -B 4 -E 'abyss_exit|abyss_menu|abyss_leave_dungeon' "$ROOT/FishingAutomation/abyss/config/targets.json" || true
+          echo '=== DASHBOARD SOURCE ==='
+          nl -ba "$ROOT/FishingAutomation/MainForm.Dashboard.cs"
+          echo '=== MAINFORM SOURCE ==='
+          nl -ba "$ROOT/FishingAutomation/MainForm.cs" | sed -n '1,260p'
