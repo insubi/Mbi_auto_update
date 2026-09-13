@@ -1,4 +1,4 @@
-name: Inspect v43 abyss targets
+name: Inspect v43 detector semantics
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect v43 abyss category and dungeon targets
+      - name: Inspect detector and target model
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -23,22 +23,7 @@ jobs:
           gh release download v43 --repo "$REPO" --pattern 'CombinedFishingDungeon_v43_StabilityRemote.zip' --dir /tmp/v43inspect
           unzip -q /tmp/v43inspect/CombinedFishingDungeon_v43_StabilityRemote.zip -d /tmp/v43inspect/src
           ROOT="$(find /tmp/v43inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          python3 - "$ROOT/FishingAutomation/abyss/config/targets.json" "$ROOT/FishingAutomation/abyss/templates" <<'PY'
-          import json, sys, os, struct
-          targets=json.load(open(sys.argv[1], encoding='utf-8-sig'))
-          ids={'abyss_menu','abyss_icon','abyss_dungeon_hallucination_anchorage','abyss_dungeon_madness_cave','abyss_dungeon_scattered_waterway','abyss_enter'}
-          for t in targets:
-              if t.get('Id') in ids:
-                  print('TARGET', json.dumps(t, ensure_ascii=False))
-                  p=t.get('TemplatePath')
-                  if p:
-                      fp=os.path.join(os.path.dirname(sys.argv[1]), '..', p)
-                      fp=os.path.normpath(fp)
-                      if os.path.exists(fp):
-                          with open(fp,'rb') as f: b=f.read(24)
-                          if b[:8]==b'\x89PNG\r\n\x1a\n':
-                              w,h=struct.unpack('>II',b[16:24]); print('SIZE',t['Id'],w,h)
-                          else: print('SIZE',t['Id'],os.path.getsize(fp),'bytes')
-          PY
-          echo '=== ENGINE DETECTION/CLOSE ==='
-          grep -RIn -C 8 --include='*.cs' -E 'DetectAsync\(|wait_click|found.Center|CheckMonitorsAsync|ExecuteStepAsync' "$ROOT/FishingAutomation/Dungeon" | head -n 900 || true
+          echo '=== TARGET DETECTOR ==='
+          nl -ba "$ROOT/FishingAutomation/Dungeon/TargetDetector.cs" | sed -n '1,180p'
+          echo '=== TARGET MODEL ==='
+          grep -RIn -A 45 -B 5 --include='Models.cs' -E 'class TargetDefinition|record TargetDefinition' "$ROOT/FishingAutomation/Dungeon" || true
