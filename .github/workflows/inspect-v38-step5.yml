@@ -1,0 +1,32 @@
+name: Inspect v38 Abyss step5
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v38-step5.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect scenario and engine
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir work && cd work
+          gh release download v38 --repo "$REPO" --pattern 'CombinedFishingDungeon_v38_StabilityRemote.zip'
+          unzip -q CombinedFishingDungeon_v38_StabilityRemote.zip
+          ROOT="$(find . -maxdepth 2 -type d -name FishingAutomation | head -n1)"
+          echo '===== scenario.json ====='
+          cat "$ROOT/abyss/config/scenario.json"
+          echo '===== abyss targets ====='
+          cat "$ROOT/abyss/config/targets.json"
+          echo '===== engine relevant ====='
+          grep -n -B 30 -A 120 -E 'TimeoutClickTarget|TimeoutSeconds|Followup|AlternativeTarget|ClickAlternativeThenWaitPrimary|RunStep|wait_click' "$ROOT/Dungeon/ScenarioEngine.cs" | head -n 1800 || true
