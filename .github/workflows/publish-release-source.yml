@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'release-source/*.zip'
+      - 'release-source/*.patch'
   workflow_dispatch:
 
 permissions:
@@ -16,8 +17,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
-      - name: Publish source ZIP as a GitHub Release
+      - name: Build source ZIP if needed and publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -25,17 +28,56 @@ jobs:
         run: |
           set -euo pipefail
 
-          ZIP="$(find release-source -maxdepth 1 -type f -name '*.zip' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
-          if [ -z "$ZIP" ]; then
-            echo 'No release-source ZIP found.'
+          INPUT="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -E '^release-source/.*\.(zip|patch)$' | tail -n1 || true)"
+          if [ -z "$INPUT" ]; then
+            INPUT="$(find release-source -maxdepth 1 -type f \( -name '*.zip' -o -name '*.patch' \) | sort -V | tail -n1 || true)"
+          fi
+          if [ -z "$INPUT" ]; then
+            echo 'No release source input found.'
             exit 1
           fi
 
-          NAME="$(basename "$ZIP")"
-          VERSION="$(printf '%s' "$NAME" | sed -nE 's/.*_v([0-9]+([.][0-9]+)*)_.*/\1/p')"
+          BASE_NAME="$(basename "$INPUT")"
+          VERSION="$(printf '%s' "$BASE_NAME" | sed -nE 's/.*v([0-9]+).*/\1/p')"
           if [ -z "$VERSION" ]; then
-            echo "Could not parse version from $NAME"
+            echo "Could not parse version from $BASE_NAME"
             exit 1
+          fi
+
+          if [[ "$INPUT" == *.patch ]]; then
+            if [ "$VERSION" -le 1 ]; then
+              echo 'Patch releases require a previous integer version.'
+              exit 1
+            fi
+            BASE_VERSION=$((VERSION - 1))
+            BASE_TAG="v$BASE_VERSION"
+            echo "Creating v$VERSION source from $BASE_TAG + $INPUT"
+
+            SOURCE_ASSET="$(gh release view "$BASE_TAG" --repo "$REPO" --json assets --jq '.assets[].name' | grep -Ei '\.zip$' | grep -Eiv 'Windows_Lite|Windows_Ready|Prebuilt' | head -n1 || true)"
+            if [ -z "$SOURCE_ASSET" ]; then
+              echo "No source ZIP found in $BASE_TAG"
+              exit 1
+            fi
+
+            rm -rf patch-work "CombinedFishingDungeon_v$VERSION"
+            mkdir patch-work
+            gh release download "$BASE_TAG" --repo "$REPO" --pattern "$SOURCE_ASSET" --clobber
+            unzip -q "$SOURCE_ASSET" -d patch-work
+            ROOT="$(find patch-work -mindepth 1 -maxdepth 1 -type d | head -n1)"
+            if [ -z "$ROOT" ]; then
+              echo 'Base source ZIP does not contain a root directory.'
+              exit 1
+            fi
+
+            patch -d "$ROOT" -p2 < "$INPUT"
+            TARGET_ROOT="CombinedFishingDungeon_v$VERSION"
+            mv "$ROOT" "$TARGET_ROOT"
+            ZIP="CombinedFishingDungeon_v${VERSION}_StabilityRemote.zip"
+            zip -qr "$ZIP" "$TARGET_ROOT"
+            unzip -t "$ZIP" >/dev/null
+          else
+            ZIP="$INPUT"
+            unzip -t "$ZIP" >/dev/null
           fi
 
           TAG="v$VERSION"
@@ -44,14 +86,19 @@ jobs:
           cat > "$NOTES_FILE" <<EOF
           MABI AUTO $TAG
 
-          Source package is published automatically.
-          A Windows_Lite package will be built and attached automatically after this workflow succeeds.
-
-          Windows_Lite does not require the .NET SDK on the user's PC.
+          안정성 중심 업데이트입니다.
+          소스 패키지 게시 후 GitHub Actions가 Windows_Lite 완성본과 SHA256 파일을 자동 생성합니다.
+          Windows_Lite는 사용자 PC에 .NET SDK 설치가 필요하지 않습니다.
           EOF
 
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            echo "Release $TAG exists; replacing source asset."
+            echo "Release $TAG exists; replacing source ZIP assets."
+            while IFS= read -r asset; do
+              [ -z "$asset" ] && continue
+              if printf '%s' "$asset" | grep -Eqi '\.zip$' && ! printf '%s' "$asset" | grep -Eqi 'Windows_Lite|Windows_Ready|Prebuilt'; then
+                gh release delete-asset "$TAG" "$asset" --repo "$REPO" -y || true
+              fi
+            done < <(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name')
             gh release upload "$TAG" "$ZIP" --repo "$REPO" --clobber
           else
             echo "Creating release $TAG"
@@ -62,4 +109,4 @@ jobs:
               --notes-file "$NOTES_FILE"
           fi
 
-          echo "SOURCE RELEASE OK: $TAG / $NAME"
+          echo "SOURCE RELEASE OK: $TAG / $(basename "$ZIP")"
