@@ -1,6 +1,10 @@
 name: Prefer Windows Lite Asset
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/reorder-lite-first.yml'
   workflow_run:
     workflows: ['Build Windows Lite']
     types: [completed]
