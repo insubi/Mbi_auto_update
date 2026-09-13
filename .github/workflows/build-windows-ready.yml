@@ -31,13 +31,13 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $headers = @{
+          $apiHeaders = @{
             Authorization = "Bearer $env:GH_TOKEN"
             Accept = 'application/vnd.github+json'
             'X-GitHub-Api-Version' = '2022-11-28'
           }
 
-          $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/latest"
+          $release = Invoke-RestMethod -Headers $apiHeaders -Uri "https://api.github.com/repos/$env:REPO/releases/latest"
           $tag = $release.tag_name
           if (-not $tag) { throw 'Latest release tag not found.' }
 
@@ -56,12 +56,14 @@ jobs:
           Write-Host "Source asset: $($sourceAsset.name)"
 
           $sourceZip = Join-Path $PWD 'source.zip'
-          Invoke-WebRequest -Headers $headers -Uri $sourceAsset.url -OutFile $sourceZip
+          Invoke-WebRequest -Uri $sourceAsset.browser_download_url -OutFile $sourceZip
+          if ((Get-Item $sourceZip).Length -lt 1024) { throw 'Downloaded source ZIP is unexpectedly small.' }
 
           $work = Join-Path $PWD 'work'
           if (Test-Path $work) { Remove-Item $work -Recurse -Force }
           New-Item -ItemType Directory -Path $work | Out-Null
-          Expand-Archive -Path $sourceZip -DestinationPath $work -Force
+          tar -xf $sourceZip -C $work
+          if ($LASTEXITCODE -ne 0) { throw 'Source ZIP extraction failed.' }
 
           $mainProj = Get-ChildItem -Path $work -Recurse -Filter 'FishingAutomation.csproj' | Select-Object -First 1
           if (-not $mainProj) { throw 'FishingAutomation.csproj not found in source ZIP.' }
