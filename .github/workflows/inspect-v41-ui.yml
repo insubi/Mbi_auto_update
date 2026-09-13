@@ -1,4 +1,4 @@
-name: Inspect v43 abyss selection
+name: Inspect v43 abyss targets
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download v43 source and inspect abyss selection
+      - name: Inspect v43 abyss category and dungeon targets
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -23,19 +23,22 @@ jobs:
           gh release download v43 --repo "$REPO" --pattern 'CombinedFishingDungeon_v43_StabilityRemote.zip' --dir /tmp/v43inspect
           unzip -q /tmp/v43inspect/CombinedFishingDungeon_v43_StabilityRemote.zip -d /tmp/v43inspect/src
           ROOT="$(find /tmp/v43inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== SCENARIO ==='
-          cat "$ROOT/FishingAutomation/abyss/config/scenario.json"
-          echo '=== TARGETS OF INTEREST ==='
-          python3 - <<'PY'
-          import json, os
-          root=os.environ['ROOT'] if 'ROOT' in os.environ else ''
+          python3 - "$ROOT/FishingAutomation/abyss/config/targets.json" "$ROOT/FishingAutomation/abyss/templates" <<'PY'
+          import json, sys, os, struct
+          targets=json.load(open(sys.argv[1], encoding='utf-8-sig'))
+          ids={'abyss_menu','abyss_icon','abyss_dungeon_hallucination_anchorage','abyss_dungeon_madness_cave','abyss_dungeon_scattered_waterway','abyss_enter'}
+          for t in targets:
+              if t.get('Id') in ids:
+                  print('TARGET', json.dumps(t, ensure_ascii=False))
+                  p=t.get('TemplatePath')
+                  if p:
+                      fp=os.path.join(os.path.dirname(sys.argv[1]), '..', p)
+                      fp=os.path.normpath(fp)
+                      if os.path.exists(fp):
+                          with open(fp,'rb') as f: b=f.read(24)
+                          if b[:8]==b'\x89PNG\r\n\x1a\n':
+                              w,h=struct.unpack('>II',b[16:24]); print('SIZE',t['Id'],w,h)
+                          else: print('SIZE',t['Id'],os.path.getsize(fp),'bytes')
           PY
-          python3 - "$ROOT/FishingAutomation/abyss/config/targets.json" <<'PY'
-          import json, sys
-          data=json.load(open(sys.argv[1], encoding='utf-8-sig'))
-          for t in data:
-              if any(k in t.get('Id','') for k in ['abyss_menu','abyss_entry','abyss_select','anchorage','cave','water','harbor','madness','scattered']):
-                  print(json.dumps(t, ensure_ascii=False))
-          PY
-          echo '=== ABYSS FILES / SELECT REFERENCES ==='
-          grep -RIn -C 5 --include='*.cs' --include='*.json' -E 'SelectedAbyssDungeon|선택 던전|허상의 정박지|광기의 동굴|흩어진 물길|abyss_.*(dock|cave|water|select)|TargetOverride|Replace' "$ROOT/FishingAutomation" | head -n 1200 || true
+          echo '=== ENGINE DETECTION/CLOSE ==='
+          grep -RIn -C 8 --include='*.cs' -E 'DetectAsync\(|wait_click|found.Center|CheckMonitorsAsync|ExecuteStepAsync' "$ROOT/FishingAutomation/Dungeon" | head -n 900 || true
