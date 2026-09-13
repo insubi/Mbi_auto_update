@@ -1,0 +1,65 @@
+name: Publish Release Source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release-source/*.zip'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Publish source ZIP as a GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="$(find release-source -maxdepth 1 -type f -name '*.zip' -printf '%T@ %p\n' | sort -nr | head -n1 | cut -d' ' -f2-)"
+          if [ -z "$ZIP" ]; then
+            echo 'No release-source ZIP found.'
+            exit 1
+          fi
+
+          NAME="$(basename "$ZIP")"
+          VERSION="$(printf '%s' "$NAME" | sed -nE 's/.*_v([0-9]+([.][0-9]+)*)_.*/\1/p')"
+          if [ -z "$VERSION" ]; then
+            echo "Could not parse version from $NAME"
+            exit 1
+          fi
+
+          TAG="v$VERSION"
+          TITLE="Mabi Auto $TAG"
+          NOTES_FILE="release-notes.txt"
+          cat > "$NOTES_FILE" <<EOF
+          MABI AUTO $TAG
+
+          Source package is published automatically.
+          A Windows_Lite package will be built and attached automatically after this workflow succeeds.
+
+          Windows_Lite does not require the .NET SDK on the user's PC.
+          EOF
+
+          if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $TAG exists; replacing source asset."
+            gh release upload "$TAG" "$ZIP" --repo "$REPO" --clobber
+          else
+            echo "Creating release $TAG"
+            gh release create "$TAG" "$ZIP" \
+              --repo "$REPO" \
+              --target main \
+              --title "$TITLE" \
+              --notes-file "$NOTES_FILE"
+          fi
+
+          echo "SOURCE RELEASE OK: $TAG / $NAME"
