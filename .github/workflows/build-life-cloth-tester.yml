@@ -1,0 +1,227 @@
+name: Build Life Cloth Tester
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-life-cloth-tester.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build standalone Life cloth tester
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'life-cloth-v1'
+          $assetName = 'MabiLifeClothTester_v1_Windows_Lite.zip'
+
+          $work = Join-Path $PWD 'life-tester-work'
+          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $work | Out-Null
+          Set-Location $work
+
+          gh release download v35 --repo $env:REPO --pattern 'CombinedFishingDungeon_v35_StabilityRemote.zip'
+          if ($LASTEXITCODE -ne 0) { throw 'v35 source download failed.' }
+          $srcZip = Join-Path $work 'CombinedFishingDungeon_v35_StabilityRemote.zip'
+          tar -xf $srcZip -C $work
+          if ($LASTEXITCODE -ne 0) { throw 'v35 source extraction failed.' }
+
+          $proj = Get-ChildItem -Path $work -Recurse -Filter 'FishingAutomation.csproj' | Select-Object -First 1
+          if (-not $proj) { throw 'FishingAutomation.csproj not found.' }
+          $appDir = $proj.Directory.FullName
+          $packageRoot = Split-Path $appDir -Parent
+
+          $patchScript = Join-Path $work 'patch_life_tester.py'
+          @'
+          from pathlib import Path
+          import re
+          import sys
+
+          app = Path(sys.argv[1])
+
+          def read(name):
+              p = app / name
+              return p, p.read_text(encoding='utf-8-sig')
+
+          def write(p, text):
+              p.write_text(text, encoding='utf-8-sig')
+
+          # 1) Show only the Life mode and make the UI clearly separate from MABI AUTO.
+          p, s = read('MainForm.Dashboard.cs')
+          old = '_mode.Items.AddRange(new object[] { "낚시", "던전", "어비스", "생활" });'
+          if old not in s:
+              raise SystemExit('mode list patch target not found')
+          s = s.replace(old, '_mode.Items.Add("생활");', 1)
+          s = s.replace('Text = "MABI AUTO",', 'Text = "MABI LIFE",', 1)
+          s = s.replace('Text = "자동화 대시보드  ·  Dashboard v35",', 'Text = "옷감 가공 독립 테스트  ·  Life v1",', 1)
+          s = s.replace('_updateStatusValue.Text = "업데이트 확인 중...";', '_updateStatusValue.Text = "독립 테스트판 · 자동 업데이트 없음";', 1)
+          update_old = '_updateButton = SmallButton("업데이트 확인", () => _ = CheckForUpdatesAsync(true));'
+          if update_old not in s:
+              raise SystemExit('update button patch target not found')
+          s = s.replace(update_old, '_updateButton = SmallButton("테스트판", () => { });\n        _updateButton.Enabled = false;', 1)
+          s = s.replace('Text = "v35  |  Mabi Auto"', 'Text = "Life v1  |  Cloth Tester"', 1)
+          write(p, s)
+
+          # 2) Distinct window title, and never check/install main MABI AUTO releases.
+          p, s = read('MainForm.cs')
+          title_old = 'Text = "MABI AUTO · v35";'
+          if title_old not in s:
+              raise SystemExit('window title patch target not found')
+          s = s.replace(title_old, 'Text = "MABI LIFE · 옷감 테스트 v1";', 1)
+          startup_update = 'await CheckForUpdatesAsync(false);'
+          if startup_update not in s:
+              raise SystemExit('startup update patch target not found')
+          s = s.replace(startup_update, '_log.Write("[생활 테스트] 자동 업데이트 비활성화 · 메인 MABI AUTO와 완전 분리");', 1)
+          write(p, s)
+
+          # 3) Even if an update method were called accidentally, it reports no update.
+          p, s = read('UpdateManager.cs')
+          s = s.replace('public const string CurrentVersion = "v35";', 'public const string CurrentVersion = "life-v1";', 1)
+          method_sig = 'public static async Task<ReleaseUpdateInfo?> CheckLatestAsync(CancellationToken ct = default)'
+          idx = s.find(method_sig)
+          if idx < 0:
+              raise SystemExit('CheckLatestAsync not found')
+          brace = s.find('{', idx)
+          depth = 0
+          end = None
+          for i in range(brace, len(s)):
+              if s[i] == '{': depth += 1
+              elif s[i] == '}':
+                  depth -= 1
+                  if depth == 0:
+                      end = i + 1
+                      break
+          if end is None:
+              raise SystemExit('CheckLatestAsync block parse failed')
+          replacement = '''public static Task<ReleaseUpdateInfo?> CheckLatestAsync(CancellationToken ct = default)\n    {\n        // Standalone Life tester: never consume the main MABI AUTO release channel.\n        return Task.FromResult<ReleaseUpdateInfo?>(null);\n    }'''
+          s = s[:idx] + replacement + s[end:]
+          write(p, s)
+
+          # 4) Tester version metadata. Keep executable name FishingAutomation.exe so the existing watchdog remains compatible.
+          p, s = read('FishingAutomation.csproj')
+          s = re.sub(r'<Version>[^<]+</Version>', '<Version>1.0.0</Version>', s, count=1)
+          s = re.sub(r'<AssemblyVersion>[^<]+</AssemblyVersion>', '<AssemblyVersion>1.0.0.0</AssemblyVersion>', s, count=1)
+          s = re.sub(r'<FileVersion>[^<]+</FileVersion>', '<FileVersion>1.0.0.0</FileVersion>', s, count=1)
+          write(p, s)
+          '@ | Set-Content -LiteralPath $patchScript -Encoding UTF8
+
+          python $patchScript $appDir
+          if ($LASTEXITCODE -ne 0) { throw 'Life tester source patch failed.' }
+
+          $publishMain = Join-Path $work 'publish-main'
+          $publishWatch = Join-Path $work 'publish-watchdog'
+          dotnet publish $proj.FullName `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:DebugType=None `
+            -p:DebugSymbols=false `
+            -o $publishMain
+          if ($LASTEXITCODE -ne 0) { throw 'Life tester publish failed.' }
+
+          $watchProj = Get-ChildItem -Path $packageRoot -Recurse -Filter 'MacroWatchdog.csproj' | Select-Object -First 1
+          if ($watchProj) {
+            dotnet publish $watchProj.FullName `
+              -c Release `
+              -r win-x64 `
+              --self-contained true `
+              -p:PublishSingleFile=true `
+              -p:EnableCompressionInSingleFile=true `
+              -p:DebugType=None `
+              -p:DebugSymbols=false `
+              -o $publishWatch
+            if ($LASTEXITCODE -ne 0) { throw 'Life tester watchdog publish failed.' }
+          }
+
+          $bundleBase = Join-Path $work 'bundle'
+          $bundleRoot = Join-Path $bundleBase 'MabiLifeClothTester_v1'
+          $runtime = Join-Path $bundleRoot 'release'
+          New-Item -ItemType Directory -Path $runtime -Force | Out-Null
+          Copy-Item -Path (Join-Path $publishMain '*') -Destination $runtime -Recurse -Force
+          Remove-Item (Join-Path $runtime '*.pdb') -Force -ErrorAction SilentlyContinue
+
+          if ($watchProj) {
+            $watchExe = Join-Path $publishWatch 'MacroWatchdog.exe'
+            if (Test-Path $watchExe) { Copy-Item $watchExe (Join-Path $runtime 'MacroWatchdog.exe') -Force }
+          }
+          if (-not (Test-Path (Join-Path $runtime 'FishingAutomation.exe'))) { throw 'Tester executable not created.' }
+          if (-not (Test-Path (Join-Path $runtime 'life\templates\processing_tab.jpg'))) { throw 'Life templates missing from publish output.' }
+          if (-not (Test-Path (Join-Path $runtime 'dungeon\config\appsettings.json'))) { throw 'Dungeon appsettings needed by Life engine is missing.' }
+
+          $start = @(
+            '@echo off',
+            'setlocal EnableExtensions',
+            'cd /d "%~dp0"',
+            'set "EXE=%~dp0release\FishingAutomation.exe"',
+            'if not exist "%EXE%" (',
+            '  echo ERROR: release\FishingAutomation.exe is missing.',
+            '  pause',
+            '  exit /b 6',
+            ')',
+            'start "" /d "%~dp0release" "%EXE%"',
+            'exit /b 0'
+          )
+          Set-Content -LiteralPath (Join-Path $bundleRoot 'START_LIFE_CLOTH_TEST.cmd') -Value $start -Encoding ASCII
+
+          $installer = Join-Path $packageRoot '1_INSTALL_INTERCEPTION.cmd'
+          if (Test-Path $installer) { Copy-Item $installer (Join-Path $bundleRoot '1_INSTALL_INTERCEPTION.cmd') -Force }
+          $toolDir = Join-Path $packageRoot 'tools'
+          if (Test-Path (Join-Path $toolDir 'InstallInterception.ps1')) {
+            New-Item -ItemType Directory -Path (Join-Path $bundleRoot 'tools') -Force | Out-Null
+            Copy-Item (Join-Path $toolDir 'InstallInterception.ps1') (Join-Path $bundleRoot 'tools\InstallInterception.ps1') -Force
+          }
+
+          @'
+          MABI LIFE - 옷감 가공 독립 테스트 v1
+
+          이 프로그램은 메인 MABI AUTO v37과 별도 프로그램입니다.
+          메인 프로그램의 낚시/던전/어비스 파일을 수정하거나 업데이트하지 않습니다.
+          자동 업데이트 기능도 비활성화되어 있습니다.
+
+          실행:
+          1. ZIP을 별도 폴더에 완전히 압축 해제합니다.
+          2. START_LIFE_CLOTH_TEST.cmd 를 실행합니다.
+          3. 양털 목표 수량을 1~9999 사이에서 지정합니다.
+          4. F9 시작 / F10 정지.
+
+          주의:
+          - Interception 드라이버가 이미 설치되어 있으면 다시 설치할 필요 없습니다.
+          - 테스트 중 문제가 생기면 실시간 로그의 마지막 단계와 debug 폴더 이미지를 확인하면 됩니다.
+          - 메인 MABI AUTO와 동시에 자동화를 실행하지 마세요. 두 프로그램이 같은 게임 창을 조작할 수 있습니다.
+          '@ | Set-Content -LiteralPath (Join-Path $bundleRoot 'README_생활_옷감_테스트.txt') -Encoding UTF8
+
+          $zipPath = Join-Path $work $assetName
+          Compress-Archive -Path $bundleRoot -DestinationPath $zipPath -CompressionLevel Optimal
+          $hash = (Get-FileHash -Algorithm SHA256 $zipPath).Hash.ToLowerInvariant()
+          "$hash  $assetName" | Set-Content -LiteralPath "$zipPath.sha256" -Encoding ASCII
+
+          gh release view $tag --repo $env:REPO *> $null
+          if ($LASTEXITCODE -ne 0) {
+            $global:LASTEXITCODE = 0
+            gh release create $tag --repo $env:REPO --title 'MABI LIFE 옷감 테스트 v1' --notes '메인 MABI AUTO와 완전히 분리된 생활/옷감 가공 테스트 프로그램입니다. v35 생활 로직과 PC용 템플릿을 독립 실행 패키지로 구성했으며 자동 업데이트는 비활성화되어 있습니다.'
+            if ($LASTEXITCODE -ne 0) { throw 'Tester release create failed.' }
+          } else {
+            gh release edit $tag --repo $env:REPO --title 'MABI LIFE 옷감 테스트 v1' --notes '메인 MABI AUTO와 완전히 분리된 생활/옷감 가공 테스트 프로그램입니다. v35 생활 로직과 PC용 템플릿을 독립 실행 패키지로 구성했으며 자동 업데이트는 비활성화되어 있습니다.'
+          }
+
+          gh release upload $tag $zipPath "$zipPath.sha256" --repo $env:REPO --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Tester release upload failed.' }
+
+          Write-Host "LIFE CLOTH TESTER BUILD OK: $assetName"
