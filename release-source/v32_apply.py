@@ -1,29 +1,112 @@
 #!/usr/bin/env python3
-import base64, json, pathlib, sys, zlib
+import base64, json, pathlib, sys
+
 root = pathlib.Path(sys.argv[1]).resolve()
+parts = pathlib.Path(__file__).with_name('v32_parts')
+
 
 def patch(rel, old, new):
-    p=root/rel
-    s=p.read_text(encoding="utf-8-sig")
-    if old not in s: raise SystemExit("patch marker missing: "+rel)
-    p.write_text(s.replace(old,new,1),encoding="utf-8-sig")
+    p = root / rel
+    s = p.read_text(encoding='utf-8-sig')
+    if old not in s:
+        raise SystemExit('patch marker missing: ' + rel)
+    p.write_text(s.replace(old, new, 1), encoding='utf-8-sig')
 
-patch('FishingAutomation/UpdateManager.cs', 'public const string CurrentVersion = "v31";', 'public const string CurrentVersion = "v32";')
-patch('FishingAutomation/Dungeon/Models.cs', '    public double Threshold { get; set; } = 0.75;\n    public int MaxEditDistance { get; set; } = 1;', '    public double Threshold { get; set; } = 0.75;\n    public double TemplateScaleMin { get; set; } = 1.0;\n    public double TemplateScaleMax { get; set; } = 1.0;\n    public double TemplateScaleStep { get; set; } = 0.10;\n    public int MaxEditDistance { get; set; } = 1;')
-patch('FishingAutomation/Dungeon/TargetDetector.cs', '        if (t.Kind.Equals("template", StringComparison.OrdinalIgnoreCase))\n        {\n            if (string.IsNullOrWhiteSpace(t.TemplatePath)) return DetectionResult.NotFound;\n            return _template.Find(frame, roi, t.TemplatePath, t.Threshold);\n        }\n\n        throw new NotSupportedException($"알 수 없는 타깃 종류: {t.Kind}");', '        if (t.Kind.Equals("template", StringComparison.OrdinalIgnoreCase))\n        {\n            if (string.IsNullOrWhiteSpace(t.TemplatePath)) return DetectionResult.NotFound;\n            return _template.FindMultiScale(\n                frame, roi, t.TemplatePath, t.Threshold,\n                t.TemplateScaleMin, t.TemplateScaleMax, t.TemplateScaleStep);\n        }\n\n        if (t.Kind.Equals("hybrid", StringComparison.OrdinalIgnoreCase))\n        {\n            if (!string.IsNullOrWhiteSpace(t.TemplatePath))\n            {\n                var visual = _template.FindMultiScale(\n                    frame, roi, t.TemplatePath, t.Threshold,\n                    t.TemplateScaleMin, t.TemplateScaleMax, t.TemplateScaleStep);\n                if (visual.Found) return visual;\n            }\n\n            if (!string.IsNullOrWhiteSpace(t.Text))\n            {\n                return await _ocr.FindTextAsync(\n                    frame, roi, t.Text, t.MaxEditDistance, t.OcrRetryAt2x, ct);\n            }\n\n            return DetectionResult.NotFound;\n        }\n\n        throw new NotSupportedException($"알 수 없는 타깃 종류: {t.Kind}");')
-(root/'FishingAutomation/Dungeon/TemplateMatcher.cs').write_bytes(zlib.decompress(base64.b64decode('eNqVVutu2zYU/u+n4P600qoqTnbBNicZGmW5AHUb2EHaYNgKWqItYhQpUJSdLM2T7cceaa+wc0TqahvdiMBSzuH5zpWf+M9ff5cFlyvyPmcyWs9TqvPJaEsU/vJgmCy4ksVkNJI0Y0VOY0bOS7liSt5xVJ0pA0ouDdOSClIwKlhCYkGLgtyyLBfUsCk1ccr06GlEYOWar0FINKOJkuKRFEaj508LWrBzrid2V7kQPB5CeG6v2+qTk9PGjpyQBqELcc4Miw2EOmNFKQy54DLxzrjJaE6WGrIKyAw2ULkSEJTiQR2Qcb5vqEkDkiiAY8SkmhWpEolf+cAFMSDmFMD5PIb8PQdbgfVRGvOAHIZj9zMOD8f+l4PuOGh89/JopP18GvGuvBrlML8tTcZl5XxbQR92KwrDclump2EMy1II9A9Nw0d4XeBjppRhidcNsC0zrp97wfdUP1mgSGULLplXT0W/AeGMwXvMvJcHLwNrAHugWko/zllONYW3CIbf9ycNOl8S76sLLhgcCF6YwquD930YYlNqOWxX+E6ZC1XKxDUVV10+yHhaBSpolntNUWEIjmAUvgnH447rurQDo7rgbU+Ghlj6vhFK0Mv4CH+/awYOlz36a6pJrBXaVfMEhgoqWU3x/BHss/Bc0w1sDa8zusLnDX9g4kLpjJrQPo6+XeT5bLXoxNKiFzoGcDuzkZJrpoE2wlsFYXroeaeRycVZhkFJtnG2bQf2GLzXHOIDPtrnzYLuC/JS00fnEDfv84LbOp52bI/WR2G0NpESCrhLx0GNHpBKZsNCHo1Uworw7HJ2dDl7c78PopNaMIzgy5DD87lghZnHSuN4WVE45fKOipK1/rsfhBsFRF+ZvVXYyYQtKYx756g49QdQjrfFV1bcyA8OyLWMRZm0JELYmkmySeFnKRQ1WO68cosDnOO/G1WKhBR/8JxwEzZgVe8QonC9eAuH9djmddptylJp4tUU5U5XfZAmTnJ80kb0ihyy1z/WmlcnHV5rjlvlN3yTJF71OmAPp46AEgw5gRqQz5/t2XyzKJz2198PfyOvG68+OUW33+/102zs1BMyYzROB9lx6exarKceKlZ3U7PFlD54PwTEA6FfCWZIZN5g2MIPPAH2/toid9myBkz/J+AV46vU7EWEKm6gJO74OPdQxbQjtBA+iZWEucEh7mFsnd3dZ7Z1B53anfaLF5jettYF0IPCNdwXqfzxVtUlGPhmomBbCMgC8G3hfzJv69g7QVAl0z2uc9y+CUjqA+VXf9d4T8sVfA6BHy4EXcEswcj4eyul7fVjb6EwrupuVl/UvIbgmrAsRtC/y00rcooixZbLd/DlYMkuZC5heoBrvBpDlYZ8so/29nGHVehotikrq1CGaWKXrTkMUUOG/fY9bbWiy5rWerJzj6VI63n3DmTJzW4VMmXaVz2P2rceu1ioY0cr1rr7nw32eNfVFdd/v8LgQCxQVjNsc8/ES0L4EZjSJR5+rG6/4X1HdB/YpO3jqtNuFwEiDqLwjC7hcmOdBm02MOtwA3AQz6Pn0b/QKty0',validate=True)))
+patch('FishingAutomation/UpdateManager.cs',
+      'public const string CurrentVersion = "v31";',
+      'public const string CurrentVersion = "v32";')
 
-for rel in ["FishingAutomation/dungeon/config/targets.json","FishingAutomation/abyss/config/targets.json","FishingAutomation/dungeon_config/targets.json"]:
-    p=root/rel
-    data=json.loads(p.read_text(encoding="utf-8-sig"))
-    scene=next((x for x in data if x.get("Id")=="scene_skip"),None)
-    if scene is None: raise SystemExit("scene_skip missing: "+rel)
-    scene.update({"Kind":"hybrid","TemplatePath":"templates/scene_skip_phone.png","Threshold":0.62,"TemplateScaleMin":0.50,"TemplateScaleMax":1.40,"TemplateScaleStep":0.08,"Text":"장면 넘기기","MaxEditDistance":1,"OcrRetryAt2x":True})
-    p.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
+patch('FishingAutomation/Dungeon/Models.cs',
+      '    public double Threshold { get; set; } = 0.75;\n    public int MaxEditDistance { get; set; } = 1;',
+      '    public double Threshold { get; set; } = 0.75;\n'
+      '    public double TemplateScaleMin { get; set; } = 1.0;\n'
+      '    public double TemplateScaleMax { get; set; } = 1.0;\n'
+      '    public double TemplateScaleStep { get; set; } = 0.10;\n'
+      '    public int MaxEditDistance { get; set; } = 1;')
 
-image=base64.b64decode('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[...truncated for brevity in this message but tool received complete content...]',validate=True)
-for rel in ["FishingAutomation/dungeon/templates/scene_skip_phone.png","FishingAutomation/abyss/templates/scene_skip_phone.png","FishingAutomation/dungeon_config/templates/scene_skip_phone.png"]:
-    p=root/rel; p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(image)
+patch('FishingAutomation/Dungeon/TargetDetector.cs',
+'''        if (t.Kind.Equals("template", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(t.TemplatePath)) return DetectionResult.NotFound;
+            return _template.Find(frame, roi, t.TemplatePath, t.Threshold);
+        }
 
-(root/"CHANGES_v32_SCENE_SKIP_HYBRID.txt").write_text("MABI AUTO v32\n- 장면 넘기기: 이미지 다중 스케일 우선 + 한국어 OCR 폴백\n- 던전/어비스 모두 적용\n",encoding="utf-8")
-print("Applied v32 scene-skip hybrid update")
+        throw new NotSupportedException($"알 수 없는 타깃 종류: {t.Kind}");''',
+'''        if (t.Kind.Equals("template", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(t.TemplatePath)) return DetectionResult.NotFound;
+            return _template.FindMultiScale(
+                frame, roi, t.TemplatePath, t.Threshold,
+                t.TemplateScaleMin, t.TemplateScaleMax, t.TemplateScaleStep);
+        }
+
+        if (t.Kind.Equals("hybrid", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrWhiteSpace(t.TemplatePath))
+            {
+                var visual = _template.FindMultiScale(
+                    frame, roi, t.TemplatePath, t.Threshold,
+                    t.TemplateScaleMin, t.TemplateScaleMax, t.TemplateScaleStep);
+                if (visual.Found) return visual;
+            }
+
+            if (!string.IsNullOrWhiteSpace(t.Text))
+            {
+                return await _ocr.FindTextAsync(
+                    frame, roi, t.Text, t.MaxEditDistance, t.OcrRetryAt2x, ct);
+            }
+
+            return DetectionResult.NotFound;
+        }
+
+        throw new NotSupportedException($"알 수 없는 타깃 종류: {t.Kind}");''')
+
+matcher = parts / 'TemplateMatcher.cs.txt'
+if not matcher.is_file():
+    raise SystemExit('missing TemplateMatcher.cs.txt')
+(root / 'FishingAutomation/Dungeon/TemplateMatcher.cs').write_text(
+    matcher.read_text(encoding='utf-8-sig'), encoding='utf-8-sig')
+
+b64_path = parts / 'scene_skip_phone_q85.jpg.b64'
+image = base64.b64decode(b64_path.read_text(encoding='ascii').strip(), validate=True)
+if len(image) < 1000:
+    raise SystemExit('scene template image is unexpectedly small')
+
+for rel in [
+    'FishingAutomation/dungeon/templates/scene_skip_phone.jpg',
+    'FishingAutomation/abyss/templates/scene_skip_phone.jpg',
+    'FishingAutomation/dungeon_config/templates/scene_skip_phone.jpg',
+]:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(image)
+
+for rel in [
+    'FishingAutomation/dungeon/config/targets.json',
+    'FishingAutomation/abyss/config/targets.json',
+    'FishingAutomation/dungeon_config/targets.json',
+]:
+    p = root / rel
+    data = json.loads(p.read_text(encoding='utf-8-sig'))
+    scene = next((x for x in data if x.get('Id') == 'scene_skip'), None)
+    if scene is None:
+        raise SystemExit('scene_skip missing: ' + rel)
+    scene.update({
+        'Kind': 'hybrid',
+        'TemplatePath': 'templates/scene_skip_phone.jpg',
+        'Threshold': 0.62,
+        'TemplateScaleMin': 0.50,
+        'TemplateScaleMax': 1.40,
+        'TemplateScaleStep': 0.08,
+        'Text': '장면 넘기기',
+        'MaxEditDistance': 1,
+        'OcrRetryAt2x': True,
+    })
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+
+(root / 'CHANGES_v32_SCENE_SKIP_HYBRID.txt').write_text(
+    'MABI AUTO v32\n'
+    '- 장면 넘기기: 이미지 다중 스케일 우선 + 한국어 OCR 폴백\n'
+    '- 던전/어비스 모두 적용\n', encoding='utf-8')
+
+print('Applied v32 scene-skip hybrid update')
