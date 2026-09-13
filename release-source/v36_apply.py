@@ -137,3 +137,5 @@ write_text(proj, text, enc)
 )
 
 print("v36 rollback applied: v32 behavior restored")
+
+# Triggered through a merged PR so GitHub Actions receives a main-branch push event.
