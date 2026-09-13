@@ -27,4 +27,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: pwsh
-        run: ./v30/publish-v30.ps1
+        run: |
+          $script = './v30/publish-v30.ps1'
+          $text = Get-Content -LiteralPath $script -Raw
+          $old = 'Expand-Archive -LiteralPath $overrideZip -DestinationPath $sourceRoot -Force'
+          $new = "tar -xf `$overrideZip -C `$sourceRoot`nif (`$LASTEXITCODE -ne 0) { throw 'v30 override extraction failed.' }"
+          if (-not $text.Contains($old)) { throw 'Expected override extraction line was not found.' }
+          Set-Content -LiteralPath $script -Value ($text.Replace($old, $new)) -Encoding UTF8
+          & $script
