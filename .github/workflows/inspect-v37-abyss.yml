@@ -29,11 +29,11 @@ jobs:
           find "$ROOT/abyss" -maxdepth 3 -type f -printf '%p %s bytes\n' | sort || true
           echo '===== image file types ====='
           find "$ROOT/abyss" -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | xargs -0 -r file
-          echo '===== target refs ====='
-          grep -R -n -B 8 -A 20 --include='*.json' --include='*.cs' -E 'abyss_menu|Wait.*Target|CaptureClient|Parameter is not valid|Image.FromFile|Bitmap\(' "$ROOT" | head -n 2400 || true
           echo '===== TargetDetector.cs ====='
-          T="$(find "$ROOT" -name 'TargetDetector.cs' -type f | head -n1)"; [ -n "$T" ] && cat "$T" || true
+          cat "$ROOT/Dungeon/TargetDetector.cs" || true
           echo '===== TemplateMatcher.cs ====='
-          T="$(find "$ROOT" -name 'TemplateMatcher.cs' -type f | head -n1)"; [ -n "$T" ] && cat "$T" || true
+          cat "$ROOT/Dungeon/TemplateMatcher.cs" || true
           echo '===== WindowCapture.cs ====='
-          T="$(find "$ROOT" -name 'WindowCapture.cs' -type f | head -n1)"; [ -n "$T" ] && cat "$T" || true
+          cat "$ROOT/Dungeon/WindowCapture.cs" || true
+          echo '===== UpdateManager.cs ====='
+          cat "$ROOT/UpdateManager.cs" || true
