@@ -6,6 +6,7 @@ on:
     paths:
       - 'release-source/*.zip'
       - 'release-source/*.patch'
+      - 'release-source/v*_apply.py'
   workflow_dispatch:
 
 permissions:
@@ -28,9 +29,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          INPUT="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -E '^release-source/.*\.(zip|patch)$' | tail -n1 || true)"
+          INPUT="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -E '^release-source/(.*\.zip|.*\.patch|v[0-9]+_apply\.py)$' | tail -n1 || true)"
           if [ -z "$INPUT" ]; then
-            INPUT="$(find release-source -maxdepth 1 -type f \( -name '*.zip' -o -name '*.patch' \) | sort -V | tail -n1 || true)"
+            INPUT="$(find release-source -maxdepth 1 -type f \( -name '*.zip' -o -name '*.patch' -o -name 'v*_apply.py' \) | sort -V | tail -n1 || true)"
           fi
           if [ -z "$INPUT" ]; then
             echo 'No release source input found.'
@@ -44,9 +45,9 @@ jobs:
             exit 1
           fi
 
-          if [[ "$INPUT" == *.patch ]]; then
+          if [[ "$INPUT" == *.patch || "$INPUT" == *_apply.py ]]; then
             if [ "$VERSION" -le 1 ]; then
-              echo 'Patch releases require a previous integer version.'
+              echo 'Overlay releases require a previous integer version.'
               exit 1
             fi
             BASE_VERSION=$((VERSION - 1))
@@ -69,7 +70,12 @@ jobs:
               exit 1
             fi
 
-            patch -d "$ROOT" -p2 < "$INPUT"
+            if [[ "$INPUT" == *.patch ]]; then
+              patch -d "$ROOT" -p2 < "$INPUT"
+            else
+              python3 "$INPUT" "$ROOT"
+            fi
+
             TARGET_ROOT="CombinedFishingDungeon_v$VERSION"
             mv "$ROOT" "$TARGET_ROOT"
             ZIP="CombinedFishingDungeon_v${VERSION}_StabilityRemote.zip"
