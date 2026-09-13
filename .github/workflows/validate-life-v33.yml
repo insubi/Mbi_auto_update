@@ -1,0 +1,54 @@
+name: Validate v33 Life Windows Lite
+
+on:
+  push:
+    branches: [codex/life-v33]
+    paths:
+      - 'life-v33/**'
+      - '.github/workflows/validate-life-v33.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Verify v32 baseline and apply isolated life changes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/v32/CombinedFishingDungeon_v32_StabilityRemote.zip' -OutFile base.zip
+          if ((Get-FileHash base.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne '2fac77323b1622c22466c031736de7614066ad21a6398ce473107e8b86cefd6e') { throw 'v32 source SHA256 mismatch' }
+          Expand-Archive base.zip work
+          $root = (Get-ChildItem work -Directory | Select-Object -First 1).FullName
+          python life-v33/apply.py $root
+          if ($LASTEXITCODE -ne 0) { throw 'Overlay verification failed' }
+          "PACKAGE_ROOT=$root" >> $env:GITHUB_ENV
+      - name: Rules and Windows UI smoke tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet run --project "$env:PACKAGE_ROOT/LifeRulesTests/LifeRulesTests.csproj" -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Life rule checks failed' }
+          dotnet run --project "$env:PACKAGE_ROOT/WindowsSmoke/WindowsSmoke.csproj" -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Windows UI smoke checks failed' }
+      - name: Publish actual Windows x64 Lite executables
+        shell: pwsh
+        run: ./life-v33/BuildLite.ps1 -PackageRoot $env:PACKAGE_ROOT
+      - name: Save Windows Lite and verification files
+        uses: actions/upload-artifact@v4
+        with:
+          name: MabiAuto_v33_Windows_Lite_Preview
+          path: |
+            MabiAuto_v33_Windows_Lite_Preview.zip
+            MabiAuto_v33_Windows_Lite_Preview.zip.sha256
+            windows-build-evidence.txt
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,106 @@
+{
+  "base_release": "v32",
+  "base_source_sha256": "2fac77323b1622c22466c031736de7614066ad21a6398ce473107e8b86cefd6e",
+  "files": [
+    {
+      "path": "FishingAutomation/FishingAutomation.csproj",
+      "sha256": "bd485eb2a78dc791f8fe0ec23a9db60cd9ca74fd82216a696ed254f61c5eca29",
+      "base_sha256": "a4bd188e79836d5f78bd837e2d6ebcbd18ffb647ef9ef604bf731f30b8924bc9"
+    },
+    {
+      "path": "FishingAutomation/LifeAutomation/LifeEngine.cs",
+      "sha256": "0f14dbe17b0e5161b1c02f7626a0e35b0157c8b6f94c0bf289f1026f7eafe63d",
+      "base_sha256": null
+    },
+    {
+      "path": "FishingAutomation/LifeAutomation/LifeKeyboard.cs",
+      "sha256": "0a3f7c31532fee805f2986a8adbc999b1b0987aa8b6cfae66b2b81941591fa8c",
+      "base_sha256": null
+    },
+    {
+      "path": "FishingAutomation/LifeAutomation/LifeRules.cs",
+      "sha256": "8ae9b08b1ab0a68b9a468ae25f28c034fe36cab58e94728f0a975290854ee9ec",
+      "base_sha256": null
+    },
+    {
+      "path": "FishingAutomation/LifeAutomation/LifeSettings.cs",
+      "sha256": "3c338abb1fdf500ed3f8beb9291fd5fe7a17f4ddbbcca2b8b1b8e85776998b55",
+      "base_sha256": null
+    },
+    {
+      "path": "FishingAutomation/LifeAutomation/LifeVision.cs",
+      "sha256": "a14a91ce86a37c2bfdc7f4637419fbf96b32c23f39c18a6f4079961e09453939",
+      "base_sha256": null
+    },
+    {
+      "path": "FishingAutomation/MainForm.Dashboard.cs",
+      "sha256": "404f1ff57a9522bc3594e26afa4bea2bb41ff60a1c55df347a7e1bd93334baca",
+      "base_sha256": "ee6d4275c67ae433715c0dbfd32ab779b0b85e5397438021d59f20f91061440a"
+    },
+    {
+      "path": "FishingAutomation/MainForm.Life.cs",
+      "sha256": "f6b5e4190cb259d745aab1ee2d885cca20a6994cdd2c77200b1595f4234deb93",
+      "base_sha256": null
+    },
+    {
+      "path": "FishingAutomation/MainForm.Telegram.cs",
+      "sha256": "e203390d8a5fc767175ab95965d10df0e42875a59cee26945f1b98d79d3717b0",
+      "base_sha256": "fa2efcce71958304c32f0d68e6803ee56d4ae96762d4a78a18f8ecb36680c110"
+    },
+    {
+      "path": "FishingAutomation/MainForm.cs",
+      "sha256": "8fbd0ffe77637b4d325eeeaf94666ad979f72d0f56ffc04b6d626fac5e1a71de",
+      "base_sha256": "3d21a59d4f57f29ebd872dbdaf1d918f6a51fb4f0c0e04f055f89d0e3b58fc53"
+    },
+    {
+      "path": "FishingAutomation/UpdateManager.cs",
+      "sha256": "fcd0955c740214a0afb1d06f6f6af0df5b6b4dd3faa1dd7dc1838c205dc16909",
+      "base_sha256": "43be5e7ffd5aa69c9811a8fef9bd5cfdac7b1045bc1eba22173112d2d5cd81a8"
+    },
+    {
+      "path": "FishingAutomation/life/profile.json",
+      "sha256": "1dea96da446085b748127af6703a78e80951f4a071897c0b7cf9df757be9b869",
+      "base_sha256": null
+    },
+    {
+      "path": "FishingAutomation/life/templates/README.txt",
+      "sha256": "fb09cd86a5742dc549b5c9f6a881e4496d9c2ca077a56b8441fedf1f97c52572",
+      "base_sha256": null
+    },
+    {
+      "path": "LifeRulesTests/LifeRulesTests.csproj",
+      "sha256": "657a81682276c20cb4cf76a28ed5b056383431d50ac8384835b698d956e541b6",
+      "base_sha256": null
+    },
+    {
+      "path": "LifeRulesTests/Program.cs",
+      "sha256": "4fd913d466a8caa07ca2bb0e3e943cf22113a596bf9507a879fb92b0e62f0849",
+      "base_sha256": null
+    },
+    {
+      "path": "START.cmd",
+      "sha256": "02b9d7c0db2d2a5899caea4b29cd3e7e9f4b9bad6b6cdc31ebcc4be638fdbe02",
+      "base_sha256": "ad3b11fd7cc2aa66c6ffa2d2cc9468763ef22cf84766d61a67cf625206586866"
+    },
+    {
+      "path": "START_HERE_v33.txt",
+      "sha256": "4b6fa3602a7b9d681ccfb1b87885df79269188e91e6c06e36b3ace11f5940a05",
+      "base_sha256": null
+    },
+    {
+      "path": "WindowsSmoke/Program.cs",
+      "sha256": "9c9085e258fdae318e87d051bd8e40473d5a6e5f9e4d0fb31736ab989b574198",
+      "base_sha256": null
+    },
+    {
+      "path": "WindowsSmoke/WindowsSmoke.csproj",
+      "sha256": "990cd9b5b38d6bfcbfec24e88695a2e68819cce752e64c6485f440c3d215b5e2",
+      "base_sha256": null
+    },
+    {
+      "path": "tools/ApplyUpdate.ps1",
+      "sha256": "63eec5326b9477cecac54976c45425dd02835d1704800f16faa2b91787066459",
+      "base_sha256": "fc049f8a0ed59924c16eed7755f0b17c69258fc581c87a70699904fc499942a7"
+    }
+  ]
+}

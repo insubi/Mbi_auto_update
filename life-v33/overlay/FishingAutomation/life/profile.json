@@ -1,0 +1,454 @@
+{
+  "Calibrated": false,
+  "ClientWidth": 800,
+  "ClientHeight": 1000,
+  "PollMs": 250,
+  "SettleMs": 600,
+  "QuantityPollSeconds": 30,
+  "StepTimeoutSeconds": 30,
+  "TravelTimeoutSeconds": 180,
+  "QueueTimeoutSeconds": 1800,
+  "Targets": [
+    {
+      "Id": "field_hud",
+      "Template": "templates/field_hud.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "processing_tab",
+      "Template": "templates/processing_tab.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "processing_menu",
+      "Template": "templates/processing_menu.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "processing_active",
+      "Template": "templates/processing_active.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92,
+      "ActiveColor": "blue"
+    },
+    {
+      "Id": "cloth_processing",
+      "Template": "templates/cloth_processing.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "move_facility",
+      "Template": "templates/move_facility.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "cloth_item",
+      "Template": "templates/cloth_item.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "go_processing",
+      "Template": "templates/go_processing.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "queue_anchor",
+      "Template": "templates/queue_anchor.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "queue_add",
+      "Template": "templates/queue_add.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "queue_cloth",
+      "Template": "templates/queue_cloth.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "collect_all",
+      "Template": "templates/collect_all.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "confirm_green",
+      "Template": "templates/confirm_green.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92,
+      "ActiveColor": "green"
+    },
+    {
+      "Id": "materials_short",
+      "Template": "templates/materials_short.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "close_white",
+      "Template": "templates/close_white.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "close_gray",
+      "Template": "templates/close_gray.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "bag_close",
+      "Template": "templates/bag_close.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "avatar_hud",
+      "Template": "templates/avatar_hud.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "life_skills",
+      "Template": "templates/life_skills.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "shearing",
+      "Template": "templates/shearing.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "sheep",
+      "Template": "templates/sheep.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "find_nearby",
+      "Template": "templates/find_nearby.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "bag",
+      "Template": "templates/bag.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "items_tab",
+      "Template": "templates/items_tab.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "items_active",
+      "Template": "templates/items_active.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92,
+      "ActiveColor": "orange"
+    },
+    {
+      "Id": "search_icon",
+      "Template": "templates/search_icon.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "search_input",
+      "Template": "templates/search_input.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "search_apply",
+      "Template": "templates/search_apply.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "golden_wool",
+      "Template": "templates/golden_wool.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "golden_plus",
+      "Template": "templates/golden_plus.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "how_to_get",
+      "Template": "templates/how_to_get.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "golden_shearing",
+      "Template": "templates/golden_shearing.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    },
+    {
+      "Id": "wool",
+      "Template": "templates/wool.png",
+      "Search": {
+        "X": 0,
+        "Y": 0,
+        "Width": 0,
+        "Height": 0
+      },
+      "Threshold": 0.92
+    }
+  ],
+  "QueueSlots": [
+    {
+      "X": 0,
+      "Y": 0,
+      "Width": 0,
+      "Height": 0
+    },
+    {
+      "X": 0,
+      "Y": 0,
+      "Width": 0,
+      "Height": 0
+    },
+    {
+      "X": 0,
+      "Y": 0,
+      "Width": 0,
+      "Height": 0
+    },
+    {
+      "X": 0,
+      "Y": 0,
+      "Width": 0,
+      "Height": 0
+    },
+    {
+      "X": 0,
+      "Y": 0,
+      "Width": 0,
+      "Height": 0
+    },
+    {
+      "X": 0,
+      "Y": 0,
+      "Width": 0,
+      "Height": 0
+    },
+    {
+      "X": 0,
+      "Y": 0,
+      "Width": 0,
+      "Height": 0
+    }
+  ],
+  "Slot7Percent": {
+    "X": 0,
+    "Y": 0,
+    "Width": 0,
+    "Height": 0
+  },
+  "GatheringRoi": {
+    "X": 0,
+    "Y": 0,
+    "Width": 0,
+    "Height": 0
+  },
+  "GaugeExclusions": [],
+  "GoldenNameOffset": {
+    "X": 0,
+    "Y": 0,
+    "Width": 0,
+    "Height": 0
+  },
+  "WoolNameOffset": {
+    "X": 0,
+    "Y": 0,
+    "Width": 0,
+    "Height": 0
+  },
+  "WoolCountOffset": {
+    "X": 0,
+    "Y": 0,
+    "Width": 0,
+    "Height": 0
+  }
+}
