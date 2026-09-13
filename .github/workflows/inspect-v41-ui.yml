@@ -1,4 +1,4 @@
-name: Inspect v46 dashboard source
+name: Inspect v29 title and watchdog
 on:
   push:
     branches: [main]
@@ -12,19 +12,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect dashboard source
+      - name: Inspect v29 title and watchdog
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v46inspect
-          mkdir -p /tmp/v46inspect
-          gh release download v46 --repo "$REPO" --pattern 'CombinedFishingDungeon_v46_StabilityRemote.zip' --dir /tmp/v46inspect
-          unzip -q /tmp/v46inspect/CombinedFishingDungeon_v46_StabilityRemote.zip -d /tmp/v46inspect/src
-          ROOT="$(find /tmp/v46inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== DASHBOARD SOURCE ==='
-          nl -ba "$ROOT/FishingAutomation/MainForm.Dashboard.cs"
-          echo '=== MAINFORM SOURCE ==='
-          nl -ba "$ROOT/FishingAutomation/MainForm.cs" | sed -n '1,260p'
+          rm -rf /tmp/v29inspect && mkdir -p /tmp/v29inspect
+          gh release download v29 --repo "$REPO" --pattern 'CombinedFishingDungeon_v29_DashboardSmartUpdate.zip' --dir /tmp/v29inspect
+          unzip -q /tmp/v29inspect/CombinedFishingDungeon_v29_DashboardSmartUpdate.zip -d /tmp/v29inspect/src
+          ROOT="$(find /tmp/v29inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          echo '=== WINDOW TITLE ==='
+          grep -RIn --include='*.cs' -E 'Text = ".*MABI|MainForm|WatchdogClient|watchdog|WATCHDOG' "$ROOT/FishingAutomation" | head -n 160 || true
+          echo '=== WATCHDOG FILES ==='
+          find "$ROOT" -maxdepth 3 -type f | grep -Ei 'watchdog|restart|launcher' || true
