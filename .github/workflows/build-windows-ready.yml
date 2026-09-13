@@ -67,7 +67,6 @@ jobs:
           $appDir = $mainProj.Directory.FullName
           $packageRoot = Split-Path $appDir -Parent
 
-          # Patch updater selection in the executable being built: Windows_Lite first, then Ready, then source.
           $updateFile = Join-Path $appDir 'UpdateManager.cs'
           if (Test-Path $updateFile) {
             $u = Get-Content -LiteralPath $updateFile -Raw
@@ -111,7 +110,6 @@ jobs:
           $publishWatch = Join-Path $PWD 'publish-watchdog'
           Remove-Item $publishMain,$publishWatch -Recurse -Force -ErrorAction SilentlyContinue
 
-          Write-Host 'Publishing main app: self-contained, single-file, compressed...'
           dotnet publish $mainProj.FullName `
             -c Release `
             -r win-x64 `
@@ -126,7 +124,6 @@ jobs:
 
           $watchProj = Get-ChildItem -Path $packageRoot -Recurse -Filter 'MacroWatchdog.csproj' | Select-Object -First 1
           if ($watchProj) {
-            Write-Host 'Publishing watchdog: self-contained, single-file, compressed...'
             dotnet publish $watchProj.FullName `
               -c Release `
               -r win-x64 `
@@ -229,12 +226,13 @@ jobs:
           "$hash  $liteName" | Set-Content -Path "$litePath.sha256" -Encoding ASCII
           $sizeMb = [Math]::Round((Get-Item $litePath).Length / 1MB, 1)
 
-          Write-Host "Uploading $liteName ($sizeMb MB)"
           gh release upload $tag $litePath "$litePath.sha256" --repo $env:REPO --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Lite release upload failed.' }
 
           foreach ($oldAsset in @("MabiAuto_${safeTag}_Windows_Ready.zip", "MabiAuto_${safeTag}_Windows_Ready.zip.sha256")) {
             gh release delete-asset $tag $oldAsset --repo $env:REPO -y 2>$null
+            if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
           }
 
           Write-Host "WINDOWS LITE BUILD OK: $liteName ($sizeMb MB)"
+          exit 0
