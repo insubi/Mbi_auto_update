@@ -1,4 +1,4 @@
-name: Inspect v37 updater UI methods
+name: Verify v28 attachment
 on:
   push:
     branches: [main]
@@ -12,18 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect updater UI methods
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
+      - name: Download and verify v28 attachment
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v37inspect && mkdir -p /tmp/v37inspect
-          gh release download v37 --repo "$REPO" --pattern 'CombinedFishingDungeon_v37_StabilityRemote.zip' --dir /tmp/v37inspect
-          unzip -q /tmp/v37inspect/CombinedFishingDungeon_v37_StabilityRemote.zip -d /tmp/v37inspect/src
-          ROOT="$(find /tmp/v37inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          FILE="$ROOT/FishingAutomation/MainForm.cs"
-          line=$(grep -n 'private async Task CheckForUpdatesAsync' "$FILE" | head -n1 | cut -d: -f1 || true)
-          echo "check method line=$line"
-          if [ -n "$line" ]; then start=$((line-20)); end=$((line+180)); sed -n "${start},${end}p" "$FILE"; fi
+          URL='https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip'
+          curl -L --fail --retry 3 "$URL" -o /tmp/v28.zip
+          ls -lh /tmp/v28.zip
+          sha256sum /tmp/v28.zip
+          unzip -t /tmp/v28.zip >/dev/null
+          echo V28_ATTACHMENT_OK
