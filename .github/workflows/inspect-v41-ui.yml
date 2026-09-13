@@ -1,4 +1,4 @@
-name: Inspect v43 detector semantics
+name: Inspect v46 abyss exit
 on:
   push:
     branches: [main]
@@ -12,18 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect detector and target model
+      - name: Inspect exit flow
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v43inspect && mkdir -p /tmp/v43inspect
-          gh release download v43 --repo "$REPO" --pattern 'CombinedFishingDungeon_v43_StabilityRemote.zip' --dir /tmp/v43inspect
-          unzip -q /tmp/v43inspect/CombinedFishingDungeon_v43_StabilityRemote.zip -d /tmp/v43inspect/src
-          ROOT="$(find /tmp/v43inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== TARGET DETECTOR ==='
-          nl -ba "$ROOT/FishingAutomation/Dungeon/TargetDetector.cs" | sed -n '1,180p'
-          echo '=== TARGET MODEL ==='
-          grep -RIn -A 45 -B 5 --include='Models.cs' -E 'class TargetDefinition|record TargetDefinition' "$ROOT/FishingAutomation/Dungeon" || true
+          rm -rf /tmp/v46inspect
+          mkdir -p /tmp/v46inspect
+          gh release download v46 --repo "$REPO" --pattern 'CombinedFishingDungeon_v46_StabilityRemote.zip' --dir /tmp/v46inspect
+          unzip -q /tmp/v46inspect/CombinedFishingDungeon_v46_StabilityRemote.zip -d /tmp/v46inspect/src
+          ROOT="$(find /tmp/v46inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          echo '=== ENGINE ==='
+          grep -n -A 80 -B 60 -E 'abyss_exit|WaitForAbyssHomeAfterNormalExitAsync|StepTimeout' "$ROOT/FishingAutomation/Dungeon/ScenarioEngine.cs" || true
+          echo '=== SCENARIO ==='
+          cat "$ROOT/FishingAutomation/abyss/config/scenario.json"
+          echo '=== TARGETS ==='
+          grep -n -A 18 -B 4 -E 'abyss_exit|abyss_menu|abyss_leave_dungeon' "$ROOT/FishingAutomation/abyss/config/targets.json" || true
