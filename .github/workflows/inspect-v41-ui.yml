@@ -1,4 +1,4 @@
-name: Inspect v37 updater
+name: Inspect v37 updater UI methods
 on:
   push:
     branches: [main]
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect v37 updater
+      - name: Inspect updater UI methods
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -23,9 +23,7 @@ jobs:
           gh release download v37 --repo "$REPO" --pattern 'CombinedFishingDungeon_v37_StabilityRemote.zip' --dir /tmp/v37inspect
           unzip -q /tmp/v37inspect/CombinedFishingDungeon_v37_StabilityRemote.zip -d /tmp/v37inspect/src
           ROOT="$(find /tmp/v37inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== UPDATE MANAGER ==='
-          cat "$ROOT/FishingAutomation/UpdateManager.cs" || true
-          echo '=== APPLY UPDATE ==='
-          cat "$ROOT/tools/ApplyUpdate.ps1" || true
-          echo '=== UPDATE REFS IN MAINFORM ==='
-          grep -n -A 35 -B 20 -E 'CheckForUpdatesAsync|ApplyUpdate|MarkStartupHealthy|Shown \+=' "$ROOT/FishingAutomation/MainForm.cs" || true
+          FILE="$ROOT/FishingAutomation/MainForm.cs"
+          line=$(grep -n 'private async Task CheckForUpdatesAsync' "$FILE" | head -n1 | cut -d: -f1 || true)
+          echo "check method line=$line"
+          if [ -n "$line" ]; then start=$((line-20)); end=$((line+180)); sed -n "${start},${end}p" "$FILE"; fi
