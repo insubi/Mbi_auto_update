@@ -13,7 +13,7 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Download v36 source and print updater files
+      - name: Download v36 source and print update call sites
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -24,9 +24,7 @@ jobs:
           cd work
           gh release download v36 --repo "$REPO" --pattern 'CombinedFishingDungeon_v36_StabilityRemote.zip'
           unzip -q CombinedFishingDungeon_v36_StabilityRemote.zip
-          echo '===== UpdateManager.cs ====='
-          U="$(find . -name UpdateManager.cs -type f | head -n1)"
-          cat "$U"
-          echo '===== ApplyUpdate.ps1 ====='
-          P="$(find . -name ApplyUpdate.ps1 -type f | head -n1)"
-          cat "$P"
+          echo '===== LaunchUpdater call sites ====='
+          grep -R -n -B 35 -A 35 --include='*.cs' 'LaunchUpdater' . || true
+          echo '===== update button / CheckLatest call sites ====='
+          grep -R -n -B 25 -A 50 --include='*.cs' -E 'CheckLatestAsync|DownloadAsync|업데이트' . | head -n 700 || true
