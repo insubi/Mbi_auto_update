@@ -6,7 +6,7 @@ on:
     paths:
       - '.github/workflows/build-windows-ready.yml'
   workflow_run:
-    workflows: ['Promote release ZIP']
+    workflows: ['Promote release ZIP', 'Publish Release Source']
     types: [completed]
   workflow_dispatch:
 
@@ -137,6 +137,7 @@ jobs:
           }
 
           $safeTag = $tag -replace '[^A-Za-z0-9._-]', '_'
+          $version = $tag.TrimStart('v','V')
           $liteBase = Join-Path $PWD 'lite'
           $liteRoot = Join-Path $liteBase "MabiAuto_$safeTag"
           Remove-Item $liteBase -Recurse -Force -ErrorAction SilentlyContinue
@@ -170,7 +171,7 @@ jobs:
             $src = Join-Path (Join-Path $packageRoot 'tools') $tool
             if (Test-Path $src) { Copy-Item $src (Join-Path $toolsOut $tool) -Force }
           }
-          foreach ($rootFile in @('1_INSTALL_INTERCEPTION.cmd','SETUP_PHONE_ALERT.cmd','SETUP_PHONE_ALERT_ALT.bat','ADD_TEMPLATES.cmd','OPEN_TEMPLATES.cmd','PHONE_ALERT_README.txt','AUTO_UPDATE_README.txt','START_HERE_v29.txt')) {
+          foreach ($rootFile in @('1_INSTALL_INTERCEPTION.cmd','SETUP_PHONE_ALERT.cmd','SETUP_PHONE_ALERT_ALT.bat','ADD_TEMPLATES.cmd','OPEN_TEMPLATES.cmd','PHONE_ALERT_README.txt','AUTO_UPDATE_README.txt','RUN_DIAGNOSTIC.cmd',"START_HERE_v$version.txt")) {
             $src = Join-Path $packageRoot $rootFile
             if (Test-Path $src) { Copy-Item $src (Join-Path $liteRoot $rootFile) -Force }
           }
@@ -193,28 +194,19 @@ jobs:
           )
           Set-Content -LiteralPath (Join-Path $liteRoot 'START.cmd') -Value $startLines -Encoding ASCII
 
-          $apply = Join-Path $toolsOut 'ApplyUpdate.ps1'
-          if (Test-Path $apply) {
-            $a = Get-Content -LiteralPath $apply -Raw
-            $a = $a.Replace("        'release\notification.json'", "        'release\notification.json',`r`n        'release\config.json',`r`n        'release\interception.dll',`r`n        'release\templates',`r`n        'release\abyss\templates',`r`n        'release\dungeon\templates'")
-            $pattern = "(?ms)^\s*\$release = Join-Path \$InstallRoot 'release'.*?^\s*Log 'Files replaced\. Starting BUILD/START\.'"
-            $a = [regex]::Replace($a, $pattern, "    Log 'Files replaced. Starting prebuilt Windows package.'")
-            Set-Content -LiteralPath $apply -Value $a -Encoding UTF8
-          }
-
           $infoLines = @(
             "MABI AUTO $tag - Windows Lite",
             '',
             '- .NET SDK installation is NOT required.',
-            '- Source code, bin/obj folders, build cache, and duplicate publish folders are excluded.',
             '- Main app and Watchdog are self-contained compressed Windows x64 executables.',
+            '- User settings and templates are preserved during in-app updates.',
             '',
             'First use:',
             '1. Extract this ZIP completely.',
             '2. If Interception is not installed, run 1_INSTALL_INTERCEPTION.cmd once and reboot.',
             '3. Run START.cmd.',
             '',
-            'For Telegram phone alerts, run SETUP_PHONE_ALERT.cmd.'
+            'For Telegram phone alerts and remote commands, run SETUP_PHONE_ALERT.cmd.'
           )
           Set-Content -LiteralPath (Join-Path $liteRoot 'WINDOWS_LITE.txt') -Value $infoLines -Encoding UTF8
 
