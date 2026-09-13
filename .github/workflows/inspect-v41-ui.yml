@@ -1,4 +1,4 @@
-name: Inspect v41 UI
+name: Inspect v43 abyss selection
 on:
   push:
     branches: [main]
@@ -12,16 +12,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download v42 source and inspect exit state
+      - name: Download v43 source and inspect abyss selection
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v42ui && mkdir -p /tmp/v42ui
-          gh release download v42 --repo "$REPO" --pattern 'CombinedFishingDungeon_v42_StabilityRemote.zip' --dir /tmp/v42ui
-          unzip -q /tmp/v42ui/CombinedFishingDungeon_v42_StabilityRemote.zip -d /tmp/v42ui/src
-          ROOT="$(find /tmp/v42ui/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== EXIT STATUS ==='
-          grep -RIn -C 8 --include='*.cs' -E '퇴장|나가기|상태|Status' "$ROOT/FishingAutomation" | head -n 800 || true
+          rm -rf /tmp/v43inspect && mkdir -p /tmp/v43inspect
+          gh release download v43 --repo "$REPO" --pattern 'CombinedFishingDungeon_v43_StabilityRemote.zip' --dir /tmp/v43inspect
+          unzip -q /tmp/v43inspect/CombinedFishingDungeon_v43_StabilityRemote.zip -d /tmp/v43inspect/src
+          ROOT="$(find /tmp/v43inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          echo '=== SCENARIO ==='
+          cat "$ROOT/FishingAutomation/abyss/config/scenario.json"
+          echo '=== TARGETS OF INTEREST ==='
+          python3 - <<'PY'
+          import json, os
+          root=os.environ['ROOT'] if 'ROOT' in os.environ else ''
+          PY
+          python3 - "$ROOT/FishingAutomation/abyss/config/targets.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1], encoding='utf-8-sig'))
+          for t in data:
+              if any(k in t.get('Id','') for k in ['abyss_menu','abyss_entry','abyss_select','anchorage','cave','water','harbor','madness','scattered']):
+                  print(json.dumps(t, ensure_ascii=False))
+          PY
+          echo '=== ABYSS FILES / SELECT REFERENCES ==='
+          grep -RIn -C 5 --include='*.cs' --include='*.json' -E 'SelectedAbyssDungeon|선택 던전|허상의 정박지|광기의 동굴|흩어진 물길|abyss_.*(dock|cave|water|select)|TargetOverride|Replace' "$ROOT/FishingAutomation" | head -n 1200 || true
