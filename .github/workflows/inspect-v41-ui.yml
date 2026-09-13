@@ -1,4 +1,4 @@
-name: Inspect v29 title and watchdog
+name: Inspect v37 updater
 on:
   push:
     branches: [main]
@@ -12,18 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect v29 title and watchdog
+      - name: Inspect v37 updater
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v29inspect && mkdir -p /tmp/v29inspect
-          gh release download v29 --repo "$REPO" --pattern 'CombinedFishingDungeon_v29_DashboardSmartUpdate.zip' --dir /tmp/v29inspect
-          unzip -q /tmp/v29inspect/CombinedFishingDungeon_v29_DashboardSmartUpdate.zip -d /tmp/v29inspect/src
-          ROOT="$(find /tmp/v29inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          echo '=== WINDOW TITLE ==='
-          grep -RIn --include='*.cs' -E 'Text = ".*MABI|MainForm|WatchdogClient|watchdog|WATCHDOG' "$ROOT/FishingAutomation" | head -n 160 || true
-          echo '=== WATCHDOG FILES ==='
-          find "$ROOT" -maxdepth 3 -type f | grep -Ei 'watchdog|restart|launcher' || true
+          rm -rf /tmp/v37inspect && mkdir -p /tmp/v37inspect
+          gh release download v37 --repo "$REPO" --pattern 'CombinedFishingDungeon_v37_StabilityRemote.zip' --dir /tmp/v37inspect
+          unzip -q /tmp/v37inspect/CombinedFishingDungeon_v37_StabilityRemote.zip -d /tmp/v37inspect/src
+          ROOT="$(find /tmp/v37inspect/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          echo '=== UPDATE MANAGER ==='
+          cat "$ROOT/FishingAutomation/UpdateManager.cs" || true
+          echo '=== APPLY UPDATE ==='
+          cat "$ROOT/tools/ApplyUpdate.ps1" || true
+          echo '=== UPDATE REFS IN MAINFORM ==='
+          grep -n -A 35 -B 20 -E 'CheckForUpdatesAsync|ApplyUpdate|MarkStartupHealthy|Shown \+=' "$ROOT/FishingAutomation/MainForm.cs" || true
