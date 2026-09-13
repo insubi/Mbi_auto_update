@@ -1,0 +1,40 @@
+name: Prefer Windows Lite Asset
+
+on:
+  workflow_run:
+    workflows: ['Build Windows Lite']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  reorder:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-upload Windows Lite last so clients select it first
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="$(gh api "repos/$REPO/releases/latest" --jq '.tag_name')"
+          LITE="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[].name' | grep -E '^MabiAuto_.*_Windows_Lite\.zip$' | head -n 1 || true)"
+          if [ -z "$LITE" ]; then
+            echo "No Windows Lite asset found for $TAG"
+            exit 0
+          fi
+          SHA="$LITE.sha256"
+          gh release download "$TAG" --repo "$REPO" --pattern "$LITE" --clobber
+          gh release download "$TAG" --repo "$REPO" --pattern "$SHA" --clobber || true
+          gh release delete-asset "$TAG" "$LITE" --repo "$REPO" -y
+          gh release delete-asset "$TAG" "$SHA" --repo "$REPO" -y || true
+          if [ -f "$SHA" ]; then
+            gh release upload "$TAG" "$LITE" "$SHA" --repo "$REPO"
+          else
+            gh release upload "$TAG" "$LITE" --repo "$REPO"
+          fi
+          echo "Preferred asset refreshed: $LITE"
