@@ -1,4 +1,4 @@
-name: Inspect v38 Abyss step5
+name: Compare v29 watchdog vs v38 Abyss
 
 on:
   push:
@@ -13,20 +13,55 @@ jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Inspect scenario and engine
+      - name: Compare Abyss recognition
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          mkdir work && cd work
+          mkdir -p work/v29 work/v38
+          cd work/v29
+          gh release download v29 --repo "$REPO" --pattern 'CombinedFishingDungeon_v29_DashboardSmartUpdate.zip'
+          unzip -q CombinedFishingDungeon_v29_DashboardSmartUpdate.zip
+          cd ../v38
           gh release download v38 --repo "$REPO" --pattern 'CombinedFishingDungeon_v38_StabilityRemote.zip'
           unzip -q CombinedFishingDungeon_v38_StabilityRemote.zip
-          ROOT="$(find . -maxdepth 2 -type d -name FishingAutomation | head -n1)"
-          echo '===== scenario.json ====='
-          cat "$ROOT/abyss/config/scenario.json"
-          echo '===== abyss targets ====='
-          cat "$ROOT/abyss/config/targets.json"
-          echo '===== engine relevant ====='
-          grep -n -B 30 -A 120 -E 'TimeoutClickTarget|TimeoutSeconds|Followup|AlternativeTarget|ClickAlternativeThenWaitPrimary|RunStep|wait_click' "$ROOT/Dungeon/ScenarioEngine.cs" | head -n 1800 || true
+          cd ..
+          R29="$(find v29 -type d -name FishingAutomation | head -n1)"
+          R38="$(find v38 -type d -name FishingAutomation | head -n1)"
+          echo "R29=$R29"
+          echo "R38=$R38"
+          echo '===== touch_screen image ====='
+          for R in "$R29" "$R38"; do
+            F="$R/abyss/templates/touch_screen.png"
+            echo "-- $F"
+            sha256sum "$F"
+            file "$F"
+            stat -c '%s bytes' "$F"
+          done
+          echo '===== targets touch block ====='
+          for R in "$R29" "$R38"; do
+            echo "-- $R"
+            grep -n -A 14 -B 2 'abyss_touch_screen' "$R/abyss/config/targets.json" || true
+          done
+          echo '===== step 5 ====='
+          for R in "$R29" "$R38"; do
+            echo "-- $R"
+            grep -n -A 14 -B 2 '5. 클리어' "$R/abyss/config/scenario.json" || true
+          done
+          echo '===== hashes ====='
+          for F in Dungeon/TemplateMatcher.cs Dungeon/TargetDetector.cs Dungeon/WindowCapture.cs Dungeon/ScenarioEngine.cs abyss/config/targets.json abyss/config/scenario.json; do
+            echo "## $F"
+            sha256sum "$R29/$F" "$R38/$F" || true
+          done
+          echo '===== target diff ====='
+          diff -u "$R29/abyss/config/targets.json" "$R38/abyss/config/targets.json" || true
+          echo '===== scenario diff ====='
+          diff -u "$R29/abyss/config/scenario.json" "$R38/abyss/config/scenario.json" || true
+          echo '===== matcher diff ====='
+          diff -u "$R29/Dungeon/TemplateMatcher.cs" "$R38/Dungeon/TemplateMatcher.cs" || true
+          echo '===== capture diff ====='
+          diff -u "$R29/Dungeon/WindowCapture.cs" "$R38/Dungeon/WindowCapture.cs" || true
+          echo '===== detector diff ====='
+          diff -u "$R29/Dungeon/TargetDetector.cs" "$R38/Dungeon/TargetDetector.cs" || true
