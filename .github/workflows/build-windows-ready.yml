@@ -1,0 +1,134 @@
+name: Build Windows Ready
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-windows-ready.yml'
+  workflow_run:
+    workflows: ['Promote release ZIP']
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: windows-latest
+
+    steps:
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build latest release as self-contained Windows package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+
+          $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/latest"
+          $tag = $release.tag_name
+          if (-not $tag) { throw 'Latest release tag not found.' }
+
+          $sourceAsset = $release.assets |
+            Where-Object {
+              $_.name.ToLowerInvariant().EndsWith('.zip') -and
+              $_.name -notmatch '(?i)Windows_Ready|Prebuilt'
+            } |
+            Select-Object -First 1
+
+          if (-not $sourceAsset) {
+            throw "No source ZIP asset found in release $tag."
+          }
+
+          Write-Host "Release: $tag"
+          Write-Host "Source asset: $($sourceAsset.name)"
+
+          $sourceZip = Join-Path $PWD 'source.zip'
+          Invoke-WebRequest -Headers $headers -Uri $sourceAsset.url -OutFile $sourceZip
+
+          $work = Join-Path $PWD 'work'
+          if (Test-Path $work) { Remove-Item $work -Recurse -Force }
+          New-Item -ItemType Directory -Path $work | Out-Null
+          Expand-Archive -Path $sourceZip -DestinationPath $work -Force
+
+          $mainProj = Get-ChildItem -Path $work -Recurse -Filter 'FishingAutomation.csproj' | Select-Object -First 1
+          if (-not $mainProj) { throw 'FishingAutomation.csproj not found in source ZIP.' }
+
+          $appDir = $mainProj.Directory.FullName
+          $packageRoot = Split-Path $appDir -Parent
+          $releaseDir = Join-Path $packageRoot 'release'
+
+          if (Test-Path $releaseDir) { Remove-Item $releaseDir -Recurse -Force }
+
+          Write-Host 'Restoring main project...'
+          dotnet restore $mainProj.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'dotnet restore failed.' }
+
+          Write-Host 'Publishing main app (self-contained win-x64)...'
+          dotnet publish $mainProj.FullName `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o $releaseDir
+          if ($LASTEXITCODE -ne 0) { throw 'Main app publish failed.' }
+
+          $watchProj = Get-ChildItem -Path $packageRoot -Recurse -Filter 'MacroWatchdog.csproj' | Select-Object -First 1
+          if ($watchProj) {
+            $watchOut = Join-Path $packageRoot 'watchdog_release'
+            if (Test-Path $watchOut) { Remove-Item $watchOut -Recurse -Force }
+            Write-Host 'Publishing watchdog (self-contained win-x64)...'
+            dotnet publish $watchProj.FullName `
+              -c Release `
+              -r win-x64 `
+              --self-contained true `
+              -p:PublishSingleFile=true `
+              -o $watchOut
+            if ($LASTEXITCODE -ne 0) { throw 'Watchdog publish failed.' }
+            Copy-Item (Join-Path $watchOut 'MacroWatchdog.exe') (Join-Path $releaseDir 'MacroWatchdog.exe') -Force
+          }
+
+          $mainExe = Join-Path $releaseDir 'FishingAutomation.exe'
+          if (-not (Test-Path $mainExe)) { throw 'FishingAutomation.exe was not created.' }
+
+          @"
+          MABI AUTO $tag - Windows Ready
+
+          This package was built automatically by GitHub Actions.
+          .NET SDK is NOT required on the PC.
+
+          1. Extract this ZIP.
+          2. Run 1_INSTALL_INTERCEPTION.cmd once if Interception is not installed.
+          3. Reboot if the driver installer asks you to.
+          4. Run START.cmd.
+
+          The app and watchdog are self-contained Windows x64 builds.
+          "@ | Set-Content -Path (Join-Path $packageRoot 'WINDOWS_READY.txt') -Encoding UTF8
+
+          $safeTag = $tag -replace '[^A-Za-z0-9._-]', '_'
+          $readyName = "MabiAuto_${safeTag}_Windows_Ready.zip"
+          $readyPath = Join-Path $PWD $readyName
+          if (Test-Path $readyPath) { Remove-Item $readyPath -Force }
+          Compress-Archive -Path $packageRoot -DestinationPath $readyPath -CompressionLevel Optimal
+
+          $hash = (Get-FileHash -Algorithm SHA256 $readyPath).Hash.ToLowerInvariant()
+          "$hash  $readyName" | Set-Content -Path "$readyPath.sha256" -Encoding ASCII
+
+          Write-Host "Uploading $readyName to release $tag"
+          gh release upload $tag $readyPath "$readyPath.sha256" --repo $env:REPO --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed.' }
+
+          Write-Host "WINDOWS READY BUILD OK: $readyName"
