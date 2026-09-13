@@ -23,13 +23,14 @@ jobs:
           gh release download v41 --repo "$REPO" --pattern 'CombinedFishingDungeon_v41_StabilityRemote.zip' --dir /tmp/v41ui
           unzip -q /tmp/v41ui/CombinedFishingDungeon_v41_StabilityRemote.zip -d /tmp/v41ui/src
           ROOT="$(find /tmp/v41ui/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
-          D="$ROOT/FishingAutomation/MainForm.Dashboard.cs"
-          M="$ROOT/FishingAutomation/MainForm.cs"
-          echo '=== DASHBOARD 1-180 ==='
-          nl -ba "$D" | sed -n '1,180p'
-          echo '=== DASHBOARD 180-390 ==='
-          nl -ba "$D" | sed -n '180,390p'
-          echo '=== DASHBOARD 390-540 ==='
-          nl -ba "$D" | sed -n '390,540p'
-          echo '=== MAINFORM 1-220 ==='
-          nl -ba "$M" | sed -n '1,220p'
+          A="$ROOT/FishingAutomation/abyss"
+          echo '=== ABYSS CONFIG FILES ==='
+          find "$A/config" -maxdepth 1 -type f -print | sort
+          echo '=== TARGETS JSON ==='
+          cat "$A/config/targets.json"
+          echo '=== SCENARIO / MONITOR JSON ==='
+          for f in "$A/config"/*.json; do echo "--- $f"; cat "$f"; done
+          echo '=== SCENARIO ENGINE ==='
+          find "$ROOT" -name 'ScenarioEngine.cs' -print -exec sed -n '1,320p' {} \;
+          echo '=== TARGET DETECTOR ==='
+          find "$ROOT" -name 'TargetDetector.cs' -print -exec sed -n '1,360p' {} \;
