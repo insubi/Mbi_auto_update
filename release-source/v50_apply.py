@@ -29,7 +29,35 @@ s = swap(s,
 s = swap(s,
 '        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64));\n        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));',
 '        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));\n        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 0));')
-s = swap(s, 'var card = BorderedPanel(Color.FromArgb(9, 34, 62));', 'var card = BorderedPanel(Color.FromArgb(6, 36, 70));')
+s = swap(s, 'var card = BorderedPanel(Color.FromArgb(9, 34, 62));', '''var card = BorderedPanel(Color.FromArgb(6, 36, 70));
+        card.Paint += (_, e) =>
+        {
+            var r = card.ClientRectangle;
+            if (r.Width < 2 || r.Height < 2) return;
+            using var bg = new System.Drawing.Drawing2D.LinearGradientBrush(r, Color.FromArgb(5, 24, 52), Color.FromArgb(12, 74, 132), 0f);
+            e.Graphics.FillRectangle(bg, r);
+            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            using var pen = new Pen(Color.FromArgb(100, 71, 176, 255), 2f);
+            using var dark = new SolidBrush(Color.FromArgb(150, 2, 17, 35));
+            int ground = r.Height - 15;
+            int start = Math.Max(430, r.Width / 3);
+            for (int i = 0; i < 7; i++)
+            {
+                int x = start + i * 85;
+                int h = 38 + (i % 3) * 12;
+                e.Graphics.FillRectangle(dark, x, ground - h, 20, h);
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                int x = start + 35 + i * 135;
+                e.Graphics.DrawArc(pen, x, ground - 60, 62, 60, 180, 180);
+                e.Graphics.DrawLine(pen, x, ground - 30, x, ground);
+                e.Graphics.DrawLine(pen, x + 62, ground - 30, x + 62, ground);
+            }
+            using var moon = new SolidBrush(Color.FromArgb(205, 204, 230, 255));
+            e.Graphics.FillEllipse(moon, r.Width - 145, 18, 42, 42);
+            e.Graphics.DrawLine(pen, start - 20, ground, r.Width - 20, ground);
+        };''')
 s = s.replace('SizeMode = PictureBoxSizeMode.StretchImage', 'SizeMode = PictureBoxSizeMode.Zoom')
 s = s.replace('using var pen = new Pen(selected ? Accent : Line, selected ? 3f : 1f);', 'using var pen = new Pen(selected ? Color.FromArgb(0, 190, 255) : Line, selected ? 4f : 1f);', 1)
 write(p, s)
