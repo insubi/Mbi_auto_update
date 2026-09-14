@@ -42,8 +42,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
           if ($env:SOURCE_SHA) {
             $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v66' })
-            if ($matches.Count -ne 1) { throw 'Expected exactly one v66 release for the source workflow commit' }
-            $tag = $matches[0].tag_name
+            if ($matches.Count -eq 1) {
+              $tag = $matches[0].tag_name
+            } else {
+              $draftMatches = @($releases | Where-Object { $_.tag_name -eq 'v66' -and $_.draft })
+              if ($draftMatches.Count -ne 1) { throw 'Expected exactly one v66 draft release for rebuild' }
+              $tag = $draftMatches[0].tag_name
+            }
           } else { $tag = $env:REQUESTED_TAG }
           if ($tag -ne 'v66') { throw 'This packaging pipeline currently requires v66' }
           $selected = @($releases | Where-Object { $_.tag_name -eq $tag })
