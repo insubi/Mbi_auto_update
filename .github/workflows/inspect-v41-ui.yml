@@ -1,4 +1,4 @@
-name: Inspect v46 dashboard dependencies
+name: Inspect v47 dashboard dependencies
 on:
   push:
     branches: [main]
@@ -12,23 +12,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect v46 dashboard dependencies
+      - name: Inspect v47 dashboard dependencies
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf /tmp/v46 && mkdir -p /tmp/v46
-          gh release download v46 --repo "$REPO" --pattern 'CombinedFishingDungeon_v46_StabilityRemote.zip' --dir /tmp/v46
-          unzip -q /tmp/v46/CombinedFishingDungeon_v46_StabilityRemote.zip -d /tmp/v46/src
-          ROOT="$(find /tmp/v46/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          rm -rf /tmp/v47 && mkdir -p /tmp/v47
+          gh release download v47 --repo "$REPO" --pattern 'CombinedFishingDungeon_v47_StabilityRemote.zip' --dir /tmp/v47
+          unzip -q /tmp/v47/CombinedFishingDungeon_v47_StabilityRemote.zip -d /tmp/v47/src
+          ROOT="$(find /tmp/v47/src -mindepth 1 -maxdepth 1 -type d | head -n1)"
           APP="$ROOT/FishingAutomation"
-          echo '=== FIELD REFERENCES OUTSIDE DASHBOARD ==='
-          grep -RIn --include='*.cs' --exclude='MainForm.Dashboard.cs' -E '_readyBadge|_failureValue|_averageValue|_startTimeValue|_telegramQuickValue|_updateStatusValue|_currentDungeonValue|_sysGameValue|_sysTemplateValue|_sysOcrValue|_sysInputValue|_sysTelegramValue|_sysUpdateValue|_stageTime|_timeoutValue|_miniStatus|_miniInfo|_logToggle|_dungeonPicker|_dashboard' "$APP" || true
+          echo '=== DASHBOARD SOURCE ==='
+          nl -ba "$APP/MainForm.Dashboard.cs"
+          echo '=== REFERENCES OUTSIDE DASHBOARD ==='
+          grep -RIn --include='*.cs' --exclude='MainForm.Dashboard.cs' -E '_readyBadge|_failureValue|_averageValue|_startTimeValue|_telegramQuickValue|_updateStatusValue|_currentDungeonValue|_sysGameValue|_sysTemplateValue|_sysOcrValue|_sysInputValue|_sysWatchdogValue|_sysTelegramValue|_sysUpdateValue|_stageTime|_timeoutValue|_miniStatus|_miniInfo|_logToggle|_dungeonPicker|_dungeonGallery|_dashboard|BuildLayout|UpdateDashboard|TrackProgress|ToggleMini|ApplyLogVisibility' "$APP" || true
+          echo '=== MAINFORM CORE ==='
+          sed -n '1,760p' "$APP/MainForm.cs"
           echo '=== UPDATE ==='
           cat "$APP/MainForm.Update.cs"
           echo '=== DIAGNOSTICS ==='
           cat "$APP/MainForm.Diagnostics.cs"
-          echo '=== MAINFORM TAIL ==='
-          sed -n '220,760p' "$APP/MainForm.cs"
