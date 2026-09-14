@@ -1,230 +1,83 @@
 name: Build Windows Lite
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/build-windows-ready.yml'
   workflow_run:
-    workflows: ['Promote release ZIP', 'Publish Release Source']
+    workflows: ['Publish Release Source']
     types: [completed]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Draft release to build (packaging pipeline v58)'
+        required: true
+        default: 'v58'
 
 permissions:
   contents: write
+
+concurrency:
+  group: windows-lite-release
+  cancel-in-progress: false
 
 jobs:
   build:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: windows-latest
-
     steps:
-      - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
+      - name: Select exact draft source, build and verify package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          REQUESTED_TAG: ${{ inputs.tag }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SOURCE_SHA) {
+            $releases = gh api "repos/$env:REPO/releases?per_page=100" | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
+            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v58' })
+            if ($matches.Count -ne 1) { throw 'Expected exactly one v58 release for the source workflow commit' }
+            $tag = $matches[0].tag_name
+          } else { $tag = $env:REQUESTED_TAG }
+          if ($tag -ne 'v58') { throw 'This audited packaging pipeline requires v58' }
+          $release = gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
+          if (-not $release.draft) { throw 'Refusing to replace an already published release' }
+          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v58_StabilityRemote.zip' })
+          if ($assets.Count -ne 1) { throw 'Expected exactly one audited source ZIP' }
+          New-Item -ItemType Directory -Path source-download,source-work | Out-Null
+          gh release download $tag --repo $env:REPO --pattern $assets[0].name --dir source-download
+          if ($LASTEXITCODE -ne 0) { throw 'Source download failed' }
+          tar -xf (Join-Path source-download $assets[0].name) -C source-work
+          if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
+          ./release-source/v58-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v58 -OutputRoot build-output
+          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v58 -PackageRoot build-output/MabiAuto_v58 -WorkRoot update-test
+          "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Build lightweight self-contained Windows package
+      - name: Keep verification reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: v58-packaging-verification
+          path: |
+            source-work/CombinedFishingDungeon_v58/V58_PACKAGING_AUDIT.json
+            build-output/v58-package-inventory.json
+            update-test/verification.txt
+          if-no-files-found: error
+
+      - name: Upload complete package and publish verified release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $apiHeaders = @{
-            Authorization = "Bearer $env:GH_TOKEN"
-            Accept = 'application/vnd.github+json'
-            'X-GitHub-Api-Version' = '2022-11-28'
-          }
-
-          $release = Invoke-RestMethod -Headers $apiHeaders -Uri "https://api.github.com/repos/$env:REPO/releases/latest"
-          $tag = $release.tag_name
-          if (-not $tag) { throw 'Latest release tag not found.' }
-
-          $sourceAsset = $release.assets |
-            Where-Object {
-              $_.name.ToLowerInvariant().EndsWith('.zip') -and
-              $_.name -notmatch '(?i)Windows_Ready|Windows_Lite|Prebuilt'
-            } |
-            Select-Object -First 1
-          if (-not $sourceAsset) { throw "No source ZIP asset found in release $tag." }
-
-          Write-Host "Release: $tag"
-          Write-Host "Source asset: $($sourceAsset.name)"
-
-          $sourceZip = Join-Path $PWD $sourceAsset.name
-          Invoke-WebRequest -Uri $sourceAsset.browser_download_url -OutFile $sourceZip
-          if ((Get-Item $sourceZip).Length -lt 1024) { throw 'Downloaded source ZIP is unexpectedly small.' }
-
-          $work = Join-Path $PWD 'work'
-          Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $work | Out-Null
-          tar -xf $sourceZip -C $work
-          if ($LASTEXITCODE -ne 0) { throw 'Source ZIP extraction failed.' }
-
-          $mainProj = Get-ChildItem -Path $work -Recurse -Filter 'FishingAutomation.csproj' | Select-Object -First 1
-          if (-not $mainProj) { throw 'FishingAutomation.csproj not found in source ZIP.' }
-          $appDir = $mainProj.Directory.FullName
-          $packageRoot = Split-Path $appDir -Parent
-
-          $updateFile = Join-Path $appDir 'UpdateManager.cs'
-          if (Test-Path $updateFile) {
-            $u = Get-Content -LiteralPath $updateFile -Raw
-            if ($u -notmatch 'Windows_Lite') {
-              $oldLines = @(
-                '        var asset = assets.FirstOrDefault(a =>',
-                '            a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
-                '            (a.Name.Contains("CombinedFishingDungeon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("Mabi", StringComparison.OrdinalIgnoreCase)));',
-                '        if (string.IsNullOrWhiteSpace(asset.Url))',
-                '            asset = assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));'
-              )
-              $newLines = @(
-                '        var asset = assets.FirstOrDefault(a =>',
-                '            a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
-                '            a.Name.Contains("Windows_Lite", StringComparison.OrdinalIgnoreCase));',
-                '        if (string.IsNullOrWhiteSpace(asset.Url))',
-                '            asset = assets.FirstOrDefault(a =>',
-                '                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
-                '                a.Name.Contains("Windows_Ready", StringComparison.OrdinalIgnoreCase));',
-                '        if (string.IsNullOrWhiteSpace(asset.Url))',
-                '            asset = assets.FirstOrDefault(a =>',
-                '                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&',
-                '                (a.Name.Contains("CombinedFishingDungeon", StringComparison.OrdinalIgnoreCase) || a.Name.Contains("Mabi", StringComparison.OrdinalIgnoreCase)));',
-                '        if (string.IsNullOrWhiteSpace(asset.Url))',
-                '            asset = assets.FirstOrDefault(a => a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));'
-              )
-              $normalized = $u.Replace("`r`n", "`n")
-              $old = $oldLines -join "`n"
-              $new = $newLines -join "`n"
-              if ($normalized.Contains($old)) {
-                $normalized = $normalized.Replace($old, $new)
-                Set-Content -LiteralPath $updateFile -Value $normalized -Encoding UTF8
-                Write-Host 'UpdateManager patched: Windows_Lite is preferred.'
-              } else {
-                throw 'UpdateManager asset selection block was not found.'
-              }
-            }
-          }
-
-          $publishMain = Join-Path $PWD 'publish-main'
-          $publishWatch = Join-Path $PWD 'publish-watchdog'
-          Remove-Item $publishMain,$publishWatch -Recurse -Force -ErrorAction SilentlyContinue
-
-          dotnet publish $mainProj.FullName `
-            -c Release `
-            -r win-x64 `
-            --self-contained true `
-            -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true `
-            -p:EnableCompressionInSingleFile=true `
-            -p:DebugType=None `
-            -p:DebugSymbols=false `
-            -o $publishMain
-          if ($LASTEXITCODE -ne 0) { throw 'Main app publish failed.' }
-
-          $watchProj = Get-ChildItem -Path $packageRoot -Recurse -Filter 'MacroWatchdog.csproj' | Select-Object -First 1
-          if ($watchProj) {
-            dotnet publish $watchProj.FullName `
-              -c Release `
-              -r win-x64 `
-              --self-contained true `
-              -p:PublishSingleFile=true `
-              -p:EnableCompressionInSingleFile=true `
-              -p:DebugType=None `
-              -p:DebugSymbols=false `
-              -o $publishWatch
-            if ($LASTEXITCODE -ne 0) { throw 'Watchdog publish failed.' }
-          }
-
-          $safeTag = $tag -replace '[^A-Za-z0-9._-]', '_'
-          $version = $tag.TrimStart('v','V')
-          $liteBase = Join-Path $PWD 'lite'
-          $liteRoot = Join-Path $liteBase "MabiAuto_$safeTag"
-          Remove-Item $liteBase -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $liteRoot | Out-Null
-
-          $runtimeDir = Join-Path $liteRoot 'release'
-          New-Item -ItemType Directory -Path $runtimeDir | Out-Null
-          Copy-Item -Path (Join-Path $publishMain '*') -Destination $runtimeDir -Recurse -Force
-          Remove-Item (Join-Path $runtimeDir '*.pdb') -Force -ErrorAction SilentlyContinue
-
-          if ($watchProj) {
-            $watchExe = Join-Path $publishWatch 'MacroWatchdog.exe'
-            if (Test-Path $watchExe) { Copy-Item $watchExe (Join-Path $runtimeDir 'MacroWatchdog.exe') -Force }
-          }
-          if (-not (Test-Path (Join-Path $runtimeDir 'FishingAutomation.exe'))) { throw 'FishingAutomation.exe was not created.' }
-
-          $miniSource = Join-Path $liteRoot 'FishingAutomation'
-          New-Item -ItemType Directory -Path $miniSource | Out-Null
-          foreach ($name in @('config.json','notification.json','interception.dll')) {
-            $src = Join-Path $appDir $name
-            if (Test-Path $src) { Copy-Item $src (Join-Path $miniSource $name) -Force }
-          }
-          foreach ($name in @('templates','dungeon','abyss','drivers')) {
-            $src = Join-Path $appDir $name
-            if (Test-Path $src) { Copy-Item $src (Join-Path $miniSource $name) -Recurse -Force }
-          }
-
-          $toolsOut = Join-Path $liteRoot 'tools'
-          New-Item -ItemType Directory -Path $toolsOut | Out-Null
-          foreach ($tool in @('InstallInterception.ps1','SetupPhoneAlert.ps1','AddTemplates.ps1','ApplyUpdate.ps1')) {
-            $src = Join-Path (Join-Path $packageRoot 'tools') $tool
-            if (Test-Path $src) { Copy-Item $src (Join-Path $toolsOut $tool) -Force }
-          }
-          foreach ($rootFile in @('1_INSTALL_INTERCEPTION.cmd','SETUP_PHONE_ALERT.cmd','SETUP_PHONE_ALERT_ALT.bat','ADD_TEMPLATES.cmd','OPEN_TEMPLATES.cmd','PHONE_ALERT_README.txt','AUTO_UPDATE_README.txt','RUN_DIAGNOSTIC.cmd',"START_HERE_v$version.txt")) {
-            $src = Join-Path $packageRoot $rootFile
-            if (Test-Path $src) { Copy-Item $src (Join-Path $liteRoot $rootFile) -Force }
-          }
-
-          $startLines = @(
-            '@echo off',
-            'setlocal EnableExtensions',
-            'cd /d "%~dp0"',
-            'set "EXE=%~dp0release\FishingAutomation.exe"',
-            'if not exist "%EXE%" (',
-            '  echo.',
-            '  echo ERROR: release\FishingAutomation.exe is missing.',
-            '  echo Download the Windows_Lite ZIP again and extract all files.',
-            '  echo.',
-            '  pause',
-            '  exit /b 6',
-            ')',
-            'start "" /d "%~dp0release" "%EXE%"',
-            'exit /b 0'
-          )
-          Set-Content -LiteralPath (Join-Path $liteRoot 'START.cmd') -Value $startLines -Encoding ASCII
-
-          $infoLines = @(
-            "MABI AUTO $tag - Windows Lite",
-            '',
-            '- .NET SDK installation is NOT required.',
-            '- Main app and Watchdog are self-contained compressed Windows x64 executables.',
-            '- User settings and templates are preserved during in-app updates.',
-            '',
-            'First use:',
-            '1. Extract this ZIP completely.',
-            '2. If Interception is not installed, run 1_INSTALL_INTERCEPTION.cmd once and reboot.',
-            '3. Run START.cmd.',
-            '',
-            'For Telegram phone alerts and remote commands, run SETUP_PHONE_ALERT.cmd.'
-          )
-          Set-Content -LiteralPath (Join-Path $liteRoot 'WINDOWS_LITE.txt') -Value $infoLines -Encoding UTF8
-
-          $liteName = "MabiAuto_${safeTag}_Windows_Lite.zip"
-          $litePath = Join-Path $PWD $liteName
-          Remove-Item $litePath,"$litePath.sha256" -Force -ErrorAction SilentlyContinue
-          Compress-Archive -Path $liteRoot -DestinationPath $litePath -CompressionLevel Optimal
-          $hash = (Get-FileHash -Algorithm SHA256 $litePath).Hash.ToLowerInvariant()
-          "$hash  $liteName" | Set-Content -Path "$litePath.sha256" -Encoding ASCII
-          $sizeMb = [Math]::Round((Get-Item $litePath).Length / 1MB, 1)
-
-          gh release upload $tag $litePath "$litePath.sha256" --repo $env:REPO --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Lite release upload failed.' }
-
-          foreach ($oldAsset in @("MabiAuto_${safeTag}_Windows_Ready.zip", "MabiAuto_${safeTag}_Windows_Ready.zip.sha256")) {
-            gh release delete-asset $tag $oldAsset --repo $env:REPO -y 2>$null
-            if ($LASTEXITCODE -ne 0) { $global:LASTEXITCODE = 0 }
-          }
-
-          Write-Host "WINDOWS LITE BUILD OK: $liteName ($sizeMb MB)"
-          exit 0
+          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v58_Windows_Lite.zip build-output/MabiAuto_v58_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Package upload failed; release remains draft' }
+          gh release edit $env:RELEASE_TAG --repo $env:REPO --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

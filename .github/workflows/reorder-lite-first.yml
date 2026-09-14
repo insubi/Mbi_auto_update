@@ -26,6 +26,10 @@ jobs:
         run: |
           set -euo pipefail
           TAG="$(gh api "repos/$REPO/releases/latest" --jq '.tag_name')"
+          if [[ "$TAG" =~ ^v([0-9]+)$ ]] && [ "${BASH_REMATCH[1]}" -ge 58 ]; then
+            echo 'v58+ publishes all verified assets together; no reordering needed.'
+            exit 0
+          fi
           LITE="$(gh api "repos/$REPO/releases/tags/$TAG" --jq '.assets[].name' | grep -E '^MabiAuto_.*_Windows_Lite\.zip$' | head -n 1 || true)"
           if [ -z "$LITE" ]; then
             echo "No Windows Lite asset found for $TAG"

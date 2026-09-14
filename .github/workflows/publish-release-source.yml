@@ -29,7 +29,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          INPUT="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA" | grep -E '^release-source/(.*\.zip|.*\.patch|v[0-9]+_apply\.py)$' | tail -n1 || true)"
+          INPUT="$(git diff-tree --no-commit-id --name-only --diff-filter=AM -r "$GITHUB_SHA" | grep -E '^release-source/(.*\.zip|.*\.patch|v[0-9]+_apply\.py)$' | sort -V | tail -n1 || true)"
           if [ -z "$INPUT" ]; then
             INPUT="$(find release-source -maxdepth 1 -type f \( -name '*.zip' -o -name '*.patch' -o -name 'v*_apply.py' \) | sort -V | tail -n1 || true)"
           fi
@@ -99,7 +99,24 @@ jobs:
           Windows_Lite는 사용자 PC에 .NET SDK 설치가 필요하지 않습니다.
           EOF
 
+          if [ "$VERSION" -ge 58 ]; then
+            cat > "$NOTES_FILE" <<EOF
+          MABI AUTO $TAG - 안전 배포 최적화
+
+          v57 기능 로직과 OCR/다시하기/업데이트 복구 동작을 유지합니다.
+          배포에 불필요한 소스, README, 디버그 파일 및 대소문자 중복 경로를 정리했습니다.
+          설정·템플릿은 기존 실행부와 도구가 참조하는 경로에 그대로 유지합니다.
+          .NET self-contained x64 유지. OpenCV/OCR/WinForms trimming 및 AOT를 사용하지 않습니다.
+          Windows 빌드, 실행·Watchdog 시작 확인, 기존 updater의 설정 보존 테스트 후 공개됩니다.
+          일반 사용자는 MabiAuto_${TAG}_Windows_Lite.zip을 받으세요.
+          EOF
+          fi
+
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            if [ "$VERSION" -ge 58 ] && [ "$(gh release view "$TAG" --repo "$REPO" --json isDraft --jq '.isDraft')" != true ]; then
+              echo "Refusing to replace already published $TAG. Use a new version."
+              exit 1
+            fi
             echo "Release $TAG exists; replacing source ZIP assets."
             while IFS= read -r asset; do
               [ -z "$asset" ] && continue
@@ -110,11 +127,13 @@ jobs:
             gh release upload "$TAG" "$ZIP" --repo "$REPO" --clobber
           else
             echo "Creating release $TAG"
+            RELEASE_FLAGS=()
+            if [ "$VERSION" -ge 58 ]; then RELEASE_FLAGS+=(--draft); fi
             gh release create "$TAG" "$ZIP" \
               --repo "$REPO" \
-              --target main \
+              --target "$GITHUB_SHA" \
               --title "$TITLE" \
-              --notes-file "$NOTES_FILE"
+              --notes-file "$NOTES_FILE" "${RELEASE_FLAGS[@]}"
           fi
 
           echo "SOURCE RELEASE OK: $TAG / $(basename "$ZIP")"
