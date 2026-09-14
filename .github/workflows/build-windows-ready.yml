@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Draft release to build (packaging pipeline v58)'
+        description: 'Draft release to build'
         required: true
-        default: 'v58'
+        default: 'v59'
 
 permissions:
   contents: write
@@ -38,38 +38,36 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # Draft releases have no published tag yet; select them from the
-          # authenticated releases list instead of the releases/tags endpoint.
           $releases = gh api "repos/$env:REPO/releases?per_page=100" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
           if ($env:SOURCE_SHA) {
-            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v58' })
-            if ($matches.Count -ne 1) { throw 'Expected exactly one v58 release for the source workflow commit' }
+            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v59' })
+            if ($matches.Count -ne 1) { throw 'Expected exactly one v59 release for the source workflow commit' }
             $tag = $matches[0].tag_name
           } else { $tag = $env:REQUESTED_TAG }
-          if ($tag -ne 'v58') { throw 'This audited packaging pipeline requires v58' }
+          if ($tag -ne 'v59') { throw 'This packaging pipeline currently requires v59' }
           $selected = @($releases | Where-Object { $_.tag_name -eq $tag })
           if ($selected.Count -ne 1) { throw 'Expected exactly one matching release' }
           $release = $selected[0]
           if (-not $release.draft) { throw 'Refusing to replace an already published release' }
-          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v58_StabilityRemote.zip' })
-          if ($assets.Count -ne 1) { throw 'Expected exactly one audited source ZIP' }
+          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v59_StabilityRemote.zip' })
+          if ($assets.Count -ne 1) { throw 'Expected exactly one v59 source ZIP' }
           New-Item -ItemType Directory -Path source-download,source-work | Out-Null
           gh release download $tag --repo $env:REPO --pattern $assets[0].name --dir source-download
           if ($LASTEXITCODE -ne 0) { throw 'Source download failed' }
           tar -xf (Join-Path source-download $assets[0].name) -C source-work
           if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
-          ./release-source/v58-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v58 -OutputRoot build-output
-          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v58 -PackageRoot build-output/MabiAuto_v58 -WorkRoot update-test
+          ./release-source/v59-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v59 -OutputRoot build-output
+          ./release-source/v59-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v59 -PackageRoot build-output/MabiAuto_v59 -WorkRoot update-test
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Keep verification reports
         uses: actions/upload-artifact@v4
         with:
-          name: v58-packaging-verification
+          name: v59-window-verification
           path: |
-            source-work/CombinedFishingDungeon_v58/V58_PACKAGING_AUDIT.json
-            build-output/v58-package-inventory.json
+            source-work/CombinedFishingDungeon_v59/V59_WINDOW_AUDIT.json
+            build-output/v59-package-inventory.json
             update-test/verification.txt
           if-no-files-found: error
 
@@ -80,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v58_Windows_Lite.zip build-output/MabiAuto_v58_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v59_Windows_Lite.zip build-output/MabiAuto_v59_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Package upload failed; release remains draft' }
           gh release edit $env:RELEASE_TAG --repo $env:REPO --draft=false --latest
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
