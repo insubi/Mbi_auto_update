@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import hashlib, sys
+import sys
+root=Path(sys.argv[1]).resolve()
 
-root = Path(sys.argv[1]).resolve()
-print('V66_ENGINE_INSPECT_START')
-for rel in [
-    'FishingAutomation/dungeon/ScenarioEngine.cs',
-    'FishingAutomation/dungeon/TargetDetector.cs',
-    'FishingAutomation/dungeon/Models.cs',
-    'FishingAutomation/dungeon/TemplateMatcher.cs',
-]:
-    p = root / rel
+def show(rel, needles, radius=1800):
+    p=root/rel
+    s=p.read_text(encoding='utf-8-sig', errors='replace')
     print(f'===== {rel} =====')
-    print(p.read_text(encoding='utf-8-sig', errors='replace') if p.exists() else 'MISSING')
-for folder in ['FishingAutomation/dungeon/templates','FishingAutomation/abyss/templates']:
-    print(f'===== {folder} =====')
-    p = root / folder
-    if p.exists():
-        for f in sorted(x for x in p.iterdir() if x.is_file()):
-            print(f'{f.name}\t{f.stat().st_size}\t{hashlib.sha256(f.read_bytes()).hexdigest()}')
-print('V66_ENGINE_INSPECT_END')
+    for needle in needles:
+        i=s.find(needle)
+        print(f'--- NEEDLE {needle!r} @ {i} ---')
+        if i>=0:
+            print(s[max(0,i-radius):min(len(s),i+radius)])
+
+show('FishingAutomation/MainForm.ReferenceUI.cs', ['class ReferenceDashboard', 'ReferenceDashboard(MainForm owner)', '시스템 상태', 'v65.0.0 · UI'])
+show('FishingAutomation/MainForm.cs', ['private readonly System.Windows.Forms.Timer _uiTimer', '_uiTimer.Tick', 'private void StopSelected()', 'public MainForm()'])
+show('FishingAutomation/MainForm.Dashboard.cs', ['void UpdateDashboard', 'AnyRunning'])
+print('V66_UI_INSPECT_END')
 raise SystemExit(66)
