@@ -1,0 +1,353 @@
+--- a/MabiAuto/FishingAutomation/MainForm.Dashboard.cs
++++ b/MabiAuto/FishingAutomation/MainForm.Dashboard.cs
+@@ -173,7 +173,7 @@
+         brand.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
+         brand.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+         brand.Controls.Add(new Label { Text = "M  Mabi_Auto", Dock = DockStyle.Fill, ForeColor = Color.White, Font = new Font("Segoe UI", 17f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
+-        brand.Controls.Add(new Label { Text = "v51.0.0", Dock = DockStyle.Fill, ForeColor = Muted, Font = new Font("Segoe UI", 9f), TextAlign = ContentAlignment.MiddleLeft }, 1, 0);
++        brand.Controls.Add(new Label { Text = "v52.0.0", Dock = DockStyle.Fill, ForeColor = Muted, Font = new Font("Segoe UI", 9f), TextAlign = ContentAlignment.MiddleLeft }, 1, 0);
+         layout.Controls.Add(brand, 0, 0);
+         layout.Controls.Add(new Label { Text = "●  시스템 상태", Dock = DockStyle.Fill, ForeColor = Green, Font = new Font("맑은 고딕", 9f, FontStyle.Bold), TextAlign = ContentAlignment.MiddleRight }, 1, 0);
+         header.Controls.Add(layout);
+@@ -645,7 +645,10 @@
+         bool abyss = (_activeMode ?? SelectedMode) == "어비스";
+         _currentModeValue.Text = _activeMode ?? SelectedMode;
+         _currentDungeonValue.Text = abyss ? SelectedAbyssDungeon : "—";
+-        _currentStepValue.Text = string.IsNullOrWhiteSpace(_statusValue.Text) ? "준비" : _statusValue.Text;
++        string currentStepText = string.IsNullOrWhiteSpace(_statusValue.Text) ? "준비" : _statusValue.Text;
++        if (abyss && currentStepText.StartsWith("어비스 준비 완료", StringComparison.Ordinal))
++            currentStepText = $"어비스 준비 완료\n{SelectedAbyssDungeon}";
++        _currentStepValue.Text = currentStepText;
+         _recentDetectValue.Text = _recentDetectText;
+         _timeoutValue.Text = abyss ? _timeoutExits.ToString() : "0";
+ 
+@@ -762,5 +765,5 @@
+         catch { }
+     }
+ }
+-
+-
++
++
+--- a/MabiAuto/FishingAutomation/MainForm.ReferenceUI.cs
++++ b/MabiAuto/FishingAutomation/MainForm.ReferenceUI.cs
+@@ -82,6 +82,7 @@
+         private readonly List<(Control Control, RectangleF Bounds)> _positions = new();
+         private readonly List<ReferenceButton> _gallery = new();
+         private readonly ToolTip _tips = new();
++        private ContextMenuStrip? _openMenu;
+         private readonly Font _baseFont = new("맑은 고딕", 16f, FontStyle.Regular, GraphicsUnit.Pixel);
+         private readonly Color _text = Color.FromArgb(215, 230, 250);
+         private readonly Color _cyan = Color.FromArgb(0, 190, 255);
+@@ -148,17 +149,25 @@
+ 
+         private void SelectMode(int mode)
+         {
+-            if (_owner.AnyRunning || _owner._activeMode is not null) return;
+-            _owner._mode.SelectedIndex = mode;
+-            _owner.UpdateDashboard();
++            _owner.SafeUiAction("현재 모드 선택", () =>
++            {
++                if (_owner.AnyRunning || _owner._activeMode is not null) return;
++                if (mode < 0 || mode >= _owner._mode.Items.Count) return;
++                _owner._mode.SelectedIndex = mode;
++                _owner.UpdateDashboard();
++            });
+         }
+ 
+         private void SelectDungeon(int index)
+         {
+-            if (_owner.AnyRunning || _owner._activeMode is not null) return;
+-            _owner._mode.SelectedIndex = 2;
+-            _owner._abyssDungeon.SelectedIndex = index;
+-            _owner.UpdateDashboard();
++            _owner.SafeUiAction("어비스 던전 선택", () =>
++            {
++                if (_owner.AnyRunning || _owner._activeMode is not null) return;
++                if (index < 0 || index >= _owner._abyssDungeon.Items.Count) return;
++                _owner._mode.SelectedIndex = 2;
++                _owner._abyssDungeon.SelectedIndex = index;
++                _owner.UpdateDashboard();
++            });
+         }
+ 
+         private void ShowModeMenu()
+@@ -170,19 +179,49 @@
+         private void ShowDungeonMenu()
+         {
+             if (_owner.AnyRunning || _owner._activeMode is not null) return;
++
++            // 허상의 정박지 / 광기의 동굴 / 흩어진 물길은 모두 어비스 전용이다.
++            // 현재 모드가 낚시 또는 던전이면 선택 던전 버튼을 눌러도
++            // 아무 메뉴도 표시하지 않는다. 왼쪽 낚시/던전 버튼으로
++            // 모드를 바꾼 경우에도 동일하게 적용된다.
++            if (!string.Equals(_owner._mode.SelectedItem?.ToString(), "어비스", StringComparison.Ordinal))
++                return;
++
+             ShowMenu(new[] { "허상의 정박지", "광기의 동굴", "흩어진 물길" }, SelectDungeon, 680, 312);
+         }
+ 
+         private void ShowMenu(string[] captions, Action<int> action, int x, int y)
+         {
+-            var menu = new ContextMenuStrip { BackColor = Color.FromArgb(3, 28, 49), ForeColor = _text, Font = Font };
+-            for (int i = 0; i < captions.Length; i++)
+-            {
+-                int index = i;
+-                menu.Items.Add(captions[i], null, (_, _) => action(index));
+-            }
+-            menu.Closed += (_, _) => menu.Dispose();
+-            menu.Show(this, new Point((int)(x * ScaleX), (int)(y * ScaleY)));
++            _owner.SafeUiAction("선택 메뉴 열기", () =>
++            {
++                // Disposing a ContextMenuStrip synchronously from its Closed event can
++                // race the final ToolStrip click/paint messages. Keep only one menu open
++                // and let the closed menu be collected after WinForms has finished with it.
++                if (_openMenu is { IsDisposed: false, Visible: true })
++                    _openMenu.Close();
++
++                var menu = new ContextMenuStrip
++                {
++                    BackColor = Color.FromArgb(3, 28, 49),
++                    ForeColor = _text,
++                    Font = Font,
++                    ShowImageMargin = false
++                };
++                _openMenu = menu;
++
++                for (int i = 0; i < captions.Length; i++)
++                {
++                    int index = i;
++                    menu.Items.Add(captions[i], null, (_, _) => _owner.SafeUiAction("선택 메뉴 항목", () => action(index)));
++                }
++
++                menu.Closed += (_, _) =>
++                {
++                    if (ReferenceEquals(_openMenu, menu)) _openMenu = null;
++                };
++
++                menu.Show(this, new Point((int)(x * ScaleX), (int)(y * ScaleY)));
++            });
+         }
+ 
+         private ReferenceButton AddButton(string text, RectangleF bounds, Action action, string icon, string kind)
+@@ -193,7 +232,7 @@
+                 BackColor = Color.FromArgb(3, 29, 51), ForeColor = Color.White,
+                 FlatStyle = FlatStyle.Flat, UseVisualStyleBackColor = false
+             };
+-            button.Click += (_, _) => action();
++            button.Click += (_, _) => _owner.SafeUiAction(text, action);
+             Controls.Add(button);
+             _positions.Add((button, bounds));
+             return button;
+@@ -323,7 +362,7 @@
+             // Original logo and decorative art only; version and status are live text.
+             Artwork(g, new(27, 21, 39, 37), new(27, 21, 39, 37));
+             TextAt(g, "Mabi_Auto", new(83, 14, 168, 48), 28, true, Color.White);
+-            TextAt(g, "v51.0.0 · UI", new(252, 22, 150, 35), 15);
++            TextAt(g, "v52.0.0 · UI", new(252, 22, 150, 35), 15);
+             Card(g, new(1077, 15, 153, 41));
+             bool ready = _owner._sysInputValue.Text == "정상" && _owner._sysTemplateValue.Text == "정상" && _owner._sysOcrValue.Text == "정상";
+             Color readyColor = ready ? _green : Color.Gold;
+@@ -410,18 +449,29 @@
+                 TextAt(g, names[i], new(x + 12, 801, tileWidth - 24, 33), 20, true, Color.White, StringAlignment.Center);
+                 TextAt(g, desc[i], new(x + 12, 833, tileWidth - 24, 28), 17, false, _text, StringAlignment.Center);
+             }
+-            TextAt(g, "반복은 맡기고,\n즐거운 플레이.", new(26, 854, 163, 70), 14);
+-            TextAt(g, "AUTOMATE", new(28, 926, 157, 41), 16, false, _text, StringAlignment.Center);
+         }
+ 
+         private void Info(Graphics g, RectangleF r, string icon, string caption, string value, float iconX)
+         {
+             Card(g, r);
++
++            // The abyss status strings shown in "현재 단계" are considerably longer
++            // than the other info-card values. Give that card a compact header row and
++            // the full card width for the value so all three abyss dungeons can show
++            // their stage text without clipping.
++            if (caption == "현재 단계")
++            {
++                Icon(g, icon, new(r.X + 11, r.Y + 9, 25, 25), _cyan);
++                TextAt(g, caption, new(r.X + 45, r.Y + 7, r.Width - 55, 28), 15);
++                TextAt(g, value, new(r.X + 11, r.Y + 36, r.Width - 22, 44), 13, true, Color.White, StringAlignment.Center, multiline: true);
++                return;
++            }
++
+             Icon(g, icon, new(iconX, r.Y + 24, 35, 35), _cyan);
+             float left = iconX + 55;
+             float reserved = caption is "현재 모드" or "선택 던전" ? 42 : 10;
+             TextAt(g, caption, new(left, r.Y + 12, r.Right - left - reserved, 24), 16);
+-            TextAt(g, value, new(left, r.Y + 32, r.Right - left - reserved, 50), caption == "현재 단계" ? 15 : 18, true, Color.White, multiline: caption == "현재 단계");
++            TextAt(g, value, new(left, r.Y + 32, r.Right - left - reserved, 50), 18, true, Color.White);
+         }
+ 
+         private void Stat(Graphics g, float y, string icon, string caption, string value, Color c)
+@@ -483,7 +533,13 @@
+ 
+         protected override void Dispose(bool disposing)
+         {
+-            if (disposing) { _art.Dispose(); _baseFont.Dispose(); _tips.Dispose(); }
++            if (disposing)
++            {
++                try { _openMenu?.Dispose(); } catch { }
++                _art.Dispose();
++                _baseFont.Dispose();
++                _tips.Dispose();
++            }
+             base.Dispose(disposing);
+         }
+ 
+@@ -570,7 +626,7 @@
+         }
+     }
+ }
+-
+-
+-
+-
++
++
++
++
+--- a/MabiAuto/FishingAutomation/MainForm.cs
++++ b/MabiAuto/FishingAutomation/MainForm.cs
+@@ -603,6 +603,34 @@
+         if (IsDisposed) return;
+         if (InvokeRequired) BeginInvoke(action); else action();
+     }
++
++    // Reference UI buttons are custom drawn. Never allow a click/menu exception
++    // to escape the WinForms message loop and terminate the entire program.
++    internal void SafeUiAction(string actionName, Action action)
++    {
++        try
++        {
++            action();
++        }
++        catch (Exception ex)
++        {
++            try
++            {
++                string path = Path.Combine(AppContext.BaseDirectory, "ui-crash.log");
++                File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {actionName}\r\n{ex}\r\n\r\n");
++            }
++            catch { }
++
++            try
++            {
++                _statusValue.Text = $"UI 오류: {ex.Message}";
++                _statusValue.ForeColor = Color.Salmon;
++                _miniStatus.Text = "UI 오류 · ui-crash.log 확인";
++                _referenceDashboard?.Invalidate();
++            }
++            catch { }
++        }
++    }
+ }
+-
+-
++
++
+--- a/MabiAuto/FishingAutomation/Program.cs
++++ b/MabiAuto/FishingAutomation/Program.cs
+@@ -8,9 +8,26 @@
+     [SupportedOSPlatform("windows10.0.19041.0")]
+     private static void Main()
+     {
++        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
++        Application.ThreadException += (_, e) => WriteCrash("UI thread exception", e.Exception);
++        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
++        {
++            if (e.ExceptionObject is Exception ex) WriteCrash("Unhandled exception", ex);
++        };
++
+         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+         Application.EnableVisualStyles();
+         Application.SetCompatibleTextRenderingDefault(false);
+         Application.Run(new MainForm());
+     }
++
++    private static void WriteCrash(string source, Exception ex)
++    {
++        try
++        {
++            string path = Path.Combine(AppContext.BaseDirectory, "ui-crash.log");
++            File.AppendAllText(path, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {source}\r\n{ex}\r\n\r\n");
++        }
++        catch { }
++    }
+ }
+--- a/MabiAuto/FishingAutomation/MainForm.Update.cs
++++ b/MabiAuto/FishingAutomation/MainForm.Update.cs
+@@ -40,8 +40,9 @@
+                 _updateButton.Enabled = true;
+             });
+ 
+-            if (userInitiated)
+-                await InstallPendingUpdateAsync();
++            // 시작 시 발견한 새 버전은 자동으로 내려받아 적용한다.
++            // 사용자가 버튼을 눌러 확인한 경우에는 기존처럼 확인창을 보여준다.
++            await InstallPendingUpdateAsync(askConfirmation: userInitiated);
+         }
+         catch (Exception ex)
+         {
+@@ -60,7 +61,7 @@
+         }
+     }
+ 
+-    private async Task InstallPendingUpdateAsync()
++    private async Task InstallPendingUpdateAsync(bool askConfirmation = true)
+     {
+         var info = _pendingUpdate;
+         if (info is null)
+@@ -76,12 +77,19 @@
+ 
+         string notes = string.IsNullOrWhiteSpace(info.Notes) ? "새 버전이 준비되었습니다." : info.Notes;
+         if (notes.Length > 700) notes = notes[..700] + "...";
+-        var result = MessageBox.Show(
+-            $"{UpdateManager.CurrentVersion} → {info.Tag} 업데이트가 있습니다.\r\n\r\n{notes}\r\n\r\n설정, 텔레그램 정보, 이미지 템플릿은 유지합니다. SHA256 검증 후 설치하며, 새 버전 실행 실패 시 이전 버전으로 자동 복구합니다. 지금 업데이트할까요?",
+-            "MABI AUTO 업데이트",
+-            MessageBoxButtons.YesNo,
+-            MessageBoxIcon.Question);
+-        if (result != DialogResult.Yes) return;
++        if (askConfirmation)
++        {
++            var result = MessageBox.Show(
++                $"{UpdateManager.CurrentVersion} → {info.Tag} 업데이트가 있습니다.\r\n\r\n{notes}\r\n\r\n설정, 텔레그램 정보, 이미지 템플릿은 유지합니다. SHA256 검증 후 설치하며, 새 버전 실행 실패 시 이전 버전으로 자동 복구합니다. 지금 업데이트할까요?",
++                "MABI AUTO 업데이트",
++                MessageBoxButtons.YesNo,
++                MessageBoxIcon.Question);
++            if (result != DialogResult.Yes) return;
++        }
++        else
++        {
++            _log.Write($"[업데이트] 자동 업데이트 시작: {UpdateManager.CurrentVersion} -> {info.Tag}");
++        }
+ 
+         try
+         {
+--- a/MabiAuto/FishingAutomation/UpdateManager.cs
++++ b/MabiAuto/FishingAutomation/UpdateManager.cs
+@@ -16,7 +16,7 @@
+ 
+ internal static class UpdateManager
+ {
+-    public const string CurrentVersion = "v51";
++    public const string CurrentVersion = "v52";
+     public const string RepositoryOwner = "insubi";
+     public const string RepositoryName = "Mbi_auto_update";
+ 
+--- a/MabiAuto/FishingAutomation/FishingAutomation.csproj
++++ b/MabiAuto/FishingAutomation/FishingAutomation.csproj
+@@ -10,9 +10,9 @@
+     <ApplicationManifest>app.manifest</ApplicationManifest>
+     <PlatformTarget>x64</PlatformTarget>
+     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+-    <Version>51.0.0</Version>
+-    <AssemblyVersion>51.0.0.0</AssemblyVersion>
+-    <FileVersion>51.0.0.0</FileVersion>
++    <Version>52.0.0</Version>
++    <AssemblyVersion>52.0.0.0</AssemblyVersion>
++    <FileVersion>52.0.0.0</FileVersion>
+     <RunAnalyzers>false</RunAnalyzers>
+     <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+     <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
