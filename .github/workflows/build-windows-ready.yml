@@ -58,7 +58,7 @@ jobs:
           tar -xf (Join-Path source-download $assets[0].name) -C source-work
           if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
           ./release-source/v59-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v59 -OutputRoot build-output
-          ./release-source/v59-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v59 -PackageRoot build-output/MabiAuto_v59 -WorkRoot update-test
+          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v59 -PackageRoot build-output/MabiAuto_v59 -WorkRoot update-test
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Keep verification reports
