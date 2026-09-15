@@ -33,12 +33,15 @@ $engine = Get-Content -LiteralPath (Join-Path $app 'dungeon/ScenarioEngine.cs') 
 foreach ($required in @(
     'DetectAbyssConfirmedClearAsync',
     '클리어 화면 동시 이미지 확인 완료',
+    '클리어 후보 점수: title=',
     'TryAbyssInternalRecoveryAsync',
     'DetectAbyssOutsideWorkflowAsync',
-    'outsideMenuConsecutive >= 3',
+    'outsideAbyssIconConsecutive >= 2',
     'Smart Recovery 상태 확인용 메뉴 열기',
+    '어비스 메뉴 2회 확인 -> 던전 밖 확정 및 메뉴 닫기 완료',
     'WaitForAbyssHomeAfterNormalExitAsync',
-    '던전 밖 메뉴 3회 연속 확인 완료',
+    '나가기 후 어비스 메뉴 확인 {abyssIconConsecutive}/2',
+    '던전 밖 어비스 메뉴 2회 확인 + 메뉴 닫기 완료',
     'PruneDebugScreenshots',
     'MaxDebugFiles = 200',
     'MaxDebugBytes = 268435456')) {
@@ -48,8 +51,9 @@ if ($engine.Contains('클리어 화면 동시 이미지 연속 확인 {abyssClea
     $engine.Contains('if (abyssClearConsecutive < 3)')) {
     throw 'Old BOTH+3 clear gate remains; normal clear could still stall'
 }
-if ($engine.Contains('if (home.Found)\n            {\n                Log?.Invoke("[어비스 자동복구] 던전 밖 메뉴 확인 완료')) {
-    throw 'Recovery still treats abyss_menu alone as outside proof'
+if ($engine.Contains('outsideMenuConsecutive') -or
+    $engine.Contains('[어비스 자동복구] 던전 밖 메뉴 확인 완료 -> 처음부터 재시작')) {
+    throw 'Recovery still contains menu-icon-only outside confirmation'
 }
 
 $matcher = Get-Content -LiteralPath (Join-Path $app 'dungeon/TemplateMatcher.cs') -Raw
@@ -119,4 +123,4 @@ foreach ($required in @('TextAt(g, UpdateManager.CurrentVersion','Text = "자동
 }
 $manifest = Get-Content -LiteralPath (Join-Path $app 'app.manifest') -Raw
 if ($manifest -notmatch 'requestedExecutionLevel\s+level="requireAdministrator"') { throw 'Administrator elevation was lost' }
-Write-Host 'V0.1.2 SOURCE VERIFIED: immediate BOTH-image clear, state-aware Abyss recovery, verified exit, repaired template-only monitors, missed-minute auto-stop guard, debug pruning, and image decode validation.'
+Write-Host 'V0.1.2 SOURCE VERIFIED: immediate BOTH-image clear, menu-probe outside confirmation, state-aware recovery, verified exit, repaired template-only monitors, missed-minute auto-stop guard, debug pruning, and image decode validation.'
