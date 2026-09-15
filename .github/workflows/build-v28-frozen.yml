@@ -1,0 +1,105 @@
+name: Build v28 Frozen Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v28-frozen.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build original v28 Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip'
+          Invoke-WebRequest -Uri $url -OutFile v28.zip
+          New-Item -ItemType Directory -Path src,publish-main,publish-watch,out | Out-Null
+          Expand-Archive -LiteralPath v28.zip -DestinationPath src
+          $root = Get-ChildItem src -Directory | Select-Object -First 1
+          if ($null -eq $root) { throw 'v28 source root not found' }
+
+          # This is the real first GitHub package source. It predates UpdateManager.
+          $updateManagers = @(Get-ChildItem $root.FullName -Recurse -File -Filter UpdateManager.cs)
+          if ($updateManagers.Count -ne 0) { throw 'Unexpected updater source found in v28' }
+          $networkUpdaterHits = @(Get-ChildItem $root.FullName -Recurse -File -Filter *.cs | Select-String -SimpleMatch 'api.github.com/repos/' -ErrorAction SilentlyContinue)
+          if ($networkUpdaterHits.Count -ne 0) { throw 'Unexpected GitHub updater API code found in v28 source' }
+
+          $publishArgs = @('-c','Release','-r','win-x64','--self-contained','true',
+            '-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true',
+            '-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false',
+            '-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $root.FullName 'FishingAutomation/FishingAutomation.csproj') @publishArgs -o publish-main
+          if ($LASTEXITCODE -ne 0) { throw 'v28 main publish failed' }
+          dotnet publish (Join-Path $root.FullName 'MacroWatchdog/MacroWatchdog.csproj') @publishArgs -o publish-watch
+          if ($LASTEXITCODE -ne 0) { throw 'v28 watchdog publish failed' }
+
+          $pkg = Join-Path (Resolve-Path out).Path 'MabiAuto_v28_FROZEN_TEST'
+          Copy-Item -LiteralPath $root.FullName -Destination $pkg -Recurse
+          $release = Join-Path $pkg 'release'
+          if (Test-Path -LiteralPath $release) { Remove-Item -LiteralPath $release -Recurse -Force }
+          New-Item -ItemType Directory -Path $release | Out-Null
+          Copy-Item -Path 'publish-main/*' -Destination $release -Recurse -Force
+          Copy-Item -LiteralPath 'publish-watch/MacroWatchdog.exe' -Destination (Join-Path $release 'MacroWatchdog.exe') -Force
+
+          # Original START.cmd already launches release/FishingAutomation.exe and mirrors v28 templates/config.
+          @'
+MABI AUTO v28 FROZEN TEST
+
+- Built directly from the original first GitHub v28 package attachment.
+- No UpdateManager.cs exists in this source and no GitHub release updater API code is present.
+- Automatic update cannot replace this test build.
+- Purpose: check the oldest available fishing flow before later v57/V0.1 changes.
+- Test the exact sequence: compass -> S -> hook -> Space -> gauge.
+'@ | Set-Content -LiteralPath (Join-Path $pkg 'FROZEN_TEST.txt') -Encoding UTF8
+
+          $exe = Join-Path $release 'FishingAutomation.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'v28 frozen exe missing' }
+          if (-not (Test-Path -LiteralPath (Join-Path $release 'templates/hook.png'))) { throw 'v28 hook template missing from publish' }
+          if (-not (Test-Path -LiteralPath (Join-Path $release 'templates/compass.png'))) { throw 'v28 compass template missing from publish' }
+
+          # Basic startup smoke test only; no game window is expected on the runner.
+          $p = Start-Process -FilePath $exe -WorkingDirectory $release -PassThru
+          Start-Sleep -Seconds 3
+          $p.Refresh()
+          if ($p.HasExited) { throw "v28 frozen app exited during smoke test: $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process -Name MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $zip = Join-Path (Resolve-Path out).Path 'MabiAuto_v28_FROZEN_TEST.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $zip -CompressionLevel Optimal
+          $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_v28_FROZEN_TEST.zip" | Set-Content -LiteralPath "$zip.sha256" -Encoding ASCII
+
+      - name: Publish frozen v28 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'v28-frozen-test'
+          $zip = 'out/MabiAuto_v28_FROZEN_TEST.zip'
+          $sha = "$zip.sha256"
+          $notes = @'
+Original v28 frozen diagnostic build
+
+Built directly from the first GitHub v28 package attachment. The original v28 source contains no UpdateManager.cs and no GitHub release updater API path, so it will not self-update to current versions.
+Use only for diagnosis of the oldest available fishing state flow: compass -> S -> hook -> Space -> gauge.
+'@
+          Set-Content notes.txt -Value $notes -Encoding UTF8
+          if (gh release view $tag --repo $env:REPO *> $null) {
+            gh release upload $tag $zip $sha --repo $env:REPO --clobber
+          } else {
+            gh release create $tag $zip $sha --repo $env:REPO --title 'Mabi Auto v28 Frozen Test' --notes-file notes.txt --prerelease
+          }
