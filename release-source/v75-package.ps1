@@ -29,6 +29,17 @@ try {
 $liteRoot = Join-Path $OutputRoot 'MabiAuto_v75'
 if (-not (Test-Path -LiteralPath $liteRoot)) { throw 'V0.1.2 lite root missing after delegated package build' }
 
+# v66/v74 mirror only the legacy V58 runtime-asset list. V0.1.2 adds four
+# outside-state templates after that audit, so explicitly keep them in the
+# FishingAutomation mirror as well as the published release runtime.
+$outsideMirror = Join-Path $liteRoot 'FishingAutomation/abyss/templates'
+New-Item -ItemType Directory -Path $outsideMirror -Force | Out-Null
+foreach ($name in @('outside_home_v75.png','outside_end_v75.png','outside_k_v75.png','outside_i_v75.png')) {
+    $src = Join-Path $SourceRoot "FishingAutomation/abyss/templates/$name"
+    if (-not (Test-Path -LiteralPath $src)) { throw "V0.1.2 outside source template missing: $name" }
+    Copy-Item -LiteralPath $src -Destination (Join-Path $outsideMirror $name) -Force
+}
+
 # Verify repaired monitors and fixed-HUD outside templates in runtime and mirrored source paths.
 Add-Type -AssemblyName System.Drawing
 $requiredImages = @(
