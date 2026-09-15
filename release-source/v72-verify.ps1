@@ -33,7 +33,7 @@ if ($ui.Contains('Path.Combine(AppContext.BaseDirectory, "abyss", "templates", f
 $expectedPreviewHashes = @{
     'FishingAutomation/abyss/previews/hallucination_anchorage.jpg' = '0195c292d2b32cb369d2561ab01227e4b7120e9cade8178cc174d40bf8ceeb9d'
     'FishingAutomation/abyss/previews/madness_cave.jpg' = 'e6af39c665f1126dde46f17054589413b88690a0eaae56fc14e06a6434b4e50e'
-    'FishingAutomation/abyss/previews/scattered_waterway.jpg' = 'e554e07e40a3b07def8ef9f6ffe2f659c6a35097e02d14a9007a0a6fab8ccfdd'
+    'FishingAutomation/abyss/previews/scattered_waterway.jpg' = 'd1d56c996e21aaf60c8ec6d09770b2b93ae918ea1c1c290f4e767b62490c1ff6'
 }
 foreach ($entry in $expectedPreviewHashes.GetEnumerator()) {
     $path = Join-Path $SourceRoot $entry.Key
