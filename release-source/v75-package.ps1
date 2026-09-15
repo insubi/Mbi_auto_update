@@ -54,7 +54,7 @@ foreach ($rel in $requiredImages) {
         $img = [System.Drawing.Image]::FromFile($path)
         if ($img.Width -lt 2 -or $img.Height -lt 2) { throw "Invalid dimensions $($img.Width)x$($img.Height)" }
     } catch {
-        throw "V0.1.2 packaged image decode failed: $rel: $($_.Exception.Message)"
+        throw "V0.1.2 packaged image decode failed: ${rel}: $($_.Exception.Message)"
     } finally { if ($null -ne $img) { $img.Dispose() } }
 }
 
