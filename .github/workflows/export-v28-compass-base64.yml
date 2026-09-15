@@ -1,0 +1,20 @@
+name: Export v28 compass base64
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/export-v28-compass-base64.yml']
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.13/CombinedFishingDungeon_V0.1.13_ExactV28Fishing.zip' -OutFile s.zip
+          Expand-Archive s.zip -DestinationPath s
+          $r=Get-ChildItem s -Directory|Select-Object -First 1
+          $p=Join-Path $r.FullName 'FishingAutomation/templates/compass.png'
+          $b=[Convert]::ToBase64String([IO.File]::ReadAllBytes($p))
+          Write-Host "COMPASS_BASE64_BEGIN"
+          Write-Host $b
+          Write-Host "COMPASS_BASE64_END"
