@@ -8,6 +8,10 @@ $baseScript = Join-Path $PSScriptRoot 'v75-package.ps1'
 if (-not (Test-Path -LiteralPath $baseScript)) { throw 'v75 package script missing' }
 $text = Get-Content -LiteralPath $baseScript -Raw
 $text = $text.Replace("'v75-verify.ps1'","'v76-verify.ps1'")
+$text = $text.Replace("Replace('v74','v75')","Replace('v74','v76')")
+$text = $text.Replace("Replace('V0.1.1','V0.1.2')","Replace('V0.1.1','V0.1.3')")
+$text = $text.Replace("Replace('V0_1_1_ABYSS_CLEAR_GUARD_AUDIT.json','V0_1_2_STABILITY_AUDIT.json')","Replace('V0_1_1_ABYSS_CLEAR_GUARD_AUDIT.json','V0_1_3_FISHING_AUDIT.json')")
+$text = $text.Replace("Replace('0.1.1.0','0.1.2.0')","Replace('0.1.1.0','0.1.3.0')")
 $text = $text.Replace("MabiAuto_v75","MabiAuto_v76")
 $text = $text.Replace("v75-package-inventory.json","v76-package-inventory.json")
 $text = $text.Replace("MabiAuto_v75_Windows_Lite.zip","MabiAuto_v76_Windows_Lite.zip")
