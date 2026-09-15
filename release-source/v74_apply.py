@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Final V0.1.1 patch; verifier aligned with this exact source transformation.
 from pathlib import Path
 import hashlib, json, re, sys
 
