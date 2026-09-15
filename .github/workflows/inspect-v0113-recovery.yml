@@ -1,0 +1,35 @@
+name: Inspect V0.1.13 Fishing Recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0113-recovery.yml'
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect recovery and stall logic
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.13/CombinedFishingDungeon_V0.1.13_ExactV28Fishing.zip' -OutFile src.zip
+          Expand-Archive src.zip -DestinationPath src
+          $root=Get-ChildItem src -Directory | Select-Object -First 1
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          foreach($file in @('FishingBot.cs','MainForm.cs','WatchdogClient.cs','TelegramNotifier.cs')){
+            $p=Join-Path $fish $file
+            if(Test-Path $p){
+              Write-Host "===== $file ====="
+              Select-String -Path $p -Pattern 'WaitReadyAndCast|WaitRoundReturn|MatchCompass|CompassThreshold|60|stall|정지|진행|watchdog|Watchdog|lastProgress|PressS' -Context 12,28 | ForEach-Object { $_.Context.PreContext; $_.Line; $_.Context.PostContext; Write-Host '---' }
+            }
+          }
+          $wd=Join-Path $root.FullName 'MacroWatchdog'
+          if(Test-Path $wd){
+            Get-ChildItem $wd -Recurse -File -Filter *.cs | ForEach-Object {
+              Write-Host "===== $($_.FullName) ====="
+              Select-String -Path $_.FullName -Pattern '60|정지|진행|stall|timeout|Telegram' -Context 10,25 | ForEach-Object { $_.Context.PreContext; $_.Line; $_.Context.PostContext; Write-Host '---' }
+            }
+          }
