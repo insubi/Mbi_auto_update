@@ -16,7 +16,8 @@ $text = $text.Replace('0.1.1.0','0.1.2.0')
 $text = $text.Replace('Abyss false-clear guard requires clear-title + touch-prompt together for 3 consecutive frames',
     'Abyss stability: BOTH images in one frame then immediate touch; Home+End+K+I outside HUD confirmation; verified exit; repaired monitors')
 
-$tmp = Join-Path $env:TEMP ('mabiauto-v75-package-' + [Guid]::NewGuid().ToString('N') + '.ps1')
+# Keep the generated delegate beside the release scripts so its $PSScriptRoot stays valid.
+$tmp = Join-Path $PSScriptRoot ('mabiauto-v75-package-' + [Guid]::NewGuid().ToString('N') + '.ps1')
 try {
     Set-Content -LiteralPath $tmp -Value $text -Encoding UTF8
     & $tmp -SourceRoot $SourceRoot -OutputRoot $OutputRoot
