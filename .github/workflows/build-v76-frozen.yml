@@ -38,43 +38,32 @@ jobs:
           $updater = Join-Path $sourceRoot.FullName 'FishingAutomation/UpdateManager.cs'
           $text = Get-Content -LiteralPath $updater -Raw
           $pattern = '(?s)public static async Task<ReleaseUpdateInfo\?> CheckLatestAsync\(CancellationToken ct = default\)\s*\{.*?\n\s*\}\s*\n\s*private static bool IsMainReleaseTag'
-          $replacement = @'
-public static Task<ReleaseUpdateInfo?> CheckLatestAsync(CancellationToken ct = default)
-    {
-        // Frozen diagnostic build: intentionally disable all GitHub update discovery.
-        return Task.FromResult<ReleaseUpdateInfo?>(null);
-    }
-
-    private static bool IsMainReleaseTag
-'@
+          $replacement = "public static Task<ReleaseUpdateInfo?> CheckLatestAsync(CancellationToken ct = default)`r`n    {`r`n        // Frozen diagnostic build: intentionally disable all GitHub update discovery.`r`n        return Task.FromResult<ReleaseUpdateInfo?>(null);`r`n    }`r`n`r`n    private static bool IsMainReleaseTag"
           $patched = [regex]::Replace($text, $pattern, $replacement, 1)
           if ($patched -eq $text -or -not $patched.Contains('Frozen diagnostic build')) { throw 'Failed to patch v76 updater' }
           Set-Content -LiteralPath $updater -Value $patched -Encoding UTF8
 
           $app = Join-Path $sourceRoot.FullName 'FishingAutomation'
-          $publishArgs = @('-c','Release','-r','win-x64','--self-contained','true',
-            '-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true',
-            '-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false',
-            '-p:DebugType=None','-p:DebugSymbols=false')
+          $publishArgs = @('-c','Release','-r','win-x64','--self-contained','true', '-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
           dotnet publish (Join-Path $app 'FishingAutomation.csproj') @publishArgs -o publish
           if ($LASTEXITCODE -ne 0) { throw 'Frozen v76 publish failed' }
 
           $newExe = Join-Path (Resolve-Path publish).Path 'FishingAutomation.exe'
           $runtimeExe = Join-Path $packageRoot.FullName 'release/FishingAutomation.exe'
           Copy-Item -LiteralPath $newExe -Destination $runtimeExe -Force
-
           $mirrorUpdater = Join-Path $packageRoot.FullName 'FishingAutomation/UpdateManager.cs'
           if (Test-Path -LiteralPath $mirrorUpdater) { Copy-Item -LiteralPath $updater -Destination $mirrorUpdater -Force }
 
-          @'
-MABI AUTO V0.1.3 FROZEN TEST
-
-- Based on the original v76 / public V0.1.3 source and package.
-- Automatic GitHub update discovery is disabled in this diagnostic build.
-- Purpose: verify the older fishing state machine without being replaced by a newer release.
-- Expected startup flow to test: compass -> S -> hook -> Space -> gauge.
-- Do not use this as the normal latest release after diagnosis is complete.
-'@ | Set-Content -LiteralPath (Join-Path $packageRoot.FullName 'FROZEN_TEST.txt') -Encoding UTF8
+          $readme = @(
+            'MABI AUTO V0.1.3 FROZEN TEST',
+            '',
+            '- Based on the original v76 / public V0.1.3 source and package.',
+            '- Automatic GitHub update discovery is disabled in this diagnostic build.',
+            '- Purpose: verify the older fishing state machine without being replaced by a newer release.',
+            '- Expected startup flow to test: compass -> S -> hook -> Space -> gauge.',
+            '- Do not use this as the normal latest release after diagnosis is complete.'
+          )
+          Set-Content -LiteralPath (Join-Path $packageRoot.FullName 'FROZEN_TEST.txt') -Value $readme -Encoding UTF8
 
           $out = 'MabiAuto_V0.1.3_FROZEN_TEST.zip'
           Compress-Archive -LiteralPath $packageRoot.FullName -DestinationPath $out -CompressionLevel Optimal
@@ -90,13 +79,13 @@ MABI AUTO V0.1.3 FROZEN TEST
         run: |
           $ErrorActionPreference = 'Stop'
           $tag = 'V0.1.3-frozen-test'
-          $notes = @'
-V0.1.3 frozen diagnostic build
-
-Original v76/V0.1.3 fishing logic is preserved while GitHub automatic update discovery is disabled.
-Use only to verify the old fishing sequence: compass -> S -> hook -> Space -> gauge.
-This release is intentionally marked prerelease and must not replace the normal latest release.
-'@
+          $notes = @(
+            'V0.1.3 frozen diagnostic build',
+            '',
+            'Original v76/V0.1.3 fishing logic is preserved while GitHub automatic update discovery is disabled.',
+            'Use only to verify the old fishing sequence: compass -> S -> hook -> Space -> gauge.',
+            'This release is intentionally marked prerelease and must not replace the normal latest release.'
+          )
           Set-Content -LiteralPath notes.txt -Value $notes -Encoding UTF8
           if (gh release view $tag --repo $env:REPO *> $null) {
             gh release upload $tag $env:FROZEN_ZIP "$env:FROZEN_ZIP.sha256" --repo $env:REPO --clobber
