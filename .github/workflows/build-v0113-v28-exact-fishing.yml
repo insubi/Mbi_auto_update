@@ -1,0 +1,191 @@
+name: Build V0.1.13 Exact v28 Fishing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v0113-v28-exact-fishing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Replace fishing runtime with exact v28 implementation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.12/CombinedFishingDungeon_V0.1.12_v28FishingCapture.zip' -OutFile current.zip
+          Invoke-WebRequest -Uri 'https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip' -OutFile v28.zip
+          Expand-Archive current.zip -DestinationPath current
+          Expand-Archive v28.zip -DestinationPath old
+          $cur = Get-ChildItem current -Directory | Select-Object -First 1
+          $v28 = Get-ChildItem old -Directory | Select-Object -First 1
+          if ($null -eq $cur -or $null -eq $v28) { throw 'source root missing' }
+          $curFish = Join-Path $cur.FullName 'FishingAutomation'
+          $oldFish = Join-Path $v28.FullName 'FishingAutomation'
+
+          # V0.1.13: fishing execution path is the proven v28 runtime, byte-for-byte
+          # for every file that participates in capture, window selection, keyboard
+          # injection, fishing state transitions, OCR and fishing templates/config.
+          $exactFiles = @(
+            'AppLog.cs',
+            'AutomationConfig.cs',
+            'CaptureService.cs',
+            'config.json',
+            'FishingBot.cs',
+            'InputSender.cs',
+            'NativeMethods.cs',
+            'OcrService.cs',
+            'TemplateMatcher.cs',
+            'templates/compass.png',
+            'templates/gauge.png',
+            'templates/healthbar.png',
+            'templates/hook.png',
+            'templates/README.txt'
+          )
+          foreach ($rel in $exactFiles) {
+            $src = Join-Path $oldFish $rel
+            $dst = Join-Path $curFish $rel
+            if (-not (Test-Path -LiteralPath $src)) { throw "v28 source missing: $rel" }
+            New-Item -ItemType Directory -Path (Split-Path $dst -Parent) -Force | Out-Null
+            Copy-Item -LiteralPath $src -Destination $dst -Force
+          }
+
+          # Keep latest UI, Telegram remote control, updater and latest abyss/dungeon.
+          # FishingFocusGuard.cs may remain compiled for other latest code, but the exact
+          # v28 fishing runtime must not reference it.
+          foreach ($rel in @('CaptureService.cs','FishingBot.cs','InputSender.cs','NativeMethods.cs')) {
+            $txt = Get-Content -Raw -LiteralPath (Join-Path $curFish $rel)
+            if ($txt -match 'FishingFocusGuard') { throw "latest focus guard leaked into v28 runtime: $rel" }
+          }
+
+          # Bump only current-version strings outside the copied v28 runtime behavior.
+          Get-ChildItem $cur.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p = $_.FullName
+            $s = Get-Content -Raw -LiteralPath $p
+            $n = $s.Replace('V0.1.12','V0.1.13').Replace('0.1.12.0','0.1.13.0').Replace('0.1.12','0.1.13')
+            if ($n -ne $s) { Set-Content -LiteralPath $p -Value $n -Encoding UTF8 }
+          }
+
+          # Verify exact v28 hashes for the fishing runtime files after version bump.
+          $expected = @{
+            'AppLog.cs'='a9df7c2482ad03c8d99422caf72fd7b1a524b44400e7f58bf3271cffe3e76849';
+            'AutomationConfig.cs'='489580fa5ba69df4f59e0c1db65919c141272cd0aece6ef2d8aba549e64bb66c';
+            'CaptureService.cs'='e6ba4e28e2625f7b632d6d11df5804d9dabee6e433a2874791f777619c87b323';
+            'config.json'='2b47c1d8edda013767dd0193505a1eb7dc4de9c722f28047bd78f08c241345b5';
+            'FishingBot.cs'='f945a273035cc7a8d87f2d48f504f3abe93191d267b0361ed6fafa43dfe2f82a';
+            'InputSender.cs'='1c8f09fb8a8d6f57351254eef1b74fccdacb3ff39f51ad8f71e77712851de662';
+            'NativeMethods.cs'='c043aba58461e7bb539c8db367a2acc7b6e45d88212f91a89c6e3b659acf01fd';
+            'OcrService.cs'='be7b57b760cef847f6206cd3fe3c5903dc3a85e46423919c5c59745673092c11';
+            'TemplateMatcher.cs'='5290b28fea8d6eb0bde91a64c9835fb7369d4376e4ed596caaa6cc6bd6ccbc21';
+            'templates/compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'templates/gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'templates/healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'templates/hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949';
+            'templates/README.txt'='4bf54ac5cc0acf1aa68d4f029df07fbec4f76415ba36a995381a57e942cc6a0a'
+          }
+          foreach ($rel in $expected.Keys) {
+            $got = (Get-FileHash -LiteralPath (Join-Path $curFish $rel) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($got -ne $expected[$rel]) { throw "v28 exact hash mismatch $rel : $got" }
+          }
+
+          $cfg = Get-Content -Raw -LiteralPath (Join-Path $curFish 'config.json') | ConvertFrom-Json
+          if ([double]$cfg.HookThreshold -ne 0.85) { throw 'v28 HookThreshold 0.85 missing' }
+          $bot = Get-Content -Raw -LiteralPath (Join-Path $curFish 'FishingBot.cs')
+          if ($bot -notmatch 'MatchCompass' -or $bot -notmatch 'PressS' -or $bot -notmatch 'MatchHook' -or $bot -notmatch 'PressSpace') { throw 'v28 compass -> S -> hook -> Space flow missing' }
+          $capture = Get-Content -Raw -LiteralPath (Join-Path $curFish 'CaptureService.cs')
+          if ($capture -notmatch 'CopyFromScreen\(window\.ClientScreenOrigin\.X,\s*window\.ClientScreenOrigin\.Y') { throw 'exact v28 capture missing' }
+          $input = Get-Content -Raw -LiteralPath (Join-Path $curFish 'InputSender.cs')
+          if ($input -match 'FishingFocusGuard') { throw 'latest input focus path remains' }
+
+          $updater = Get-ChildItem $cur.FullName -Recurse -File -Filter UpdateManager.cs | Select-Object -First 1
+          if ($null -eq $updater) { throw 'UpdateManager missing' }
+          $ut = Get-Content -Raw -LiteralPath $updater.FullName
+          if ($ut -notmatch '0\.1\.13|V0\.1\.13') { throw 'V0.1.13 updater version missing' }
+
+          $changeLines = @(
+            'MABI AUTO V0.1.13 - EXACT v28 FISHING RUNTIME',
+            '',
+            'Fishing runtime copied byte-for-byte from the proven v28 build.',
+            'Exact v28 files: AppLog, AutomationConfig, CaptureService, config, FishingBot, InputSender, NativeMethods, OcrService, TemplateMatcher and all fishing templates.',
+            'This restores v28 window selection, fixed capture origin and keyboard injection behavior, not just the hook matcher.',
+            'Latest MainForm/UI, Telegram remote control, UpdateManager, abyss and dungeon remain from the V0.1.12/latest line.'
+          )
+          Set-Content -LiteralPath (Join-Path $cur.FullName 'CHANGES_V0.1.13_EXACT_V28_FISHING.txt') -Value $changeLines -Encoding UTF8
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $cur.FullName -Destination 'stage/MabiAuto_V0.1.13' -Recurse
+          $pkgRoot = (Resolve-Path 'stage/MabiAuto_V0.1.13').Path
+          $pkgFish = Join-Path $pkgRoot 'FishingAutomation'
+          $publishArgs = @('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @publishArgs -o stage/release
+          if ($LASTEXITCODE -ne 0) { throw 'FishingAutomation publish failed' }
+          $watchProj = Join-Path $pkgRoot 'MacroWatchdog/MacroWatchdog.csproj'
+          if (Test-Path -LiteralPath $watchProj) {
+            dotnet publish $watchProj @publishArgs -o stage/watchdog
+            if ($LASTEXITCODE -ne 0) { throw 'MacroWatchdog publish failed' }
+            if (Test-Path 'stage/watchdog/MacroWatchdog.exe') { Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force }
+          }
+          $releaseDir = Join-Path $pkgRoot 'release'
+          if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
+          Copy-Item -LiteralPath (Resolve-Path 'stage/release').Path -Destination $releaseDir -Recurse
+
+          # Verify runtime templates are still exact v28.
+          foreach ($t in @('compass.png','gauge.png','healthbar.png','hook.png')) {
+            $rel = "templates/$t"
+            $runtime = Join-Path $releaseDir $rel
+            if (-not (Test-Path -LiteralPath $runtime)) { throw "runtime template missing: $t" }
+            $got = (Get-FileHash -LiteralPath $runtime -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($got -ne $expected[$rel]) { throw "runtime v28 template mismatch: $t" }
+          }
+
+          $exe = Join-Path $releaseDir 'FishingAutomation.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'runtime exe missing' }
+          $p = Start-Process -FilePath $exe -WorkingDirectory $releaseDir -PassThru
+          Start-Sleep -Seconds 3
+          $p.Refresh()
+          if ($p.HasExited) { throw "V0.1.13 app exited during smoke test: $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process -Name MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $sourceZip = (Resolve-Path out).Path + '\CombinedFishingDungeon_V0.1.13_ExactV28Fishing.zip'
+          Compress-Archive -LiteralPath $cur.FullName -DestinationPath $sourceZip -CompressionLevel Optimal
+          $liteZip = (Resolve-Path out).Path + '\MabiAuto_V0.1.13_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkgRoot -DestinationPath $liteZip -CompressionLevel Optimal
+          $hash = (Get-FileHash -LiteralPath $liteZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.13_Windows_Lite.zip" | Set-Content -LiteralPath "$liteZip.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.13 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'V0.1.13'
+          $notes = @(
+            'MABI AUTO V0.1.13 - v28 낚시 런타임 완전 복구',
+            '',
+            'v28에서 밤새 정상 동작한 낚시 실행 경로를 최신판 안에 그대로 넣은 테스트 버전입니다.',
+            'FishingBot/TemplateMatcher뿐 아니라 CaptureService, NativeMethods/WindowLocator, InputSender, AutomationConfig, OcrService, config.json 및 낚시 템플릿까지 v28 원본 해시와 동일하게 복구했습니다.',
+            '따라서 낚시는 v28의 나침반 -> S -> Hook -> Space -> 게이지 흐름과 v28 캡처/입력 동작을 사용합니다.',
+            '최신 UI, Telegram 원격제어/알림, 자동업데이트, 어비스/던전 기능은 최신 계열을 유지합니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.13_Windows_Lite.zip'
+          )
+          Set-Content notes.txt -Value $notes -Encoding UTF8
+          $assets = @('out/CombinedFishingDungeon_V0.1.13_ExactV28Fishing.zip','out/MabiAuto_V0.1.13_Windows_Lite.zip','out/MabiAuto_V0.1.13_Windows_Lite.zip.sha256')
+          if (gh release view $tag --repo $env:REPO *> $null) {
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          } else {
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.13' --notes-file notes.txt
+          }
