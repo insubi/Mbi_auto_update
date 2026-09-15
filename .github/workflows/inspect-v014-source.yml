@@ -15,23 +15,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download V0.1.4 source
+      - name: Download V0.1.5 source
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir src
-          gh release download V0.1.4 --repo "$GITHUB_REPOSITORY" --pattern 'CombinedFishingDungeon_V0.1.4_StabilityRemote.zip' --dir src
-          unzip -q src/CombinedFishingDungeon_V0.1.4_StabilityRemote.zip -d src/unpacked
+          gh release download V0.1.5 --repo "$GITHUB_REPOSITORY" --pattern 'CombinedFishingDungeon_V0.1.5_StabilityRemote.zip' --dir src
+          unzip -q src/CombinedFishingDungeon_V0.1.5_StabilityRemote.zip -d src/unpacked
           ROOT=$(find src/unpacked -mindepth 1 -maxdepth 1 -type d | head -n1)
           mkdir inspect
-          cp "$ROOT/FishingAutomation/FishingBot.cs" inspect/
-          cp "$ROOT/FishingAutomation/InputSender.cs" inspect/
-          cp "$ROOT/FishingAutomation/WindowLocator.cs" inspect/ || true
-          cp "$ROOT/FishingAutomation/config.json" inspect/
+          for f in FishingBot.cs InputSender.cs WindowLocator.cs TemplateMatcher.cs CaptureService.cs AutomationConfig.cs MainForm.cs config.json FishingFocusGuard.cs; do
+            cp "$ROOT/FishingAutomation/$f" inspect/ 2>/dev/null || true
+          done
           cp "$ROOT/FishingAutomation/templates/hook.png" inspect/
-          cp "$ROOT/FishingAutomation/FishingFocusGuard.cs" inspect/
+          cp "$ROOT/FishingAutomation/templates/gauge.png" inspect/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
-          name: v014-source-inspect
+          name: v015-source-inspect
           path: inspect
           if-no-files-found: error
