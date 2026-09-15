@@ -65,7 +65,7 @@ preview_dir.mkdir(parents=True, exist_ok=True)
 payloads = {
     "hallucination_anchorage.jpg": ("v72_preview_hallucination.b64", "0195c292d2b32cb369d2561ab01227e4b7120e9cade8178cc174d40bf8ceeb9d"),
     "madness_cave.jpg": ("v72_preview_madness.b64", "e6af39c665f1126dde46f17054589413b88690a0eaae56fc14e06a6434b4e50e"),
-    "scattered_waterway.jpg": ("v72_preview_waterway.b64", "e554e07e40a3b07def8ef9f6ffe2f659c6a35097e02d14a9007a0a6fab8ccfdd"),
+    "scattered_waterway.jpg": ("v72_preview_waterway.b64", "d1d56c996e21aaf60c8ec6d09770b2b93ae918ea1c1c290f4e767b62490c1ff6"),
 }
 preview_paths = []
 for out_name, (payload_name, expected_hash) in payloads.items():
