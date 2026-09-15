@@ -21,7 +21,7 @@ $inputPath = Join-Path $SourceRoot ([string]$audit.keyboard_input_file)
 $input = Get-Content -LiteralPath $inputPath -Raw
 $guardCount = ([regex]::Matches($input, [regex]::Escape('global::FishingFocusGuard.Activate();'))).Count
 if ($guardCount -lt @($audit.guarded_methods).Count) { throw "V0.1.4 keyboard guard count too small: $guardCount" }
-if (-not (@($audit.guarded_methods) -contains 'TapSpace')) { throw 'V0.1.4 TapSpace was not guarded' }
+if (-not (@($audit.guarded_methods) -contains 'Tap')) { throw 'V0.1.4 low-level Tap method was not guarded' }
 $bot = Get-Content -LiteralPath (Join-Path $SourceRoot 'FishingAutomation/FishingBot.cs') -Raw
 foreach ($marker in @('double hookThreshold = Math.Min(_cfg.HookThreshold, 0.82);','bool sent = _input.TapSpace();','Space 전송 실패 -> 재시도')) {
     if (-not $bot.Contains($marker)) { throw "V0.1.3 fishing invariant lost in V0.1.4: $marker" }
@@ -33,4 +33,4 @@ foreach ($name in @('hook.png','gauge.png','healthbar.png','compass.png')) {
 }
 $update = Get-Content -LiteralPath (Join-Path $SourceRoot 'FishingAutomation/UpdateManager.cs') -Raw
 if (-not $update.Contains('public const string CurrentVersion = "V0.1.4";')) { throw 'V0.1.4 updater version missing' }
-Write-Host "V0.1.4 SOURCE VERIFIED: every fishing keyboard send activates the game window first; guarded methods=$(@($audit.guarded_methods) -join ',')."
+Write-Host "V0.1.4 SOURCE VERIFIED: every fishing low-level Tap activates the game window first; guarded methods=$(@($audit.guarded_methods) -join ',')."
