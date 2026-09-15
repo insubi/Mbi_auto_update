@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import base64, gzip, hashlib, struct, sys
+import base64, gzip, hashlib, json, struct, sys
 
 # V0.1.2 verified split payload loader.
 base = Path(__file__).resolve().parent
@@ -55,9 +55,11 @@ exec(compile(source.decode("utf-8"), __file__, "exec"))
 
 # The generated C# interpolation needs two backslashes in source so TimeSpan's
 # escaped colon survives C# string parsing: hh\\:mm. The implementation payload
-# emitted only one, which produces CS1009. Apply the minimal source fix here.
+# emitted only one, which produces CS1009. Apply the minimal source fix here,
+# then refresh the audit hash so the final generated source remains integrity-checked.
 if len(sys.argv) > 1:
-    main_form = Path(sys.argv[1]) / "FishingAutomation" / "MainForm.cs"
+    source_root = Path(sys.argv[1])
+    main_form = source_root / "FishingAutomation" / "MainForm.cs"
     if main_form.is_file():
         text = main_form.read_text(encoding="utf-8")
         bad = r"{_autoStopTime:hh\:mm}"
@@ -68,3 +70,15 @@ if len(sys.argv) > 1:
             print("V75 FIXED MainForm auto-stop TimeSpan format escape")
         elif good not in text:
             raise RuntimeError("V0.1.2 auto-stop TimeSpan format marker not found")
+
+        audit_path = source_root / "V0_1_2_STABILITY_AUDIT.json"
+        if not audit_path.is_file():
+            raise RuntimeError("V0.1.2 audit missing after source generation")
+        audit = json.loads(audit_path.read_text(encoding="utf-8"))
+        files = audit.get("files")
+        if not isinstance(files, dict) or "FishingAutomation/MainForm.cs" not in files:
+            raise RuntimeError("V0.1.2 audit MainForm entry missing")
+        final_hash = hashlib.sha256(main_form.read_bytes()).hexdigest()
+        files["FishingAutomation/MainForm.cs"] = final_hash
+        audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"V75 REFRESHED MainForm audit hash: {final_hash}")
