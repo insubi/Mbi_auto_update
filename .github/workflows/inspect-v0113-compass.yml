@@ -1,0 +1,26 @@
+name: Inspect V0.1.13 Compass Matcher
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/inspect-v0113-compass.yml']
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.13/CombinedFishingDungeon_V0.1.13_ExactV28Fishing.zip' -OutFile s.zip
+          Expand-Archive s.zip -DestinationPath s
+          $r=Get-ChildItem s -Directory|Select-Object -First 1
+          $p=Join-Path $r.FullName 'FishingAutomation/TemplateMatcher.cs'
+          $lines=Get-Content $p
+          for($i=0;$i -lt $lines.Count;$i++){
+            if($lines[$i] -match 'compass|BuildVariants|MatchCompass'){
+              $a=[Math]::Max(0,$i-12);$b=[Math]::Min($lines.Count-1,$i+28)
+              for($j=$a;$j -le $b;$j++){Write-Host ("{0:D4}: {1}" -f ($j+1),$lines[$j])}
+              Write-Host '---'
+            }
+          }
+          Write-Host '===== CONFIG ====='
+          Get-Content (Join-Path $r.FullName 'FishingAutomation/config.json')
