@@ -23,14 +23,14 @@ jobs:
           gh release download V0.1.5 --repo "$GITHUB_REPOSITORY" --pattern 'CombinedFishingDungeon_V0.1.5_StabilityRemote.zip' --dir src
           unzip -q src/CombinedFishingDungeon_V0.1.5_StabilityRemote.zip -d src/unpacked
           ROOT=$(find src/unpacked -mindepth 1 -maxdepth 1 -type d | head -n1)
-          mkdir inspect
-          for f in FishingBot.cs InputSender.cs WindowLocator.cs TemplateMatcher.cs CaptureService.cs AutomationConfig.cs MainForm.cs config.json FishingFocusGuard.cs; do
-            cp "$ROOT/FishingAutomation/$f" inspect/ 2>/dev/null || true
-          done
-          cp "$ROOT/FishingAutomation/templates/hook.png" inspect/
-          cp "$ROOT/FishingAutomation/templates/gauge.png" inspect/ 2>/dev/null || true
+          mkdir -p inspect/templates
+          cp "$ROOT/FishingAutomation/"*.cs inspect/ 2>/dev/null || true
+          cp "$ROOT/FishingAutomation/"*.csproj inspect/ 2>/dev/null || true
+          cp "$ROOT/FishingAutomation/config.json" inspect/
+          cp "$ROOT/FishingAutomation/templates/hook.png" inspect/templates/
+          cp "$ROOT/FishingAutomation/templates/gauge.png" inspect/templates/ 2>/dev/null || true
       - uses: actions/upload-artifact@v4
         with:
-          name: v015-source-inspect
+          name: v015-full-source-inspect
           path: inspect
           if-no-files-found: error
