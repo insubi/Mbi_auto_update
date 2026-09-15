@@ -53,7 +53,6 @@ jobs:
             BASE_VERSION=$((VERSION - 1))
             BASE_TAG="v$BASE_VERSION"
             echo "Creating v$VERSION source from $BASE_TAG + $INPUT"
-
             SOURCE_ASSET="$(gh release view "$BASE_TAG" --repo "$REPO" --json assets --jq '.assets[].name' | grep -Ei '\.zip$' | grep -Eiv 'Windows_Lite|Windows_Ready|Prebuilt' | head -n1 || true)"
             if [ -z "$SOURCE_ASSET" ]; then
               echo "No source ZIP found in $BASE_TAG"
@@ -139,11 +138,13 @@ jobs:
           fi
 
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            if [ "$VERSION" -ge 58 ] && [ "$(gh release view "$TAG" --repo "$REPO" --json isDraft --jq '.isDraft')" != true ]; then
+            IS_DRAFT="$(gh release view "$TAG" --repo "$REPO" --json isDraft --jq '.isDraft')"
+            if [ "$VERSION" -ge 58 ] && [ "$IS_DRAFT" != true ]; then
               echo "Refusing to replace already published $TAG. Use a new version."
               exit 1
             fi
-            echo "Release $TAG exists; replacing source ZIP assets."
+            echo "Release $TAG exists; retargeting draft and replacing source ZIP assets."
+            gh release edit "$TAG" --repo "$REPO" --target "$GITHUB_SHA" --title "$TITLE" --notes-file "$NOTES_FILE"
             while IFS= read -r asset; do
               [ -z "$asset" ] && continue
               if printf '%s' "$asset" | grep -Eqi '\.zip$' && ! printf '%s' "$asset" | grep -Eqi 'Windows_Lite|Windows_Ready|Prebuilt'; then
