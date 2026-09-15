@@ -215,3 +215,5 @@ audit = {
     json.dumps(audit, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 print("V0.1 applied on v72: brand polish + compact centered auto-stop + semantic public versioning")
+
+# Pipeline marker: V0.1 verification/package/workflows are now finalized.
