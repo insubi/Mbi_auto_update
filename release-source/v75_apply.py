@@ -2,7 +2,7 @@
 from pathlib import Path
 import base64, gzip, hashlib, struct
 
-# V0.1.2 verified split payload loader.
+# V0.1.2 verified split payload loader. Rebuild trigger after package-script parser fix.
 base = Path(__file__).resolve().parent
 
 def rebuild_b64(target_name: str, prefix: str, count: int):
