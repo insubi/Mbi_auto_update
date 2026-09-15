@@ -1,0 +1,37 @@
+name: Inspect V0.1.4 Source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v014-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download V0.1.4 source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir src
+          gh release download V0.1.4 --repo "$GITHUB_REPOSITORY" --pattern 'CombinedFishingDungeon_V0.1.4_StabilityRemote.zip' --dir src
+          unzip -q src/CombinedFishingDungeon_V0.1.4_StabilityRemote.zip -d src/unpacked
+          ROOT=$(find src/unpacked -mindepth 1 -maxdepth 1 -type d | head -n1)
+          mkdir inspect
+          cp "$ROOT/FishingAutomation/FishingBot.cs" inspect/
+          cp "$ROOT/FishingAutomation/InputSender.cs" inspect/
+          cp "$ROOT/FishingAutomation/WindowLocator.cs" inspect/ || true
+          cp "$ROOT/FishingAutomation/config.json" inspect/
+          cp "$ROOT/FishingAutomation/templates/hook.png" inspect/
+          cp "$ROOT/FishingAutomation/FishingFocusGuard.cs" inspect/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v014-source-inspect
+          path: inspect
+          if-no-files-found: error
