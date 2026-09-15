@@ -225,8 +225,8 @@ def add_focus(match: re.Match) -> str:
     return match.group(0) + "\n" + indent + "    global::FishingFocusGuard.Activate();"
 
 input_text, count = method_pattern.subn(add_focus, input_text)
-if count == 0 or "TapSpace" not in patched_methods:
-    raise RuntimeError(f"V0.1.4 could not guard TapSpace; methods found={patched_methods}")
+if count == 0 or "Tap" not in patched_methods:
+    raise RuntimeError(f"V0.1.4 could not guard low-level Tap; methods found={patched_methods}")
 write(input_path, input_text)
 
 bot_text = read(app / "FishingBot.cs")
@@ -241,7 +241,7 @@ for marker in (
 changes = root / "CHANGES_V0.1.4_FOCUS_BEFORE_KEYBOARD.txt"
 changes.write_text(
     "MABI AUTO V0.1.4 - focus before keyboard input\n"
-    "- Every fishing keyboard-send method now activates the real '마비노기 모바일' window immediately before injection.\n"
+    "- Every fishing low-level Tap method now activates the real '마비노기 모바일' window immediately before injection.\n"
     "- Foreground recovery uses AttachThreadInput + BringWindowToTop + SetForegroundWindow + SetFocus so clicking another app no longer strands Space input there.\n"
     "- The target is resolved by visible game-window title and largest client area on every send, so stale HWND/focus state is not reused.\n"
     "- Minimized game windows are restored before input.\n"
