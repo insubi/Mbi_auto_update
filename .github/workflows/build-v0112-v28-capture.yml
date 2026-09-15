@@ -1,0 +1,153 @@
+name: Build V0.1.12 v28 Capture
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v0112-v28-capture.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore v28 capture geometry on V0.1.11
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.11/CombinedFishingDungeon_V0.1.11_v28Fishing.zip' -OutFile current.zip
+          Invoke-WebRequest -Uri 'https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip' -OutFile v28.zip
+          Expand-Archive current.zip -DestinationPath current
+          Expand-Archive v28.zip -DestinationPath old
+          $cur = Get-ChildItem current -Directory | Select-Object -First 1
+          $v28 = Get-ChildItem old -Directory | Select-Object -First 1
+          if ($null -eq $cur -or $null -eq $v28) { throw 'source root missing' }
+          $curFish = Join-Path $cur.FullName 'FishingAutomation'
+          $oldFish = Join-Path $v28.FullName 'FishingAutomation'
+
+          # V0.1.11 already restored the proven v28 FishingBot, matcher and templates.
+          # The remaining runtime difference was CaptureService. Restore the v28 fixed
+          # client-origin capture geometry, while retaining the modern focus guard so
+          # keyboard input/capture can recover when another window briefly gets focus.
+          Copy-Item -LiteralPath (Join-Path $oldFish 'CaptureService.cs') -Destination (Join-Path $curFish 'CaptureService.cs') -Force
+          $capPath = Join-Path $curFish 'CaptureService.cs'
+          $cap = Get-Content -Raw -LiteralPath $capPath
+          $needle = "    public CapturedFrame Capture(GameWindow window)`r`n    {`r`n"
+          if (-not $cap.Contains($needle)) {
+            $needle = "    public CapturedFrame Capture(GameWindow window)`n    {`n"
+          }
+          if (-not $cap.Contains($needle)) { throw 'v28 Capture method header not found' }
+          $guard = $needle + "        // V0.1.12: keep the v28 fixed capture origin, but recover game focus if needed.`r`n        if (!global::FishingFocusGuard.IsForeground(window.Handle))`r`n        {`r`n            global::FishingFocusGuard.Activate(window.Handle);`r`n            Thread.Sleep(70);`r`n        }`r`n`r`n"
+          $cap = $cap.Replace($needle, $guard)
+          Set-Content -LiteralPath $capPath -Value $cap -Encoding UTF8
+
+          # Version bump only; leave the restored v28 fishing behavior intact.
+          Get-ChildItem $cur.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p = $_.FullName
+            $s = Get-Content -Raw -LiteralPath $p
+            $n = $s.Replace('V0.1.11','V0.1.12').Replace('0.1.11.0','0.1.12.0').Replace('0.1.11','0.1.12')
+            if ($n -ne $s) { Set-Content -LiteralPath $p -Value $n -Encoding UTF8 }
+          }
+
+          $changeLines = @(
+            'MABI AUTO V0.1.12 - v28 FIXED CAPTURE GEOMETRY',
+            '',
+            'Base: V0.1.11 (latest features + proven v28 fishing engine).',
+            'Reason: v28 ran overnight, while V0.1.11 stopped after about 10 minutes with a visible hook but Hook 0.54 x0.65.',
+            'V0.1.11 still used the newer per-frame GetClientRect/ClientToScreen capture origin.',
+            'V0.1.12 restores the v28 fixed ClientScreenOrigin capture path.',
+            'Modern FishingFocusGuard activation is retained only for foreground recovery.',
+            'v28 FishingBot, TemplateMatcher, hook.png and HookThreshold 0.85 remain unchanged.'
+          )
+          Set-Content -LiteralPath (Join-Path $cur.FullName 'CHANGES_V0.1.12_V28_CAPTURE.txt') -Value $changeLines -Encoding UTF8
+
+          # Verification: exact v28 fishing assets/logic plus fixed-origin capture.
+          $expectedHook = 'e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          $hookHash = (Get-FileHash -LiteralPath (Join-Path $curFish 'templates/hook.png') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hookHash -ne $expectedHook) { throw "v28 hook changed: $hookHash" }
+          $cfg = Get-Content -Raw -LiteralPath (Join-Path $curFish 'config.json') | ConvertFrom-Json
+          if ([double]$cfg.HookThreshold -ne 0.85) { throw 'HookThreshold is not v28 0.85' }
+          $bot = Get-Content -Raw -LiteralPath (Join-Path $curFish 'FishingBot.cs')
+          if ($bot -notmatch 'hook\.Score\s*>=\s*_cfg\.HookThreshold') { throw 'v28 hook decision missing' }
+          if ($bot -match 'LooksLikeFishingCastHud|HUD보조|Math\.Min\(_cfg\.HookThreshold,\s*0\.72') { throw 'newer hook fallback leaked back in' }
+          $matcher = Get-Content -Raw -LiteralPath (Join-Path $curFish 'TemplateMatcher.cs')
+          if ($matcher -notmatch 'MatchHook\(Mat gray, Rectangle roi\)\s*=>\s*MatchVariants') { throw 'v28 MatchHook missing' }
+          $capture = Get-Content -Raw -LiteralPath $capPath
+          if ($capture -notmatch 'CopyFromScreen\(window\.ClientScreenOrigin\.X,\s*window\.ClientScreenOrigin\.Y') { throw 'v28 fixed-origin capture missing' }
+          if ($capture -match 'ClientToScreen\(window\.Handle|GetClientRect\(window\.Handle') { throw 'per-frame live origin still present' }
+          if ($capture -notmatch 'FishingFocusGuard\.Activate\(window\.Handle\)') { throw 'foreground recovery guard missing' }
+          $updater = Get-ChildItem $cur.FullName -Recurse -File -Filter UpdateManager.cs | Select-Object -First 1
+          if ($null -eq $updater) { throw 'UpdateManager missing' }
+          $ut = Get-Content -Raw -LiteralPath $updater.FullName
+          if ($ut -notmatch '0\.1\.12|V0\.1\.12') { throw 'V0.1.12 updater version missing' }
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $cur.FullName -Destination 'stage/MabiAuto_V0.1.12' -Recurse
+          $pkgRoot = (Resolve-Path 'stage/MabiAuto_V0.1.12').Path
+          $pkgFish = Join-Path $pkgRoot 'FishingAutomation'
+          $publishArgs = @('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @publishArgs -o stage/release
+          if ($LASTEXITCODE -ne 0) { throw 'FishingAutomation publish failed' }
+          $watchProj = Join-Path $pkgRoot 'MacroWatchdog/MacroWatchdog.csproj'
+          if (Test-Path -LiteralPath $watchProj) {
+            dotnet publish $watchProj @publishArgs -o stage/watchdog
+            if ($LASTEXITCODE -ne 0) { throw 'MacroWatchdog publish failed' }
+            if (Test-Path 'stage/watchdog/MacroWatchdog.exe') { Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force }
+          }
+          $releaseDir = Join-Path $pkgRoot 'release'
+          if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
+          Copy-Item -LiteralPath (Resolve-Path 'stage/release').Path -Destination $releaseDir -Recurse
+          $runtimeHook = Join-Path $releaseDir 'templates/hook.png'
+          if (-not (Test-Path -LiteralPath $runtimeHook)) { throw 'runtime hook missing' }
+          $runtimeHash = (Get-FileHash -LiteralPath $runtimeHook -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($runtimeHash -ne $expectedHook) { throw "runtime hook not v28: $runtimeHash" }
+          $exe = Join-Path $releaseDir 'FishingAutomation.exe'
+          if (-not (Test-Path -LiteralPath $exe)) { throw 'runtime exe missing' }
+          $p = Start-Process -FilePath $exe -WorkingDirectory $releaseDir -PassThru
+          Start-Sleep -Seconds 3
+          $p.Refresh()
+          if ($p.HasExited) { throw "V0.1.12 app exited during smoke test: $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process -Name MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $sourceZip = (Resolve-Path out).Path + '\CombinedFishingDungeon_V0.1.12_v28FishingCapture.zip'
+          Compress-Archive -LiteralPath $cur.FullName -DestinationPath $sourceZip -CompressionLevel Optimal
+          $liteZip = (Resolve-Path out).Path + '\MabiAuto_V0.1.12_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkgRoot -DestinationPath $liteZip -CompressionLevel Optimal
+          $hash = (Get-FileHash -LiteralPath $liteZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.12_Windows_Lite.zip" | Set-Content -LiteralPath "$liteZip.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.12 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'V0.1.12'
+          $notes = @(
+            'MABI AUTO V0.1.12 - v28 캡처 경로 복구',
+            '',
+            'v28은 밤새 정상 동작했지만 V0.1.11은 약 10분 후 화면에 Hook이 보이는 상태에서 Hook 0.54 x0.65로 정지한 증상을 기준으로 수정했습니다.',
+            'V0.1.11에 남아 있던 매 프레임 GetClientRect/ClientToScreen 좌표 재계산을 제거하고, v28의 고정 ClientScreenOrigin 캡처를 복원했습니다.',
+            '다른 창으로 포커스가 넘어간 경우 게임창을 다시 활성화하는 FishingFocusGuard는 유지했습니다.',
+            '낚시 상태머신, TemplateMatcher, hook.png, HookThreshold 0.85는 V0.1.11에서 복원한 v28 그대로 유지합니다.',
+            '어비스/던전, UI, Telegram/알림, 자동업데이트는 최신 계열을 유지합니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.12_Windows_Lite.zip'
+          )
+          Set-Content notes.txt -Value $notes -Encoding UTF8
+          $assets = @('out/CombinedFishingDungeon_V0.1.12_v28FishingCapture.zip','out/MabiAuto_V0.1.12_Windows_Lite.zip','out/MabiAuto_V0.1.12_Windows_Lite.zip.sha256')
+          if (gh release view $tag --repo $env:REPO *> $null) {
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          } else {
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.12' --notes-file notes.txt
+          }
