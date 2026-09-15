@@ -24,25 +24,12 @@ jobs:
           Expand-Archive cur.zip -DestinationPath cur
           $v28root = Get-ChildItem v28 -Directory | Select-Object -First 1
           $curroot = Get-ChildItem cur -Directory | Select-Object -First 1
-          Write-Host "V28ROOT=$($v28root.FullName)"
-          Write-Host "CURROOT=$($curroot.FullName)"
-          foreach ($name in @('FishingBot.cs','TemplateMatcher.cs','CaptureService.cs','config.json')) {
-            Write-Host "===== $name ====="
-            $a = Get-ChildItem $v28root.FullName -Recurse -File -Filter $name | Select-Object -First 1
-            $b = Get-ChildItem $curroot.FullName -Recurse -File -Filter $name | Select-Object -First 1
-            Write-Host "v28=$($a.FullName)"
-            Write-Host "cur=$($b.FullName)"
-            if ($a -and $b -and $name -match '\.cs$') {
-              Write-Host '-- v28 signatures --'
-              Select-String -Path $a.FullName -Pattern 'class |public FishingBot|WaitReadyAndCast|WaitFor|MatchHook|MatchCompass|DetectGauge|Press|Send|compass|hookThreshold' | Select-Object -First 140 | ForEach-Object { $_.Line }
-              Write-Host '-- current signatures --'
-              Select-String -Path $b.FullName -Pattern 'class |public FishingBot|WaitReadyAndCast|WaitFor|MatchHook|MatchCompass|DetectGauge|Press|Send|compass|hookThreshold|HUD' | Select-Object -First 200 | ForEach-Object { $_.Line }
-            }
+          foreach ($label in @('V28','CURRENT')) {
+            if ($label -eq 'V28') { $root = $v28root.FullName } else { $root = $curroot.FullName }
+            $f = Join-Path $root 'FishingAutomation/FishingBot.cs'
+            Write-Host "===== $label FishingBot API/METHODS ====="
+            Select-String -Path $f -Pattern '^\s*(public|private|internal|protected)\s+.*\(' | ForEach-Object { $_.Line.Trim() }
           }
-          Write-Host '===== V28 CONFIG ====='
-          Get-Content -LiteralPath (Join-Path $v28root.FullName 'FishingAutomation/config.json')
-          Write-Host '===== CURRENT CONFIG ====='
-          Get-Content -LiteralPath (Join-Path $curroot.FullName 'FishingAutomation/config.json')
           Write-Host '===== TEMPLATE HASHES ====='
           foreach ($t in @('hook.png','compass.png','gauge.png','healthbar.png')) {
             $a = Get-ChildItem $v28root.FullName -Recurse -File -Filter $t | Select-Object -First 1
