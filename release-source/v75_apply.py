@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import base64, gzip, hashlib
+import base64, gzip, hashlib, struct
 
 # V0.1.2 verified split payload loader.
 base = Path(__file__).resolve().parent
+for name in ("v75_outside_home.b64", "v75_outside_end.b64", "v75_outside_k.b64", "v75_outside_i.b64"):
+    p = base / name
+    if p.is_file():
+        data = base64.b64decode(p.read_text(encoding="ascii").strip(), validate=True)
+        extra = ""
+        if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 26:
+            w, h = struct.unpack(">II", data[16:24])
+            extra = f" png={w}x{h} color_type={data[25]}"
+        print(f"V75 SIDE-CAR {name}: bytes={len(data)} sha256={hashlib.sha256(data).hexdigest()}{extra}")
+
 parts = []
 for i in range(10):
     p = base / f"v75_impl_{i:02d}.b64part"
