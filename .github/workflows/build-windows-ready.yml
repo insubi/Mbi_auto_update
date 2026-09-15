@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Draft bridge release to build'
         required: true
-        default: 'v79'
+        default: 'v80'
 
 permissions:
   contents: write
@@ -26,10 +26,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Select v79 bridge source, build V0.1.6 and verify package
+
+      - name: Select v80 bridge source, build V0.1.7 and verify package
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -40,38 +42,44 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $releases = gh api "repos/$env:REPO/releases?per_page=100" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
+
           if ($env:SOURCE_SHA) {
-            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v79' })
-            if ($matches.Count -ne 1) { throw 'Expected exactly one v79 bridge release for the source workflow commit' }
+            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v80' })
+            if ($matches.Count -ne 1) { throw 'Expected exactly one v80 bridge release for the source workflow commit' }
             $tag = $matches[0].tag_name
-          } else { $tag = $env:REQUESTED_TAG }
-          if ($tag -ne 'v79') { throw 'This bridge packaging pipeline currently requires v79' }
-          $selected = @($releases | Where-Object { $_.tag_name -eq $tag })
-          if ($selected.Count -ne 1) { throw 'Expected exactly one matching bridge release' }
-          $release = $selected[0]
+          } else {
+            $tag = $env:REQUESTED_TAG
+          }
+          if ($tag -ne 'v80') { throw 'This packaging pipeline requires v80' }
+
+          $release = @($releases | Where-Object { $_.tag_name -eq $tag }) | Select-Object -First 1
+          if ($null -eq $release) { throw 'v80 release not found' }
           if (-not $release.draft) { throw 'Refusing to replace an already published bridge release' }
-          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v79_StabilityRemote.zip' })
-          if ($assets.Count -ne 1) { throw 'Expected exactly one v79 source ZIP' }
+
+          $asset = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v80_StabilityRemote.zip' }) | Select-Object -First 1
+          if ($null -eq $asset) { throw 'Expected v80 source ZIP' }
+
           New-Item -ItemType Directory -Path source-download,source-work | Out-Null
-          gh release download $tag --repo $env:REPO --pattern $assets[0].name --dir source-download
+          gh release download $tag --repo $env:REPO --pattern $asset.name --dir source-download
           if ($LASTEXITCODE -ne 0) { throw 'Source download failed' }
-          tar -xf (Join-Path source-download $assets[0].name) -C source-work
+          tar -xf (Join-Path source-download $asset.name) -C source-work
           if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
-          ./release-source/v79-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v79 -OutputRoot build-output
-          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v79 -PackageRoot build-output/MabiAuto_v79 -WorkRoot update-test
+
+          ./release-source/v80-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v80 -OutputRoot build-output
+          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v80 -PackageRoot build-output/MabiAuto_v80 -WorkRoot update-test
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Keep V0.1.6 verification reports
+      - name: Keep V0.1.7 verification reports
         uses: actions/upload-artifact@v4
         with:
-          name: V0.1.6-foreground-capture-verification
+          name: V0.1.7-fishing-capture-resync-verification
           path: |
-            source-work/CombinedFishingDungeon_v79/V0_1_6_FOREGROUND_CAPTURE_AUDIT.json
-            build-output/v79-package-inventory.json
+            source-work/CombinedFishingDungeon_v80/V0_1_7_FISHING_CAPTURE_RESYNC_AUDIT.json
+            build-output/v80-package-inventory.json
             update-test/verification.txt
           if-no-files-found: error
 
-      - name: Publish bridge v79 and public V0.1.6 release
+      - name: Publish bridge v80 and public V0.1.7 release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -80,47 +88,47 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v79_Windows_Lite.zip build-output/MabiAuto_v79_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Bridge package upload failed; release remains draft' }
+          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v80_Windows_Lite.zip build-output/MabiAuto_v80_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Bridge package upload failed' }
           gh release edit $env:RELEASE_TAG --repo $env:REPO --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Bridge release publication failed' }
 
-          $publicSourceRoot = 'build-output/CombinedFishingDungeon_V0.1.6'
-          $publicPackageRoot = 'build-output/MabiAuto_V0.1.6'
-          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v79' -Destination $publicSourceRoot -Recurse
-          Copy-Item -LiteralPath 'build-output/MabiAuto_v79' -Destination $publicPackageRoot -Recurse
+          $publicSourceRoot = 'build-output/CombinedFishingDungeon_V0.1.7'
+          $publicPackageRoot = 'build-output/MabiAuto_V0.1.7'
+          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v80' -Destination $publicSourceRoot -Recurse
+          Copy-Item -LiteralPath 'build-output/MabiAuto_v80' -Destination $publicPackageRoot -Recurse
 
           Get-ChildItem -LiteralPath $publicSourceRoot -Recurse -Directory -Force | Where-Object {
             $_.Name -in @('bin','obj','.vs','debug')
           } | Sort-Object FullName -Descending | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
           Get-ChildItem -LiteralPath $publicSourceRoot -Recurse -File -Force | Where-Object {
-            $_.Extension -in @('.pdb','.user','.suo') -or $_.Name -match '^timeout_.*\.png$|^recovery_.*\.png$'
+            $_.Extension -in @('.pdb','.user','.suo') -or $_.Name -match '^timeout_.*\.png$|^recovery_.*\.png$|^stage1_hook_wait_.*\.png$'
           } | Remove-Item -Force -ErrorAction SilentlyContinue
 
-          $publicSourceZip = 'build-output/CombinedFishingDungeon_V0.1.6_StabilityRemote.zip'
-          $publicPackageZip = 'build-output/MabiAuto_V0.1.6_Windows_Lite.zip'
+          $publicSourceZip = 'build-output/CombinedFishingDungeon_V0.1.7_StabilityRemote.zip'
+          $publicPackageZip = 'build-output/MabiAuto_V0.1.7_Windows_Lite.zip'
           Compress-Archive -LiteralPath $publicSourceRoot -DestinationPath $publicSourceZip -CompressionLevel Optimal
           Compress-Archive -LiteralPath $publicPackageRoot -DestinationPath $publicPackageZip -CompressionLevel Optimal
           $publicHash = (Get-FileHash -LiteralPath $publicPackageZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$publicHash  MabiAuto_V0.1.6_Windows_Lite.zip" | Set-Content -LiteralPath "$publicPackageZip.sha256" -Encoding ASCII
+          "$publicHash  MabiAuto_V0.1.7_Windows_Lite.zip" | Set-Content -LiteralPath "$publicPackageZip.sha256" -Encoding ASCII
 
-          $notes = 'build-output/V0.1.6-release-notes.txt'
+          $notes = 'build-output/V0.1.7-release-notes.txt'
           @'
-          MABI AUTO V0.1.6 - 화면 캡처 전 게임창 복구
+          MABI AUTO V0.1.7 - 낚시 시전 감지 복구 강화
 
-          22:10 화면을 현재 hook 템플릿과 800x1000 기준으로 다시 대조한 결과, 화면 자체에서는 충분히 높은 점수로 인식 가능했습니다. 따라서 임계값보다 실제 캡처 대상/포커스가 어긋나는 문제가 핵심 원인이었습니다.
-          기존 CaptureService는 CopyFromScreen 방식이라 다른 창이나 매크로 UI가 게임보다 앞에 있으면 게임 화면 대신 그 창을 캡처할 수 있었습니다.
-          이제 화면 캡처 직전에 게임창이 전경이 아니면 V0.1.4의 강제 포커스 복구를 먼저 수행하고 70ms 안정화 뒤 실제 게임 클라이언트를 캡처합니다.
-          WindowLocator의 약한 BringWindowToTop/SetForegroundWindow 경로도 동일한 강제 포커스 복구로 통일했습니다.
-          60초 진행 정지 텔레그램 알림에는 마지막 낚시 상태를 함께 넣어 다음 문제 발생 시 Hook/Gauge 단계까지 바로 확인할 수 있습니다.
-          V0.1.5의 0.78 hook 판정, 2프레임 확인, 수동 Space 후 게이지 상태 재동기화와 V0.1.4의 입력 전 포커스 복구는 유지합니다.
+          22:41 정지 알림에서 실제 게임 화면에는 Space 낚시 아이콘이 선명하게 보이지만 매크로 상태는 Hook 0.39 x0.65로 남는 현상을 확인했습니다.
+          텔레그램 캡처는 매번 현재 게임 클라이언트 위치를 다시 계산하지만 기존 낚시 CaptureService는 시작 시 저장한 화면 좌표를 계속 사용했습니다. 게임창 위치가 조금이라도 변하면 매크로는 다른 영역을 읽을 수 있었습니다.
+          V0.1.7은 매 캡처마다 GetClientRect + ClientToScreen으로 현재 게임 클라이언트 원점을 다시 계산합니다.
+          설정 Hook ROI에서 점수가 낮으면 화면 하단 중앙을 넓게 한 번 더 검색해 좌표 오차에도 실제 Space 아이콘을 복구합니다.
+          START.cmd는 현재 패키지의 hook.png를 실행 시 runtime templates에 강제로 새로 복사하여 오래된 템플릿이 남는 경우도 제거합니다.
+          시전 대기가 8초 이상 지속되면 실제 매크로 캡처 화면을 debug 폴더에 1회 저장해 다음 진단에 사용합니다.
+          V0.1.6의 게임창 전면 복구, V0.1.5의 0.78/2프레임 판정 및 수동 Space 후 게이지 재동기화는 유지합니다.
 
-          주의: 현재 낚시 캡처는 실제 화면 픽셀을 사용하는 방식이므로 자동화 중 다른 창을 게임 위에 띄우면 프로그램이 게임창을 다시 앞으로 가져옵니다.
-          일반 사용자는 MabiAuto_V0.1.6_Windows_Lite.zip을 받으세요.
+          일반 사용자는 MabiAuto_V0.1.7_Windows_Lite.zip을 받으세요.
           '@ | Set-Content -LiteralPath $notes -Encoding UTF8
 
-          if (gh release view 'V0.1.6' --repo $env:REPO *> $null) {
-            throw 'Public V0.1.6 release already exists; refusing to overwrite a published stable version'
+          if (gh release view 'V0.1.7' --repo $env:REPO *> $null) {
+            throw 'Public V0.1.7 release already exists; refusing to overwrite it'
           }
-          gh release create 'V0.1.6' $publicSourceZip $publicPackageZip "$publicPackageZip.sha256" --repo $env:REPO --target $env:SOURCE_SHA --title 'Mabi Auto V0.1.6' --notes-file $notes --latest
-          if ($LASTEXITCODE -ne 0) { throw 'Public V0.1.6 release publication failed' }
+          gh release create 'V0.1.7' $publicSourceZip $publicPackageZip "$publicPackageZip.sha256" --repo $env:REPO --target $env:SOURCE_SHA --title 'Mabi Auto V0.1.7' --notes-file $notes --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Public V0.1.7 release publication failed' }
