@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Draft release to build'
         required: true
-        default: 'v71'
+        default: 'v72'
 
 permissions:
   contents: write
@@ -41,33 +41,33 @@ jobs:
           $releases = gh api "repos/$env:REPO/releases?per_page=100" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
           if ($env:SOURCE_SHA) {
-            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v71' })
-            if ($matches.Count -ne 1) { throw 'Expected exactly one v71 release for the source workflow commit' }
+            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v72' })
+            if ($matches.Count -ne 1) { throw 'Expected exactly one v72 release for the source workflow commit' }
             $tag = $matches[0].tag_name
           } else { $tag = $env:REQUESTED_TAG }
-          if ($tag -ne 'v71') { throw 'This packaging pipeline currently requires v71' }
+          if ($tag -ne 'v72') { throw 'This packaging pipeline currently requires v72' }
           $selected = @($releases | Where-Object { $_.tag_name -eq $tag })
           if ($selected.Count -ne 1) { throw 'Expected exactly one matching release' }
           $release = $selected[0]
           if (-not $release.draft) { throw 'Refusing to replace an already published release' }
-          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v71_StabilityRemote.zip' })
-          if ($assets.Count -ne 1) { throw 'Expected exactly one v71 source ZIP' }
+          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v72_StabilityRemote.zip' })
+          if ($assets.Count -ne 1) { throw 'Expected exactly one v72 source ZIP' }
           New-Item -ItemType Directory -Path source-download,source-work | Out-Null
           gh release download $tag --repo $env:REPO --pattern $assets[0].name --dir source-download
           if ($LASTEXITCODE -ne 0) { throw 'Source download failed' }
           tar -xf (Join-Path source-download $assets[0].name) -C source-work
           if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
-          ./release-source/v71-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v71 -OutputRoot build-output
-          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v71 -PackageRoot build-output/MabiAuto_v71 -WorkRoot update-test
+          ./release-source/v72-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v72 -OutputRoot build-output
+          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v72 -PackageRoot build-output/MabiAuto_v72 -WorkRoot update-test
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Keep verification reports
         uses: actions/upload-artifact@v4
         with:
-          name: v71-ui-polish-verification
+          name: v72-scenic-preview-verification
           path: |
-            source-work/CombinedFishingDungeon_v71/V71_UI_POLISH_AUDIT.json
-            build-output/v71-package-inventory.json
+            source-work/CombinedFishingDungeon_v72/V72_SCENIC_PREVIEW_AUDIT.json
+            build-output/v72-package-inventory.json
             update-test/verification.txt
           if-no-files-found: error
 
@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v71_Windows_Lite.zip build-output/MabiAuto_v71_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v72_Windows_Lite.zip build-output/MabiAuto_v72_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Package upload failed; release remains draft' }
           gh release edit $env:RELEASE_TAG --repo $env:REPO --draft=false --latest
           if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
