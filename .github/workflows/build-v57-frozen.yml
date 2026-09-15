@@ -1,0 +1,98 @@
+name: Build v57 Frozen Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v57-frozen.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build frozen v57 package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path source-download,source-work,pkg-download,pkg-work,publish | Out-Null
+          gh release download v57 --repo $env:REPO --pattern 'CombinedFishingDungeon_v57_StabilityRemote.zip' --dir source-download
+          gh release download v57 --repo $env:REPO --pattern 'MabiAuto_v57_Windows_Lite.zip' --dir pkg-download
+          tar -xf source-download/CombinedFishingDungeon_v57_StabilityRemote.zip -C source-work
+          tar -xf pkg-download/MabiAuto_v57_Windows_Lite.zip -C pkg-work
+
+          $sourceRoot = Get-ChildItem source-work -Directory | Select-Object -First 1
+          $packageRoot = Get-ChildItem pkg-work -Directory | Select-Object -First 1
+          if ($null -eq $sourceRoot -or $null -eq $packageRoot) { throw 'v57 roots not found' }
+
+          $updater = Join-Path $sourceRoot.FullName 'FishingAutomation/UpdateManager.cs'
+          if (-not (Test-Path -LiteralPath $updater)) { throw 'v57 UpdateManager.cs not found' }
+          $text = Get-Content -LiteralPath $updater -Raw
+
+          $pattern = '(?s)public\s+static\s+async\s+Task<ReleaseUpdateInfo\?>\s+CheckLatestAsync\(CancellationToken\s+ct\s*=\s*default\)\s*\{.*?\n\s*\}\s*\n\s*private\s+static\s+bool\s+IsMainReleaseTag'
+          $replacement = "public static Task<ReleaseUpdateInfo?> CheckLatestAsync(CancellationToken ct = default)`r`n    {`r`n        return Task.FromResult<ReleaseUpdateInfo?>(null);`r`n    }`r`n`r`n    private static bool IsMainReleaseTag"
+          $patched = [regex]::Replace($text, $pattern, $replacement, 1)
+          if ($patched -eq $text) {
+            $patched = $text -replace 'public\s+const\s+string\s+CurrentVersion\s*=\s*"[^"]+"\s*;', 'public const string CurrentVersion = "v9999";'
+          }
+          if ($patched -eq $text) { throw 'Could not disable v57 update discovery' }
+          Set-Content -LiteralPath $updater -Value $patched -Encoding UTF8
+
+          $app = Join-Path $sourceRoot.FullName 'FishingAutomation'
+          $publishArgs = @('-c','Release','-r','win-x64','--self-contained','true',
+            '-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true',
+            '-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false',
+            '-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $app 'FishingAutomation.csproj') @publishArgs -o publish
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen v57 publish failed' }
+
+          $newExe = Join-Path (Resolve-Path publish).Path 'FishingAutomation.exe'
+          $runtimeExe = Join-Path $packageRoot.FullName 'release/FishingAutomation.exe'
+          if (-not (Test-Path -LiteralPath $runtimeExe)) { throw 'v57 runtime exe missing' }
+          Copy-Item -LiteralPath $newExe -Destination $runtimeExe -Force
+
+          $mirrorUpdater = Join-Path $packageRoot.FullName 'FishingAutomation/UpdateManager.cs'
+          if (Test-Path -LiteralPath $mirrorUpdater) { Copy-Item -LiteralPath $updater -Destination $mirrorUpdater -Force }
+
+          $readme = @(
+            'MABI AUTO v57 FROZEN TEST',
+            '',
+            '- Original v57 fishing logic and templates are retained.',
+            '- Automatic GitHub update discovery is disabled for diagnosis.',
+            '- Test the old fishing flow without moving the character first.',
+            '- Check whether compass -> S -> hook -> Space -> gauge works.',
+            '- Use this only for diagnosis; it is not the normal latest release.'
+          )
+          Set-Content -LiteralPath (Join-Path $packageRoot.FullName 'FROZEN_TEST.txt') -Value $readme -Encoding UTF8
+
+          $out = 'MabiAuto_v57_FROZEN_TEST.zip'
+          Compress-Archive -LiteralPath $packageRoot.FullName -DestinationPath $out -CompressionLevel Optimal
+          $hash = (Get-FileHash -LiteralPath $out -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $out" | Set-Content -LiteralPath "$out.sha256" -Encoding ASCII
+          "FROZEN_ZIP=$out" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Publish frozen v57 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'v57-frozen-test'
+          $zip = $env:FROZEN_ZIP
+          $notes = 'Original v57 fishing build with automatic update discovery disabled. Diagnostic use only. Test: compass -> S -> hook -> Space -> gauge.'
+          if (gh release view $tag --repo $env:REPO *> $null) {
+            gh release upload $tag $zip "$zip.sha256" --repo $env:REPO --clobber
+          } else {
+            gh release create $tag $zip "$zip.sha256" --repo $env:REPO --title 'Mabi Auto v57 Frozen Test' --notes $notes --prerelease
+          }
