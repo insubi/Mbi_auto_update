@@ -1,0 +1,160 @@
+name: Build V0.1.11 v28 Fishing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v0111-v28-fishing.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Transplant proven v28 fishing into V0.1.10 source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.10/CombinedFishingDungeon_V0.1.10_StabilityRemote.zip' -OutFile current.zip
+          Invoke-WebRequest -Uri 'https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip' -OutFile v28.zip
+          Expand-Archive current.zip -DestinationPath current
+          Expand-Archive v28.zip -DestinationPath old
+          $cur = Get-ChildItem current -Directory | Select-Object -First 1
+          $v28 = Get-ChildItem old -Directory | Select-Object -First 1
+          if ($null -eq $cur -or $null -eq $v28) { throw 'source root missing' }
+
+          $curFish = Join-Path $cur.FullName 'FishingAutomation'
+          $oldFish = Join-Path $v28.FullName 'FishingAutomation'
+
+          # Restore the exact fishing engine that was confirmed working by the user.
+          Copy-Item -LiteralPath (Join-Path $oldFish 'FishingBot.cs') -Destination (Join-Path $curFish 'FishingBot.cs') -Force
+          Copy-Item -LiteralPath (Join-Path $oldFish 'TemplateMatcher.cs') -Destination (Join-Path $curFish 'TemplateMatcher.cs') -Force
+          Copy-Item -LiteralPath (Join-Path $oldFish 'templates/hook.png') -Destination (Join-Path $curFish 'templates/hook.png') -Force
+
+          # Restore v28 fishing threshold while leaving the rest of the latest config intact.
+          $cfgPath = Join-Path $curFish 'config.json'
+          $cfg = Get-Content -Raw -LiteralPath $cfgPath | ConvertFrom-Json
+          $cfg.HookThreshold = 0.85
+          $cfg | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $cfgPath -Encoding UTF8
+
+          # Bump latest updater/application version to V0.1.11.
+          Get-ChildItem $cur.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p = $_.FullName
+            $s = Get-Content -Raw -LiteralPath $p
+            $n = $s.Replace('V0.1.10','V0.1.11').Replace('0.1.10.0','0.1.11.0').Replace('0.1.10','0.1.11')
+            if ($n -ne $s) { Set-Content -LiteralPath $p -Value $n -Encoding UTF8 }
+          }
+
+          @'
+MABI AUTO V0.1.11 - v28 FISHING ENGINE RESTORE
+
+Base: latest V0.1.10 feature set.
+Fishing engine: restored from the original v28 package that was confirmed working in-game.
+Restored fishing behavior: compass -> S -> hook -> Space -> gauge.
+Restored v28 hook.png and HookThreshold 0.85.
+Removed later fishing-only HUD fallback / lowered-hook-threshold behavior by restoring v28 FishingBot.cs and TemplateMatcher.cs.
+Latest non-fishing modules remain from V0.1.10 source, including updater, abyss/dungeon, UI, notifications, and current window/capture infrastructure.
+'@ | Set-Content -LiteralPath (Join-Path $cur.FullName 'CHANGES_V0.1.11_V28_FISHING.txt') -Encoding UTF8
+
+          # Hard verification before compiling.
+          $expected = 'e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          $hookHash = (Get-FileHash -LiteralPath (Join-Path $curFish 'templates/hook.png') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hookHash -ne $expected) { throw "v28 hook hash mismatch: $hookHash" }
+          $bot = Get-Content -Raw -LiteralPath (Join-Path $curFish 'FishingBot.cs')
+          if ($bot -notmatch 'hook\.Score\s*>=\s*_cfg\.HookThreshold') { throw 'v28 hook threshold path missing' }
+          if ($bot -notmatch 'compassFrames\s*>=\s*2') { throw 'v28 compass confirmation missing' }
+          if ($bot -match 'LooksLikeFishingCastHud|HUD보조|Math\.Min\(_cfg\.HookThreshold,\s*0\.72') { throw 'later fishing fallback leaked into v28 engine' }
+          $matcher = Get-Content -Raw -LiteralPath (Join-Path $curFish 'TemplateMatcher.cs')
+          if ($matcher -notmatch 'MatchHook\(Mat gray, Rectangle roi\)\s*=>\s*MatchVariants') { throw 'v28 MatchHook implementation missing' }
+          $cfg2 = Get-Content -Raw -LiteralPath $cfgPath | ConvertFrom-Json
+          if ([double]$cfg2.HookThreshold -ne 0.85) { throw 'HookThreshold is not v28 value 0.85' }
+
+          # Verify modern non-fishing capture infrastructure remains present.
+          $capture = Get-Content -Raw -LiteralPath (Join-Path $curFish 'CaptureService.cs')
+          if ($capture -notmatch 'ClientToScreen' -or $capture -notmatch 'GetClientRect') { throw 'latest live client capture geometry missing' }
+          $updater = Get-ChildItem $cur.FullName -Recurse -File -Filter UpdateManager.cs | Select-Object -First 1
+          if ($null -eq $updater) { throw 'latest UpdateManager missing' }
+          $updaterText = Get-Content -Raw -LiteralPath $updater.FullName
+          if ($updaterText -notmatch '0\.1\.11|V0\.1\.11') { throw 'V0.1.11 updater version not found' }
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $cur.FullName -Destination 'stage/MabiAuto_V0.1.11' -Recurse
+          $pkgRoot = (Resolve-Path 'stage/MabiAuto_V0.1.11').Path
+          $pkgFish = Join-Path $pkgRoot 'FishingAutomation'
+
+          $publishArgs = @('-c','Release','-r','win-x64','--self-contained','true',
+            '-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true',
+            '-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false',
+            '-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @publishArgs -o stage/release
+          if ($LASTEXITCODE -ne 0) { throw 'FishingAutomation publish failed' }
+
+          $watchProj = Join-Path $pkgRoot 'MacroWatchdog/MacroWatchdog.csproj'
+          if (Test-Path -LiteralPath $watchProj) {
+            dotnet publish $watchProj @publishArgs -o stage/watchdog
+            if ($LASTEXITCODE -ne 0) { throw 'MacroWatchdog publish failed' }
+            if (Test-Path 'stage/watchdog/MacroWatchdog.exe') { Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force }
+          }
+
+          $releaseDir = Join-Path $pkgRoot 'release'
+          if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
+          Copy-Item -LiteralPath (Resolve-Path 'stage/release').Path -Destination $releaseDir -Recurse
+
+          # Runtime package verification.
+          $runtimeHook = Join-Path $releaseDir 'templates/hook.png'
+          if (-not (Test-Path -LiteralPath $runtimeHook)) { throw 'runtime hook template missing' }
+          $runtimeHash = (Get-FileHash -LiteralPath $runtimeHook -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($runtimeHash -ne $expected) { throw "runtime hook is not v28 template: $runtimeHash" }
+          if (-not (Test-Path -LiteralPath (Join-Path $releaseDir 'FishingAutomation.exe'))) { throw 'runtime exe missing' }
+
+          # Smoke test without a game window.
+          $exe = Join-Path $releaseDir 'FishingAutomation.exe'
+          $p = Start-Process -FilePath $exe -WorkingDirectory $releaseDir -PassThru
+          Start-Sleep -Seconds 3
+          $p.Refresh()
+          if ($p.HasExited) { throw "V0.1.11 app exited during smoke test: $($p.ExitCode)" }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process -Name MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          # Build source and Windows Lite assets.
+          $sourceZip = (Resolve-Path out).Path + '\CombinedFishingDungeon_V0.1.11_v28Fishing.zip'
+          Compress-Archive -LiteralPath $cur.FullName -DestinationPath $sourceZip -CompressionLevel Optimal
+          $liteZip = (Resolve-Path out).Path + '\MabiAuto_V0.1.11_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkgRoot -DestinationPath $liteZip -CompressionLevel Optimal
+          $hash = (Get-FileHash -LiteralPath $liteZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.11_Windows_Lite.zip" | Set-Content -LiteralPath "$liteZip.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.11 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'V0.1.11'
+          $notes = @'
+MABI AUTO V0.1.11 - v28 낚시 엔진 복구
+
+사용자 실기 테스트에서 정상 작동이 확인된 최초 v28 낚시 엔진을 최신 V0.1.10 기반에 이식했습니다.
+낚시 순서는 v28 그대로 나침반 -> S -> 훅 -> Space -> 게이지입니다.
+v28의 FishingBot.cs, TemplateMatcher.cs, hook.png, HookThreshold 0.85를 복원했습니다.
+V0.1.9/V0.1.10에서 추가했던 색상 HUD 보조 감지와 0.72 Hook 경로는 제거됩니다.
+어비스/던전, UI, Telegram/알림, 자동업데이트, 최신 창/캡처 인프라는 V0.1.10 기반을 유지합니다.
+
+일반 실행 파일: MabiAuto_V0.1.11_Windows_Lite.zip
+'@
+          Set-Content notes.txt -Value $notes -Encoding UTF8
+          $assets = @('out/CombinedFishingDungeon_V0.1.11_v28Fishing.zip','out/MabiAuto_V0.1.11_Windows_Lite.zip','out/MabiAuto_V0.1.11_Windows_Lite.zip.sha256')
+          if (gh release view $tag --repo $env:REPO *> $null) {
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          } else {
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.11' --notes-file notes.txt
+          }
