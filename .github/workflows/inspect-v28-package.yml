@@ -1,0 +1,35 @@
+name: Inspect Original v28 Package
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v28-package.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and inspect original v28 package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip'
+          Invoke-WebRequest -Uri $url -OutFile v28.zip
+          New-Item -ItemType Directory -Path v28 | Out-Null
+          Expand-Archive -LiteralPath v28.zip -DestinationPath v28
+          Write-Host '===== TOP LEVEL ====='
+          Get-ChildItem v28 -Force | Select-Object FullName,Length | Format-Table -AutoSize
+          Write-Host '===== PROJECT / UPDATE FILES ====='
+          Get-ChildItem v28 -Recurse -File | Where-Object {
+            $_.Name -match 'Update|FishingAutomation\.csproj|FishingBot\.cs|Program\.cs|START\.cmd|\.exe$'
+          } | Select-Object FullName,Length | Format-Table -AutoSize
+          $updaters = @(Get-ChildItem v28 -Recurse -File -Filter UpdateManager.cs)
+          foreach ($f in $updaters) {
+            Write-Host "===== $($f.FullName) ====="
+            Get-Content -LiteralPath $f.FullName
+          }
