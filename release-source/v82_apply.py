@@ -71,7 +71,6 @@ helper = '''    private static bool LooksLikeFishingCastHud(OpenCvSharp.Mat bgr)
 bot = bot.replace(insert_marker, helper + insert_marker, 1)
 write(bot_path, bot)
 
-# Retain V0.1.8 template path as the primary detector; HUD-color fallback only adds\n# a second independent signal for the fixed lower-center cast button.
 for marker in (
     'Math.Min(_cfg.HookThreshold, 0.72)',
     'if (hookFrames >= 3)',
@@ -159,3 +158,5 @@ audit = {
 (root / "V0_1_9_HUD_FALLBACK_AUDIT.json").write_text(
     json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print("V0.1.9 applied: fixed lower-center HUD color fallback + V0.1.8 template path preserved")
+
+# Pipeline-ready retrigger after v82 verifier/package/workflow landed on main.
