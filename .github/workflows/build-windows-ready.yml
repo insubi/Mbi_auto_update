@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Draft bridge release to build'
         required: true
-        default: 'v73'
+        default: 'v74'
 
 permissions:
   contents: write
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
-      - name: Select v73 bridge source, build V0.1 and verify package
+      - name: Select v74 bridge source, build V0.1.1 and verify package
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -41,37 +41,37 @@ jobs:
           $releases = gh api "repos/$env:REPO/releases?per_page=100" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
           if ($env:SOURCE_SHA) {
-            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v73' })
-            if ($matches.Count -ne 1) { throw 'Expected exactly one v73 bridge release for the source workflow commit' }
+            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v74' })
+            if ($matches.Count -ne 1) { throw 'Expected exactly one v74 bridge release for the source workflow commit' }
             $tag = $matches[0].tag_name
           } else { $tag = $env:REQUESTED_TAG }
-          if ($tag -ne 'v73') { throw 'This bridge packaging pipeline currently requires v73' }
+          if ($tag -ne 'v74') { throw 'This bridge packaging pipeline currently requires v74' }
           $selected = @($releases | Where-Object { $_.tag_name -eq $tag })
           if ($selected.Count -ne 1) { throw 'Expected exactly one matching bridge release' }
           $release = $selected[0]
           if (-not $release.draft) { throw 'Refusing to replace an already published bridge release' }
-          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v73_StabilityRemote.zip' })
-          if ($assets.Count -ne 1) { throw 'Expected exactly one v73 source ZIP' }
+          $assets = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v74_StabilityRemote.zip' })
+          if ($assets.Count -ne 1) { throw 'Expected exactly one v74 source ZIP' }
           New-Item -ItemType Directory -Path source-download,source-work | Out-Null
           gh release download $tag --repo $env:REPO --pattern $assets[0].name --dir source-download
           if ($LASTEXITCODE -ne 0) { throw 'Source download failed' }
           tar -xf (Join-Path source-download $assets[0].name) -C source-work
           if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
-          ./release-source/v73-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v73 -OutputRoot build-output
-          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v73 -PackageRoot build-output/MabiAuto_v73 -WorkRoot update-test
+          ./release-source/v74-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v74 -OutputRoot build-output
+          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v74 -PackageRoot build-output/MabiAuto_v74 -WorkRoot update-test
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Keep V0.1 verification reports
+      - name: Keep V0.1.1 verification reports
         uses: actions/upload-artifact@v4
         with:
-          name: V0.1-stable-ui-verification
+          name: V0.1.1-abyss-clear-guard-verification
           path: |
-            source-work/CombinedFishingDungeon_v73/V0_1_RELEASE_AUDIT.json
-            build-output/v73-package-inventory.json
+            source-work/CombinedFishingDungeon_v74/V0_1_1_ABYSS_CLEAR_GUARD_AUDIT.json
+            build-output/v74-package-inventory.json
             update-test/verification.txt
           if-no-files-found: error
 
-      - name: Publish bridge v73 and public V0.1 release
+      - name: Publish bridge v74 and public V0.1.1 release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -80,44 +80,41 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          # Legacy updater bridge: v72 and older compare integer release tags, so they need v73 once.
-          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v73_Windows_Lite.zip build-output/MabiAuto_v73_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+          # Legacy integer-tag bridge for users still on v72/v73-era updater logic.
+          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v74_Windows_Lite.zip build-output/MabiAuto_v74_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Bridge package upload failed; release remains draft' }
           gh release edit $env:RELEASE_TAG --repo $env:REPO --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Bridge release publication failed' }
 
-          # Public stable package/source: user-facing versioning starts at V0.1.
-          $publicSourceRoot = 'build-output/CombinedFishingDungeon_V0.1'
-          $publicPackageRoot = 'build-output/MabiAuto_V0.1'
-          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v73' -Destination $publicSourceRoot -Recurse
-          Copy-Item -LiteralPath 'build-output/MabiAuto_v73' -Destination $publicPackageRoot -Recurse
+          # Public semantic patch release for V0.1 users.
+          $publicSourceRoot = 'build-output/CombinedFishingDungeon_V0.1.1'
+          $publicPackageRoot = 'build-output/MabiAuto_V0.1.1'
+          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v74' -Destination $publicSourceRoot -Recurse
+          Copy-Item -LiteralPath 'build-output/MabiAuto_v74' -Destination $publicPackageRoot -Recurse
 
-          $publicSourceZip = 'build-output/CombinedFishingDungeon_V0.1_StabilityRemote.zip'
-          $publicPackageZip = 'build-output/MabiAuto_V0.1_Windows_Lite.zip'
+          $publicSourceZip = 'build-output/CombinedFishingDungeon_V0.1.1_StabilityRemote.zip'
+          $publicPackageZip = 'build-output/MabiAuto_V0.1.1_Windows_Lite.zip'
           Compress-Archive -LiteralPath $publicSourceRoot -DestinationPath $publicSourceZip -CompressionLevel Optimal
           Compress-Archive -LiteralPath $publicPackageRoot -DestinationPath $publicPackageZip -CompressionLevel Optimal
           $publicHash = (Get-FileHash -LiteralPath $publicPackageZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$publicHash  MabiAuto_V0.1_Windows_Lite.zip" | Set-Content -LiteralPath "$publicPackageZip.sha256" -Encoding ASCII
+          "$publicHash  MabiAuto_V0.1.1_Windows_Lite.zip" | Set-Content -LiteralPath "$publicPackageZip.sha256" -Encoding ASCII
 
-          $notes = 'build-output/V0.1-release-notes.txt'
+          $notes = 'build-output/V0.1.1-release-notes.txt'
           @'
-          MABI AUTO V0.1 - 첫 정식 버전
+          MABI AUTO V0.1.1 - 어비스 클리어 오인식 방지
 
-          v72 기능/자동복구/텔레그램/어비스 인식 로직은 그대로 유지합니다.
-          상단 Mabi_Auto 배너를 정돈하고 V0.1 버전을 작은 배지 형태로 표시합니다.
-          자동 정지 영역은 내용 크기에 맞게 축소하고 02:30 시간이 가운데 보이도록 정렬했습니다.
-          어비스 던전 카드 풍경 이미지는 승인된 v72 이미지를 그대로 유지합니다.
+          전투 중 화면을 던전 완료로 오인식해 보물상자 단계로 넘어가는 문제를 수정했습니다.
+          이제 최초 클리어 판정은 '던전 클리어' 이미지와 '화면을 터치해 주세요' 이미지가 같은 프레임에서 모두 감지되어야 합니다.
+          이 동시 조건을 3회 연속 확인한 뒤에만 클리어 화면으로 인정합니다.
+          OCR과 S등급 인식은 사용하지 않으며 기존 터치 위치 클릭/전환 확인/자동복구 흐름은 유지합니다.
+          어비스 인식 템플릿과 임계값 자체는 변경하지 않아 정상 클리어 인식 범위는 보존합니다.
+          V0.1의 UI, 자동 정지, 텔레그램, 던전 카드 이미지와 다른 기능은 변경하지 않았습니다.
 
-          버전 규칙:
-          - V0.1.1, V0.1.2 ... : 작은 UI 수정, 버그 수정, 안정성 수정
-          - V0.2, V0.3 ... : 기능 추가 또는 의미 있는 동작 변경
-          - V1.0 : 큰 구조 변경/주요 안정 버전
-
-          일반 사용자는 MabiAuto_V0.1_Windows_Lite.zip을 받으세요.
+          일반 사용자는 MabiAuto_V0.1.1_Windows_Lite.zip을 받으세요.
           '@ | Set-Content -LiteralPath $notes -Encoding UTF8
 
-          if (gh release view 'V0.1' --repo $env:REPO *> $null) {
-            throw 'Public V0.1 release already exists; refusing to overwrite a published stable version'
+          if (gh release view 'V0.1.1' --repo $env:REPO *> $null) {
+            throw 'Public V0.1.1 release already exists; refusing to overwrite a published stable version'
           }
-          gh release create 'V0.1' $publicSourceZip $publicPackageZip "$publicPackageZip.sha256" --repo $env:REPO --target $env:SOURCE_SHA --title 'Mabi Auto V0.1' --notes-file $notes --latest
-          if ($LASTEXITCODE -ne 0) { throw 'Public V0.1 release publication failed' }
+          gh release create 'V0.1.1' $publicSourceZip $publicPackageZip "$publicPackageZip.sha256" --repo $env:REPO --target $env:SOURCE_SHA --title 'Mabi Auto V0.1.1' --notes-file $notes --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Public V0.1.1 release publication failed' }
