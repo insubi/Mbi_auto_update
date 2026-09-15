@@ -86,13 +86,11 @@ new_roi = '''        int left = Math.Max(0, (int)Math.Round(gray.Width * 0.28));
 if matcher.count(old_roi) != 1:
     raise RuntimeError(f"V0.1.8 expected one V0.1.7 recovery ROI block, found {matcher.count(old_roi)}")
 matcher = matcher.replace(old_roi, new_roi, 1)
-# Primary fast-path threshold follows the new audited acceptance threshold.
 if matcher.count('if (primary.Score >= 0.78) return primary;') != 1:
     raise RuntimeError("V0.1.8 could not update MatchHook primary threshold")
 matcher = matcher.replace('if (primary.Score >= 0.78) return primary;', 'if (primary.Score >= 0.72) return primary;', 1)
 write(matcher_path, matcher)
 
-# Retained safety/diagnostic invariants.
 for marker in (
     'GaugeAnchor? liveGauge = _templates.DetectGauge(f, _cfg, out MatchResult liveGaugeMatch);',
     'stage1_hook_wait_8s',
@@ -161,3 +159,5 @@ audit = {
 (root / "V0_1_8_REAL_DEBUG_HOOK_AUDIT.json").write_text(
     json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 print("V0.1.8 applied: 0.72 hook acceptance + 3-frame confirmation + narrowed recovery ROI from real debug evidence")
+
+# Pipeline-ready retrigger: v81 verifier/package/workflow are now present on main.
