@@ -1,4 +1,4 @@
-name: Inspect v28 vs V0.1.10 Fishing
+name: Inspect v28 vs V0.1.12 Fishing Files
 
 on:
   push:
@@ -14,31 +14,34 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Compare v28 capture/window path
+      - name: Compare full fishing file map
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           Invoke-WebRequest -Uri 'https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip' -OutFile v28.zip
-          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.11/CombinedFishingDungeon_V0.1.11_v28Fishing.zip' -OutFile cur.zip
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.12/CombinedFishingDungeon_V0.1.12_v28FishingCapture.zip' -OutFile cur.zip
           Expand-Archive v28.zip -DestinationPath v28
           Expand-Archive cur.zip -DestinationPath cur
           $v28root = Get-ChildItem v28 -Directory | Select-Object -First 1
           $curroot = Get-ChildItem cur -Directory | Select-Object -First 1
-          $a = Join-Path $v28root.FullName 'FishingAutomation/CaptureService.cs'
-          $b = Join-Path $curroot.FullName 'FishingAutomation/CaptureService.cs'
-          Write-Host '===== V28 CaptureService ====='
-          Get-Content -LiteralPath $a
-          Write-Host '===== V0.1.11 CaptureService ====='
-          Get-Content -LiteralPath $b
-          Write-Host '===== WINDOW RELATED FILES V28 ====='
-          Get-ChildItem (Join-Path $v28root.FullName 'FishingAutomation') -File -Filter *.cs | ForEach-Object {
-            if (Select-String -Path $_.FullName -Pattern 'class GameWindow|class Window|ClientScreenOrigin|ClientToScreen|GetClientRect|SetForegroundWindow' -Quiet) {
-              Write-Host "--- $($_.Name) ---"; Get-Content -LiteralPath $_.FullName
-            }
+          $aRoot = Join-Path $v28root.FullName 'FishingAutomation'
+          $bRoot = Join-Path $curroot.FullName 'FishingAutomation'
+          Write-Host '===== V28 FILE MAP ====='
+          Get-ChildItem $aRoot -Recurse -File | Where-Object { $_.FullName -notmatch '\\bin\\|\\obj\\' } | Sort-Object FullName | ForEach-Object {
+            $rel = $_.FullName.Substring($aRoot.Length + 1)
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "V28|$rel|$hash|$($_.Length)"
           }
-          Write-Host '===== WINDOW RELATED FILES V0.1.11 ====='
-          Get-ChildItem (Join-Path $curroot.FullName 'FishingAutomation') -File -Filter *.cs | ForEach-Object {
-            if (Select-String -Path $_.FullName -Pattern 'class GameWindow|class Window|ClientScreenOrigin|ClientToScreen|GetClientRect|SetForegroundWindow' -Quiet) {
-              Write-Host "--- $($_.Name) ---"; Get-Content -LiteralPath $_.FullName
-            }
+          Write-Host '===== CURRENT FILE MAP ====='
+          Get-ChildItem $bRoot -Recurse -File | Where-Object { $_.FullName -notmatch '\\bin\\|\\obj\\' } | Sort-Object FullName | ForEach-Object {
+            $rel = $_.FullName.Substring($bRoot.Length + 1)
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            Write-Host "CUR|$rel|$hash|$($_.Length)"
+          }
+          Write-Host '===== CS TYPE REFERENCES ====='
+          foreach ($name in @('FishingBot.cs','TemplateMatcher.cs','CaptureService.cs','InputService.cs','NativeMethods.cs','AutomationConfig.cs','Program.cs','MainForm.cs','TelegramNotifier.cs','UpdateManager.cs')) {
+            $af = Join-Path $aRoot $name
+            $bf = Join-Path $bRoot $name
+            if (Test-Path $af) { Write-Host "--- V28 $name ---"; Select-String -Path $af -Pattern '^\s*(public|internal|private|protected)?\s*(sealed\s+|static\s+|partial\s+)*(class|record|struct|interface|enum)\s+|^\s*(public|internal|private|protected)\s+.*\(' | ForEach-Object { $_.Line.Trim() } }
+            if (Test-Path $bf) { Write-Host "--- CUR $name ---"; Select-String -Path $bf -Pattern '^\s*(public|internal|private|protected)?\s*(sealed\s+|static\s+|partial\s+)*(class|record|struct|interface|enum)\s+|^\s*(public|internal|private|protected)\s+.*\(' | ForEach-Object { $_.Line.Trim() } }
           }
