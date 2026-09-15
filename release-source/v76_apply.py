@@ -110,4 +110,4 @@ audit = {
 }
 (root / "V0_1_3_FISHING_AUDIT.json").write_text(
     json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("V0.1.3 applied: current hook template + no launch overwrite + truthful Space retry")
+print("V0.1.3 applied: current hook template + no launch overwrite + truthful Space retry; package delegate fixed")
