@@ -4,6 +4,10 @@ on:
   workflow_run:
     workflows: ['Publish Release Source']
     types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-windows-ready.yml'
   workflow_dispatch:
     inputs:
       tag:
@@ -48,7 +52,7 @@ jobs:
             if ($matches.Count -ne 1) { throw 'Expected exactly one v84 bridge release for the source workflow commit' }
             $tag = $matches[0].tag_name
           } else {
-            $tag = $env:REQUESTED_TAG
+            $tag = if ($env:REQUESTED_TAG) { $env:REQUESTED_TAG } else { 'v84' }
           }
           if ($tag -ne 'v84') { throw 'This packaging pipeline requires v84' }
 
