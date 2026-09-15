@@ -3,7 +3,7 @@
 MABI AUTO 자동 업데이트/자동 빌드 배포 저장소입니다.
 
 ## 현재 버전
-- v58 (v57 기능 유지, 배포 구조 안전 최적화)
+- v69 (v68 기준 홈 UI·텔레그램·어비스 연속 처리 개선)
 
 ## 배포 흐름
 1. `release-source/`에 새 버전 소스 ZIP, 패치, 또는 `v*_apply.py`를 올립니다.
@@ -21,8 +21,8 @@ MABI AUTO 자동 업데이트/자동 빌드 배포 저장소입니다.
 
 ## 사용자가 받는 파일
 완성본은 아래 형식입니다.
-- `MabiAuto_v58_Windows_Lite.zip`
-- `MabiAuto_v58_Windows_Lite.zip.sha256`
+- `MabiAuto_v69_Windows_Lite.zip`
+- `MabiAuto_v69_Windows_Lite.zip.sha256`
 
 ## v58 안전 최적화 범위
 - 게임 동작 C# 소스는 v57 Windows 빌드 입력과 동일합니다. 업데이트 버전 상수와 어셈블리 버전만 v58로 변경합니다.

@@ -11,7 +11,7 @@ $install = Join-Path $WorkRoot 'install'
 $incoming = Join-Path $WorkRoot 'incoming'
 Copy-Item -LiteralPath $PackageRoot -Destination $install -Recurse
 Copy-Item -LiteralPath $PackageRoot -Destination $incoming -Recurse
-# Exercise the unmodified v57 updater with v58 layout. The launcher only returns
+# Exercise the preserved updater with the package layout. The launcher only returns
 # its health token; gameplay and phone notifications are never started here.
 $launcher = @'
 @echo off
@@ -52,6 +52,6 @@ foreach ($rel in @('release/FishingAutomation.exe','release/MacroWatchdog.exe','
 foreach ($rel in @('release/old-debug.pdb','.update_pending','.update_healthy','.update_rollback')) {
     if (Test-Path -LiteralPath (Join-Path $install $rel)) { throw "Update left stale state: $rel" }
 }
-'PASS: unmodified v57 updater installed v58 layout; 12 user data paths preserved; updater/watchdog paths intact; obsolete PDB removed.' |
+'PASS: preserved updater installed the current package layout; 12 user data paths preserved; updater/watchdog paths intact; obsolete PDB removed.' |
     Set-Content -LiteralPath (Join-Path $WorkRoot 'verification.txt') -Encoding UTF8
 Get-Content -LiteralPath (Join-Path $WorkRoot 'verification.txt')

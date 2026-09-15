@@ -112,6 +112,20 @@ jobs:
           EOF
           fi
 
+          if [ "$VERSION" -eq 69 ]; then
+            cat > "$NOTES_FILE" <<EOF
+          MABI AUTO $TAG - UI 및 어비스 연속 처리 개선
+
+          최신 v68을 기준으로 홈 타이틀, 좌측 메뉴, 자동 정지 정렬을 정돈했습니다.
+          텔레그램 메뉴에서 봇 토큰과 채팅 ID를 저장할 수 있으며 재실행 후에도 유지됩니다.
+          어비스 던전 3종의 카드 이미지를 패키지 템플릿에서 직접 표시합니다.
+          클리어는 던전 클리어/화면 터치 이미지만 멀티스케일로 2회 연속 확인하며 OCR과 S등급을 사용하지 않습니다.
+          터치 문구 위치만 클릭하고, 클리어 화면이 3프레임 연속 사라진 뒤 보물상자 단계로 진행합니다.
+          자동복구는 ESC나 게임 재시작 없이 터치→보물상자→나가기→던전 밖 메뉴 확인까지 처리합니다.
+          일반 사용자는 MabiAuto_${TAG}_Windows_Lite.zip을 받으세요.
+          EOF
+          fi
+
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             if [ "$VERSION" -ge 58 ] && [ "$(gh release view "$TAG" --repo "$REPO" --json isDraft --jq '.isDraft')" != true ]; then
               echo "Refusing to replace already published $TAG. Use a new version."
