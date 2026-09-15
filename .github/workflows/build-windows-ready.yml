@@ -4,16 +4,12 @@ on:
   workflow_run:
     workflows: ['Publish Release Source']
     types: [completed]
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/build-windows-ready.yml'
   workflow_dispatch:
     inputs:
       tag:
         description: 'Draft bridge release to build'
         required: true
-        default: 'v83'
+        default: 'v84'
 
 permissions:
   contents: write
@@ -35,7 +31,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Select v83 bridge source, build V0.1.10 and verify package
+      - name: Select v84 bridge source, build V0.1.10 and verify package
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -48,20 +44,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
 
           if ($env:SOURCE_SHA) {
-            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v83' })
-            if ($matches.Count -ne 1) { throw 'Expected exactly one v83 bridge release for the source workflow commit' }
+            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v84' })
+            if ($matches.Count -ne 1) { throw 'Expected exactly one v84 bridge release for the source workflow commit' }
             $tag = $matches[0].tag_name
           } else {
-            $tag = if ($env:REQUESTED_TAG) { $env:REQUESTED_TAG } else { 'v83' }
+            $tag = $env:REQUESTED_TAG
           }
-          if ($tag -ne 'v83') { throw 'This packaging pipeline requires v83' }
+          if ($tag -ne 'v84') { throw 'This packaging pipeline requires v84' }
 
           $release = @($releases | Where-Object { $_.tag_name -eq $tag }) | Select-Object -First 1
-          if ($null -eq $release) { throw 'v83 release not found' }
+          if ($null -eq $release) { throw 'v84 release not found' }
           if (-not $release.draft) { throw 'Refusing to replace an already published bridge release' }
 
-          $asset = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v83_StabilityRemote.zip' }) | Select-Object -First 1
-          if ($null -eq $asset) { throw 'Expected v83 source ZIP' }
+          $asset = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v84_StabilityRemote.zip' }) | Select-Object -First 1
+          if ($null -eq $asset) { throw 'Expected v84 source ZIP' }
 
           New-Item -ItemType Directory -Path source-download,source-work | Out-Null
           gh release download $tag --repo $env:REPO --pattern $asset.name --dir source-download
@@ -69,21 +65,21 @@ jobs:
           tar -xf (Join-Path source-download $asset.name) -C source-work
           if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
 
-          ./release-source/v83-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v83 -OutputRoot build-output
-          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v83 -PackageRoot build-output/MabiAuto_v83 -WorkRoot update-test
+          ./release-source/v84-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v84 -OutputRoot build-output
+          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v84 -PackageRoot build-output/MabiAuto_v84 -WorkRoot update-test
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Keep V0.1.10 verification reports
         uses: actions/upload-artifact@v4
         with:
-          name: V0.1.10-compass-priority-verification
+          name: V0.1.10-compass-priority-final-verification
           path: |
-            source-work/CombinedFishingDungeon_v83/V0_1_10_COMPASS_PRIORITY_AUDIT.json
-            build-output/v83-package-inventory.json
+            source-work/CombinedFishingDungeon_v84/V0_1_10_COMPASS_PRIORITY_FINAL_AUDIT.json
+            build-output/v84-package-inventory.json
             update-test/verification.txt
           if-no-files-found: error
 
-      - name: Publish bridge v83 and public V0.1.10 release
+      - name: Publish bridge v84 and public V0.1.10 release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -92,15 +88,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v83_Windows_Lite.zip build-output/MabiAuto_v83_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v84_Windows_Lite.zip build-output/MabiAuto_v84_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Bridge package upload failed' }
           gh release edit $env:RELEASE_TAG --repo $env:REPO --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Bridge release publication failed' }
 
           $publicSourceRoot = 'build-output/CombinedFishingDungeon_V0.1.10'
           $publicPackageRoot = 'build-output/MabiAuto_V0.1.10'
-          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v83' -Destination $publicSourceRoot -Recurse
-          Copy-Item -LiteralPath 'build-output/MabiAuto_v83' -Destination $publicPackageRoot -Recurse
+          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v84' -Destination $publicSourceRoot -Recurse
+          Copy-Item -LiteralPath 'build-output/MabiAuto_v84' -Destination $publicPackageRoot -Recurse
 
           Get-ChildItem -LiteralPath $publicSourceRoot -Recurse -Directory -Force | Where-Object {
             $_.Name -in @('bin','obj','.vs','debug')
@@ -120,12 +116,11 @@ jobs:
           @'
           MABI AUTO V0.1.10 - 나침반 우선 처리 복구
 
-          V0.1.9에서 추가한 색상 기반 HUD 보조 감지가 나침반의 초록 원형/흰색/빨간색 요소까지 낚시 Hook으로 오인해 나침반 상태에서 바로 Space를 누를 수 있었습니다.
-          V0.1.10은 기존 나침반 템플릿 판정을 Hook보다 먼저 수행합니다.
-          나침반이 보이는 동안에는 Hook 템플릿과 HUD 보조 감지를 모두 차단하고, 기존 로직대로 S를 눌러 낚시 Hook 모양으로 전환합니다.
-          나침반이 사라진 뒤에만 Hook을 3프레임 연속 확인하고 Space를 누릅니다.
-          낚시 종료 후 다음 Hook 복귀 확인 경로에도 동일한 나침반 제외 조건을 적용했습니다.
-          V0.1.9 HUD 보조 감지, V0.1.8 0.72/3프레임, V0.1.7 실시간 캡처/디버그, V0.1.6 전경 복구, V0.1.5 게이지 재동기화/입력 재시도는 유지합니다.
+          V0.1.9의 색상 기반 HUD 보조 감지가 나침반을 Hook으로 오인해 바로 Space를 누르던 문제를 수정했습니다.
+          시작 단계에서는 나침반 템플릿을 가장 먼저 판정합니다. 나침반 상태에서는 Hook/HUD 판정을 차단하고 기존 로직대로 S를 눌러 Hook 모양으로 전환합니다.
+          나침반이 사라진 뒤에만 Hook을 3프레임 연속 확인하고 Space를 입력합니다.
+          낚시 종료 후 Hook 재등장 확인은 색상 HUD를 쓰지 않고 0.72 Hook 템플릿만 사용하여 나침반 오인을 방지합니다.
+          V0.1.7 실시간 캡처/디버그, V0.1.6 전경 복구, V0.1.5 게이지 재동기화/입력 재시도는 유지합니다.
 
           일반 사용자는 MabiAuto_V0.1.10_Windows_Lite.zip을 받으세요.
           '@ | Set-Content -LiteralPath $notes -Encoding UTF8
