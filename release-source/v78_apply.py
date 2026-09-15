@@ -128,4 +128,4 @@ audit = {
 }
 (root / "V0_1_5_FISHING_RESYNC_AUDIT.json").write_text(
     json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-print("V0.1.5 applied: hook threshold 0.78 + stage1 live-gauge resync + V0.1.4 focus guard preserved")
+print("V0.1.5 applied: hook threshold 0.78 + stage1 live-gauge resync + V0.1.4 focus guard preserved; release pipeline ready")
