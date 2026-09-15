@@ -2,6 +2,7 @@
 from pathlib import Path
 import base64, gzip, hashlib
 
+# V0.1.2 verified split payload loader.
 base = Path(__file__).resolve().parent
 parts = []
 for i in range(10):
