@@ -9,7 +9,7 @@ on:
       tag:
         description: 'Draft bridge release to build'
         required: true
-        default: 'v81'
+        default: 'v82'
 
 permissions:
   contents: write
@@ -31,7 +31,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Select v81 bridge source, build V0.1.8 and verify package
+      - name: Select v82 bridge source, build V0.1.9 and verify package
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -44,20 +44,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release lookup failed' }
 
           if ($env:SOURCE_SHA) {
-            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v81' })
-            if ($matches.Count -ne 1) { throw 'Expected exactly one v81 bridge release for the source workflow commit' }
+            $matches = @($releases | Where-Object { $_.target_commitish -eq $env:SOURCE_SHA -and $_.tag_name -eq 'v82' })
+            if ($matches.Count -ne 1) { throw 'Expected exactly one v82 bridge release for the source workflow commit' }
             $tag = $matches[0].tag_name
           } else {
             $tag = $env:REQUESTED_TAG
           }
-          if ($tag -ne 'v81') { throw 'This packaging pipeline requires v81' }
+          if ($tag -ne 'v82') { throw 'This packaging pipeline requires v82' }
 
           $release = @($releases | Where-Object { $_.tag_name -eq $tag }) | Select-Object -First 1
-          if ($null -eq $release) { throw 'v81 release not found' }
+          if ($null -eq $release) { throw 'v82 release not found' }
           if (-not $release.draft) { throw 'Refusing to replace an already published bridge release' }
 
-          $asset = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v81_StabilityRemote.zip' }) | Select-Object -First 1
-          if ($null -eq $asset) { throw 'Expected v81 source ZIP' }
+          $asset = @($release.assets | Where-Object { $_.name -eq 'CombinedFishingDungeon_v82_StabilityRemote.zip' }) | Select-Object -First 1
+          if ($null -eq $asset) { throw 'Expected v82 source ZIP' }
 
           New-Item -ItemType Directory -Path source-download,source-work | Out-Null
           gh release download $tag --repo $env:REPO --pattern $asset.name --dir source-download
@@ -65,21 +65,21 @@ jobs:
           tar -xf (Join-Path source-download $asset.name) -C source-work
           if ($LASTEXITCODE -ne 0) { throw 'Source extraction failed' }
 
-          ./release-source/v81-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v81 -OutputRoot build-output
-          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v81 -PackageRoot build-output/MabiAuto_v81 -WorkRoot update-test
+          ./release-source/v82-package.ps1 -SourceRoot source-work/CombinedFishingDungeon_v82 -OutputRoot build-output
+          ./release-source/v58-test-update.ps1 -SourceRoot source-work/CombinedFishingDungeon_v82 -PackageRoot build-output/MabiAuto_v82 -WorkRoot update-test
           "RELEASE_TAG=$tag" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Keep V0.1.8 verification reports
+      - name: Keep V0.1.9 verification reports
         uses: actions/upload-artifact@v4
         with:
-          name: V0.1.8-real-debug-hook-verification
+          name: V0.1.9-hud-fallback-verification
           path: |
-            source-work/CombinedFishingDungeon_v81/V0_1_8_REAL_DEBUG_HOOK_AUDIT.json
-            build-output/v81-package-inventory.json
+            source-work/CombinedFishingDungeon_v82/V0_1_9_HUD_FALLBACK_AUDIT.json
+            build-output/v82-package-inventory.json
             update-test/verification.txt
           if-no-files-found: error
 
-      - name: Publish bridge v81 and public V0.1.8 release
+      - name: Publish bridge v82 and public V0.1.9 release
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -88,15 +88,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v81_Windows_Lite.zip build-output/MabiAuto_v81_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+          gh release upload $env:RELEASE_TAG build-output/MabiAuto_v82_Windows_Lite.zip build-output/MabiAuto_v82_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Bridge package upload failed' }
           gh release edit $env:RELEASE_TAG --repo $env:REPO --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Bridge release publication failed' }
 
-          $publicSourceRoot = 'build-output/CombinedFishingDungeon_V0.1.8'
-          $publicPackageRoot = 'build-output/MabiAuto_V0.1.8'
-          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v81' -Destination $publicSourceRoot -Recurse
-          Copy-Item -LiteralPath 'build-output/MabiAuto_v81' -Destination $publicPackageRoot -Recurse
+          $publicSourceRoot = 'build-output/CombinedFishingDungeon_V0.1.9'
+          $publicPackageRoot = 'build-output/MabiAuto_V0.1.9'
+          Copy-Item -LiteralPath 'source-work/CombinedFishingDungeon_v82' -Destination $publicSourceRoot -Recurse
+          Copy-Item -LiteralPath 'build-output/MabiAuto_v82' -Destination $publicPackageRoot -Recurse
 
           Get-ChildItem -LiteralPath $publicSourceRoot -Recurse -Directory -Force | Where-Object {
             $_.Name -in @('bin','obj','.vs','debug')
@@ -105,29 +105,28 @@ jobs:
             $_.Extension -in @('.pdb','.user','.suo') -or $_.Name -match '^timeout_.*\.png$|^recovery_.*\.png$|^stage1_hook_wait_.*\.png$'
           } | Remove-Item -Force -ErrorAction SilentlyContinue
 
-          $publicSourceZip = 'build-output/CombinedFishingDungeon_V0.1.8_StabilityRemote.zip'
-          $publicPackageZip = 'build-output/MabiAuto_V0.1.8_Windows_Lite.zip'
+          $publicSourceZip = 'build-output/CombinedFishingDungeon_V0.1.9_StabilityRemote.zip'
+          $publicPackageZip = 'build-output/MabiAuto_V0.1.9_Windows_Lite.zip'
           Compress-Archive -LiteralPath $publicSourceRoot -DestinationPath $publicSourceZip -CompressionLevel Optimal
           Compress-Archive -LiteralPath $publicPackageRoot -DestinationPath $publicPackageZip -CompressionLevel Optimal
           $publicHash = (Get-FileHash -LiteralPath $publicPackageZip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$publicHash  MabiAuto_V0.1.8_Windows_Lite.zip" | Set-Content -LiteralPath "$publicPackageZip.sha256" -Encoding ASCII
+          "$publicHash  MabiAuto_V0.1.9_Windows_Lite.zip" | Set-Content -LiteralPath "$publicPackageZip.sha256" -Encoding ASCII
 
-          $notes = 'build-output/V0.1.8-release-notes.txt'
+          $notes = 'build-output/V0.1.9-release-notes.txt'
           @'
-          MABI AUTO V0.1.8 - 실제 디버그 화면 기준 낚시 Hook 감지 보정
+          MABI AUTO V0.1.9 - 낚시 HUD 보조 감지 추가
 
-          사용자가 전달한 22:55 stage1_hook_wait_8s 실제 캡처는 800x999 게임 클라이언트를 정상적으로 담고 있고 화면 하단 중앙에 Space 낚시 아이콘도 선명하게 존재했습니다.
-          패키지의 현재 54x54 hook 템플릿과 직접 비교하면 최고 점수가 약 0.766(스케일 약 1.10)으로, V0.1.7의 0.78 기준이 정상 아이콘을 거부할 수 있음을 확인했습니다.
-          V0.1.8은 Hook 기준을 0.72로 조정하되 연속 확인을 2프레임에서 3프레임으로 강화했습니다.
-          낮아진 기준에서 오탐을 줄이기 위해 fallback 검색 영역은 화면 중앙 28%-72% 폭, 세로 72%-97%로 더 좁혔습니다.
-          V0.1.7의 매 프레임 ClientToScreen 캡처 좌표 갱신, 게임창 전면 복구, 오래된 hook 템플릿 자동복구, 8초 디버그 저장은 유지합니다.
-          V0.1.5의 수동 Space 후 게이지 상태 재동기화와 Space 입력 실패 재시도도 유지합니다.
+          V0.1.8에서도 장소/배경에 따라 회색 hook 템플릿 점수가 연속 프레임에서 흔들려 시전 아이콘을 놓치는 현상을 확인했습니다.
+          기존 0.72 템플릿 감지는 그대로 유지하고, 화면 하단 중앙의 고정 HUD 위치에서 초록 원형 테두리 + 흰색 낚싯바늘 + 빨간 팁을 함께 확인하는 독립 보조 감지를 추가했습니다.
+          보조 감지는 화면 중앙 42%-58%, 세로 80%-94%의 좁은 영역만 검사하고 기존 3프레임 연속 확인을 그대로 사용해 오탐을 억제합니다.
+          같은 보조 감지를 낚시 종료 후 다음 시전 아이콘 복귀 확인에도 사용하여 다음 판에서 멈추는 문제도 함께 방지합니다.
+          V0.1.7의 실시간 ClientToScreen 캡처 좌표 갱신/8초 debug 저장, V0.1.6의 전경 복구, V0.1.5의 게이지 상태 재동기화/입력 실패 재시도는 유지합니다.
 
-          일반 사용자는 MabiAuto_V0.1.8_Windows_Lite.zip을 받으세요.
+          일반 사용자는 MabiAuto_V0.1.9_Windows_Lite.zip을 받으세요.
           '@ | Set-Content -LiteralPath $notes -Encoding UTF8
 
-          if (gh release view 'V0.1.8' --repo $env:REPO *> $null) {
-            throw 'Public V0.1.8 release already exists; refusing to overwrite it'
+          if (gh release view 'V0.1.9' --repo $env:REPO *> $null) {
+            throw 'Public V0.1.9 release already exists; refusing to overwrite it'
           }
-          gh release create 'V0.1.8' $publicSourceZip $publicPackageZip "$publicPackageZip.sha256" --repo $env:REPO --target $env:SOURCE_SHA --title 'Mabi Auto V0.1.8' --notes-file $notes --latest
-          if ($LASTEXITCODE -ne 0) { throw 'Public V0.1.8 release publication failed' }
+          gh release create 'V0.1.9' $publicSourceZip $publicPackageZip "$publicPackageZip.sha256" --repo $env:REPO --target $env:SOURCE_SHA --title 'Mabi Auto V0.1.9' --notes-file $notes --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Public V0.1.9 release publication failed' }
