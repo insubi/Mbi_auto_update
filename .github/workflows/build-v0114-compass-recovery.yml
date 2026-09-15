@@ -1,0 +1,346 @@
+name: Build V0.1.14 Compass Recovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-v0114-compass-recovery.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch V0.1.13 compass recovery and shorter stall detection
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.13/CombinedFishingDungeon_V0.1.13_ExactV28Fishing.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          @'
+          from pathlib import Path
+          import json
+
+          root = Path(r"ROOT_PLACEHOLDER")
+          fish = root / "FishingAutomation"
+          bot_path = fish / "FishingBot.cs"
+          main_path = fish / "MainForm.cs"
+          tg_path = fish / "TelegramNotifier.cs"
+          notif_path = fish / "notification.json"
+
+          bot = bot_path.read_text(encoding="utf-8-sig")
+
+          old_decl = '''        DateTime lastCompassTap = DateTime.MinValue;
+                  DateTime lastDiagnostic = DateTime.MinValue;
+                  int hookFrames = 0;
+                  int compassFrames = 0;'''
+          new_decl = '''        DateTime lastCompassTap = DateTime.MinValue;
+                  DateTime lastDiagnostic = DateTime.MinValue;
+                  Stopwatch readyWait = Stopwatch.StartNew();
+                  int hookFrames = 0;
+                  int compassFrames = 0;
+                  int compassRecoveryFrames = 0;
+                  MatchResult? lastCompass = null;'''
+          if old_decl not in bot:
+              raise SystemExit("WaitReady declaration block not found")
+          bot = bot.replace(old_decl, new_decl, 1)
+
+          old_compass = '''                var compass = _templates.MatchCompass(f.Gray, slot);
+                          if (compass is not null && compass.Score >= _cfg.CompassThreshold && hook.Score < 0.75)
+                          {
+                              compassFrames++;
+                              if (compassFrames >= 2 && DateTime.UtcNow - lastCompassTap > TimeSpan.FromMilliseconds(900))
+                              {
+                                  _log.Write($"나침반 아이콘 {compass.Score:F3} scale={compass.Scale:F2}, 2프레임 -> S");
+                                  WindowLocator.ActivateForInput(window);
+                                  _input.TapS();
+                                  lastCompassTap = DateTime.UtcNow;
+                                  compassFrames = 0;
+                              }
+                          }
+                          else
+                          {
+                              compassFrames = 0;
+                          }'''
+          new_compass = '''                var compass = _templates.MatchCompass(f.Gray, slot);
+                          lastCompass = compass;
+                          bool compassCentered = compass is not null &&
+                              Math.Abs((compass.Rect.Left + compass.Rect.Width / 2) - (slot.Left + slot.Width / 2)) <= 60 &&
+                              Math.Abs((compass.Rect.Top + compass.Rect.Height / 2) - (slot.Top + slot.Height / 2)) <= 60;
+                          bool primaryCompass = compass is not null && compass.Score >= _cfg.CompassThreshold && hook.Score < 0.75;
+                          bool recoveryCompass = compass is not null && readyWait.ElapsedMilliseconds >= 1500 &&
+                              compass.Score >= 0.68 && hook.Score < 0.70 && compassCentered;
+
+                          if (primaryCompass)
+                          {
+                              compassFrames++;
+                              compassRecoveryFrames = 0;
+                              if (compassFrames >= 2 && DateTime.UtcNow - lastCompassTap > TimeSpan.FromMilliseconds(900))
+                              {
+                                  _log.Write($"나침반 아이콘 {compass.Score:F3} scale={compass.Scale:F2}, 2프레임 -> S");
+                                  WindowLocator.ActivateForInput(window);
+                                  _input.TapS();
+                                  lastCompassTap = DateTime.UtcNow;
+                                  readyWait.Restart();
+                                  compassFrames = 0;
+                              }
+                          }
+                          else if (recoveryCompass)
+                          {
+                              compassFrames = 0;
+                              compassRecoveryFrames++;
+                              if (compassRecoveryFrames >= 4 && DateTime.UtcNow - lastCompassTap > TimeSpan.FromMilliseconds(900))
+                              {
+                                  _log.Write($"나침반 복구 인식 {compass.Score:F3} scale={compass.Scale:F2}, 중앙 4프레임 -> S");
+                                  WindowLocator.ActivateForInput(window);
+                                  _input.TapS();
+                                  lastCompassTap = DateTime.UtcNow;
+                                  readyWait.Restart();
+                                  compassRecoveryFrames = 0;
+                              }
+                          }
+                          else
+                          {
+                              compassFrames = 0;
+                              compassRecoveryFrames = 0;
+                          }'''
+          if old_compass not in bot:
+              raise SystemExit("WaitReady compass block not found")
+          bot = bot.replace(old_compass, new_compass, 1)
+
+          old_diag = '''                lastDiagnostic = DateTime.UtcNow;
+                          Status($"시전 대기 · Hook {hook.Score:F2} x{hook.Scale:F2}");
+                          _log.Write($"진단 Hook score={hook.Score:F3}, scale={hook.Scale:F2}, rect={hook.Rect.X},{hook.Rect.Y},{hook.Rect.Width},{hook.Rect.Height}");'''
+          new_diag = '''                lastDiagnostic = DateTime.UtcNow;
+                          string compassStatus = lastCompass is null ? "없음" : $"{lastCompass.Score:F2} x{lastCompass.Scale:F2}";
+                          Status($"시전 대기 · Hook {hook.Score:F2} x{hook.Scale:F2} · Compass {compassStatus}");
+                          _log.Write($"진단 Hook score={hook.Score:F3}, scale={hook.Scale:F2}, rect={hook.Rect.X},{hook.Rect.Y},{hook.Rect.Width},{hook.Rect.Height}; Compass={compassStatus}");'''
+          if old_diag not in bot:
+              raise SystemExit("WaitReady diagnostic block not found")
+          bot = bot.replace(old_diag, new_diag, 1)
+
+          bot = bot.replace('await WaitRoundReturn(window, ct, 30000);', 'await WaitRoundReturn(window, ct, 15000);')
+          bot = bot.replace('private async Task WaitRoundReturn(GameWindow window, CancellationToken ct, int timeoutMs = 30000)', 'private async Task WaitRoundReturn(GameWindow window, CancellationToken ct, int timeoutMs = 15000)')
+          bot = bot.replace('_log.Write("다음 판 준비 30초 대기 만료");', '_log.Write("다음 판 준비 15초 대기 만료");')
+
+          round_decl = '''        Stopwatch sw = Stopwatch.StartNew();
+                  DateTime lastCompassTap = DateTime.MinValue;
+                  int hookFrames = 0;
+                  int compassFrames = 0;
+                  int compassTaps = 0;'''
+          round_new = '''        Stopwatch sw = Stopwatch.StartNew();
+                  DateTime lastCompassTap = DateTime.MinValue;
+                  DateTime lastDiagnostic = DateTime.MinValue;
+                  int hookFrames = 0;
+                  int compassFrames = 0;
+                  int compassRecoveryFrames = 0;
+                  int compassTaps = 0;
+                  MatchResult? lastCompass = null;'''
+          if round_decl not in bot:
+              raise SystemExit("WaitRoundReturn declaration block not found")
+          bot = bot.replace(round_decl, round_new, 1)
+
+          round_old = '''                var compass = _templates.MatchCompass(f.Gray, slot);
+                          if (compass is not null && compass.Score >= _cfg.CompassThreshold && hook.Score < 0.75)
+                          {
+                              compassFrames++;
+                              if (compassFrames >= 2 && compassTaps < 3 &&
+                                  DateTime.UtcNow - lastCompassTap > TimeSpan.FromMilliseconds(1000))
+                              {
+                                  WindowLocator.ActivateForInput(window);
+                                  _input.TapS();
+                                  lastCompassTap = DateTime.UtcNow;
+                                  compassTaps++;
+                                  compassFrames = 0;
+                                  _log.Write($"종료 후 나침반 감지 {compass.Score:F3}, 2프레임 -> S ({compassTaps}/3)");
+                              }
+                          }
+                          else
+                          {
+                              compassFrames = 0;
+                          }'''
+          round_new_block = '''                var compass = _templates.MatchCompass(f.Gray, slot);
+                          lastCompass = compass;
+                          bool compassCentered = compass is not null &&
+                              Math.Abs((compass.Rect.Left + compass.Rect.Width / 2) - (slot.Left + slot.Width / 2)) <= 60 &&
+                              Math.Abs((compass.Rect.Top + compass.Rect.Height / 2) - (slot.Top + slot.Height / 2)) <= 60;
+                          bool primaryCompass = compass is not null && compass.Score >= _cfg.CompassThreshold && hook.Score < 0.75;
+                          bool recoveryCompass = compass is not null && sw.ElapsedMilliseconds >= 1500 &&
+                              compass.Score >= 0.68 && hook.Score < 0.70 && compassCentered;
+
+                          if (primaryCompass)
+                          {
+                              compassFrames++;
+                              compassRecoveryFrames = 0;
+                              if (compassFrames >= 2 && compassTaps < 3 &&
+                                  DateTime.UtcNow - lastCompassTap > TimeSpan.FromMilliseconds(1000))
+                              {
+                                  WindowLocator.ActivateForInput(window);
+                                  _input.TapS();
+                                  lastCompassTap = DateTime.UtcNow;
+                                  compassTaps++;
+                                  compassFrames = 0;
+                                  _log.Write($"종료 후 나침반 감지 {compass.Score:F3}, 2프레임 -> S ({compassTaps}/3)");
+                              }
+                          }
+                          else if (recoveryCompass)
+                          {
+                              compassFrames = 0;
+                              compassRecoveryFrames++;
+                              if (compassRecoveryFrames >= 4 && compassTaps < 3 &&
+                                  DateTime.UtcNow - lastCompassTap > TimeSpan.FromMilliseconds(1000))
+                              {
+                                  WindowLocator.ActivateForInput(window);
+                                  _input.TapS();
+                                  lastCompassTap = DateTime.UtcNow;
+                                  compassTaps++;
+                                  compassRecoveryFrames = 0;
+                                  _log.Write($"종료 후 나침반 복구 {compass.Score:F3}, 중앙 4프레임 -> S ({compassTaps}/3)");
+                              }
+                          }
+                          else
+                          {
+                              compassFrames = 0;
+                              compassRecoveryFrames = 0;
+                          }'''
+          if round_old not in bot:
+              raise SystemExit("WaitRoundReturn compass block not found")
+          bot = bot.replace(round_old, round_new_block, 1)
+
+          round_delay = '''            await Task.Delay(100, ct);
+                  }
+                  _log.Write("다음 판 준비 15초 대기 만료");'''
+          round_delay_new = '''            if (DateTime.UtcNow - lastDiagnostic >= TimeSpan.FromSeconds(1))
+                  {
+                      lastDiagnostic = DateTime.UtcNow;
+                      string compassStatus = lastCompass is null ? "없음" : $"{lastCompass.Score:F2} x{lastCompass.Scale:F2}";
+                      Status($"다음 판 대기 · Hook {hook.Score:F2} x{hook.Scale:F2} · Compass {compassStatus}");
+                      _log.Write($"복귀 진단 Hook={hook.Score:F3} x{hook.Scale:F2}; Compass={compassStatus}; S={compassTaps}/3");
+                  }
+
+                  await Task.Delay(100, ct);
+              }
+              _log.Write("다음 판 준비 15초 대기 만료");'''
+          if round_delay not in bot:
+              raise SystemExit("WaitRoundReturn delay/tail block not found")
+          bot = bot.replace(round_delay, round_delay_new, 1)
+          bot_path.write_text(bot, encoding="utf-8")
+
+          main = main_path.read_text(encoding="utf-8-sig")
+          old = 'int seconds = Math.Max(30, _notifier.Settings.FishingStallSeconds);'
+          if old not in main:
+              raise SystemExit("stall seconds line not found")
+          main = main.replace(old, 'int seconds = Math.Clamp(_notifier.Settings.FishingStallSeconds, 10, 15);', 1)
+          oldp = '''bool progress = (text.Contains("낚싯대 아이콘") && text.Contains("-> Space"))
+                          || text.Contains("1차 게이지 감지")'''
+          newp = '''bool progress = (text.Contains("낚싯대 아이콘") && text.Contains("-> Space"))
+                          || (text.Contains("나침반") && text.Contains("-> S"))
+                          || text.Contains("1차 게이지 감지")'''
+          if oldp not in main:
+              raise SystemExit("progress expression not found")
+          main = main.replace(oldp, newp, 1)
+          main_path.write_text(main, encoding="utf-8")
+
+          tg = tg_path.read_text(encoding="utf-8-sig")
+          if 'public int FishingStallSeconds { get; set; } = 60;' not in tg:
+              raise SystemExit("FishingStallSeconds default not found")
+          tg = tg.replace('public int FishingStallSeconds { get; set; } = 60;', 'public int FishingStallSeconds { get; set; } = 15;', 1)
+          tg_path.write_text(tg, encoding="utf-8")
+
+          if notif_path.exists():
+              try:
+                  data = json.loads(notif_path.read_text(encoding="utf-8-sig"))
+                  data["FishingStallSeconds"] = 15
+                  notif_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+              except Exception:
+                  pass
+          '@.Replace('ROOT_PLACEHOLDER', $root.FullName.Replace('\','\\')) | Set-Content patch_v0114.py -Encoding UTF8
+          python patch_v0114.py
+          if($LASTEXITCODE -ne 0){throw 'V0.1.14 patch failed'}
+
+          # Version bump after the targeted fishing patch.
+          Get-ChildItem $root.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p=$_.FullName; $s=Get-Content -Raw -LiteralPath $p
+            $n=$s.Replace('V0.1.13','V0.1.14').Replace('0.1.13.0','0.1.14.0').Replace('0.1.13','0.1.14')
+            if($n -ne $s){Set-Content -LiteralPath $p -Value $n -Encoding UTF8}
+          }
+
+          # Verification: keep the proven v28 fishing templates and hook threshold.
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){$h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant();if($h-ne$expected[$t]){throw "template changed: $t $h"}}
+          $cfg=Get-Content -Raw (Join-Path $fish 'config.json')|ConvertFrom-Json
+          if([double]$cfg.HookThreshold-ne0.85 -or [double]$cfg.CompassThreshold-ne0.85){throw 'v28 primary thresholds changed'}
+          $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
+          foreach($m in @('Compass {compassStatus}','나침반 복구 인식','compass.Score >= 0.68','timeoutMs = 15000','다음 판 준비 15초 대기 만료')){if(-not $bot.Contains($m)){throw "bot marker missing: $m"}}
+          $main=Get-Content -Raw (Join-Path $fish 'MainForm.cs')
+          if($main -notmatch 'Math\.Clamp\(_notifier\.Settings\.FishingStallSeconds, 10, 15\)'){throw '15s stall clamp missing'}
+          if($main -notmatch '나침반.*-> S'){throw 'compass progress heartbeat missing'}
+          $tg=Get-Content -Raw (Join-Path $fish 'TelegramNotifier.cs')
+          if($tg -notmatch 'FishingStallSeconds \{ get; set; \} = 15;'){throw '15s stall default missing'}
+          $updater=Get-ChildItem $root.FullName -Recurse -File -Filter UpdateManager.cs|Select-Object -First 1
+          if($null-eq$updater -or (Get-Content -Raw $updater.FullName)-notmatch '0\.1\.14|V0\.1\.14'){throw 'V0.1.14 updater version missing'}
+
+          @(
+            'MABI AUTO V0.1.14 - COMPASS RECOVERY',
+            '',
+            'Base: V0.1.13 exact v28 fishing runtime.',
+            'Primary v28 Hook/Compass thresholds and fishing templates remain unchanged.',
+            'Stage-1 and round-return diagnostics now show both Hook and Compass score/scale.',
+            'If primary Compass 0.85 misses after 1.5s, a centered 0.68+ Compass recovery path requires 4 consecutive frames before S.',
+            'Round-return wait is reduced from 30s to 15s.',
+            'Fishing progress stall Telegram alert is capped at 15s (minimum 10s); old 60s settings therefore alert at 15s.',
+            'Compass -> S is counted as valid progress. Process watchdog remains unchanged.'
+          )|Set-Content (Join-Path $root.FullName 'CHANGES_V0.1.14_COMPASS_RECOVERY.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.14' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.14').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){dotnet publish $watch @args -o stage/watchdog;if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'};if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}}
+          $release=Join-Path $pkg 'release';if(Test-Path $release){Remove-Item $release -Recurse -Force};Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+          foreach($t in $expected.Keys){$h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant();if($h-ne$expected[$t]){throw "runtime template changed: $t $h"}}
+          $exe=Join-Path $release 'FishingAutomation.exe';$p=Start-Process $exe -WorkingDirectory $release -PassThru;Start-Sleep 3;$p.Refresh();if($p.HasExited){throw "smoke test exit $($p.ExitCode)"};Stop-Process $p.Id -Force -ErrorAction SilentlyContinue;Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.14_CompassRecovery.zip';Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.14_Windows_Lite.zip';Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant();"$hash  MabiAuto_V0.1.14_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII;Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.14 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop';$tag='V0.1.14'
+          @(
+            'MABI AUTO V0.1.14 - 나침반 실패 복귀 보강',
+            '',
+            'V0.1.13의 v28 낚시 코어를 유지하면서 실패 후 나침반 화면에서 S가 다시 안 눌리는 증상만 보강했습니다.',
+            '시전 대기/다음 판 대기 상태에 Hook과 Compass 점수 및 스케일을 같이 표시합니다.',
+            'v28 기본 Compass 0.85/2프레임 경로는 그대로이며, 1.5초 이상 대기할 때 중앙 위치의 Compass 0.68 이상이 4프레임 연속 확인되면 안전 복구로 S를 누릅니다.',
+            '다음 판 복귀 대기는 30초에서 15초로 단축했습니다.',
+            '낚시 진행 정지 텔레그램 알림은 기존 설정이 60초여도 최대 15초 안에 울리도록 변경했습니다. 프로세스 Watchdog 90초는 변경하지 않았습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.14_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@('out/CombinedFishingDungeon_V0.1.14_CompassRecovery.zip','out/MabiAuto_V0.1.14_Windows_Lite.zip','out/MabiAuto_V0.1.14_Windows_Lite.zip.sha256')
+          if(gh release view $tag --repo $env:REPO *> $null){gh release upload $tag @assets --repo $env:REPO --clobber}else{gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.14' --notes-file notes.txt}
