@@ -4,6 +4,25 @@ import base64, gzip, hashlib, struct
 
 # V0.1.2 verified split payload loader.
 base = Path(__file__).resolve().parent
+
+def rebuild_b64(target_name: str, prefix: str, count: int):
+    chunks = []
+    for i in range(count):
+        p = base / f"{prefix}_{i:02d}.part"
+        if not p.is_file():
+            raise RuntimeError(f"V0.1.2 side-car chunk missing: {p.name}")
+        chunks.append(p.read_text(encoding="ascii").strip())
+    encoded = "".join(chunks)
+    data = base64.b64decode(encoded, validate=True)
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise RuntimeError(f"V0.1.2 side-car is not PNG: {target_name}")
+    (base / target_name).write_text(encoded, encoding="ascii")
+    print(f"V75 REBUILT {target_name}: bytes={len(data)} sha256={hashlib.sha256(data).hexdigest()}")
+
+rebuild_b64("v75_outside_home.b64", "v75_homefix", 3)
+rebuild_b64("v75_outside_end.b64", "v75_endfix", 3)
+rebuild_b64("v75_outside_k.b64", "v75_kfix", 8)
+
 for name in ("v75_outside_home.b64", "v75_outside_end.b64", "v75_outside_k.b64", "v75_outside_i.b64"):
     p = base / name
     if p.is_file():
