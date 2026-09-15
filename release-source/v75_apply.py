@@ -2,7 +2,7 @@
 from pathlib import Path
 import base64, gzip, hashlib, json, struct, sys
 
-# V0.1.2 verified split payload loader.
+# V0.1.2 verified split payload loader; packaging mirror sync is verified separately.
 base = Path(__file__).resolve().parent
 
 def rebuild_b64(target_name: str, prefix: str, count: int):
