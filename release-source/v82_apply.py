@@ -160,3 +160,4 @@ audit = {
 print("V0.1.9 applied: fixed lower-center HUD color fallback + V0.1.8 template path preserved")
 
 # Pipeline-ready retrigger after v82 verifier/package/workflow landed on main.
+# This no-op comment intentionally retriggers Publish Release Source once the v82 pipeline is present.
