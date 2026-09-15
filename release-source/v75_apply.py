@@ -2,7 +2,7 @@
 from pathlib import Path
 import base64, gzip, hashlib, struct, sys
 
-# V0.1.2 verified split payload loader. Includes generated-source compile diagnostic.
+# V0.1.2 verified split payload loader.
 base = Path(__file__).resolve().parent
 
 def rebuild_b64(target_name: str, prefix: str, count: int):
@@ -53,11 +53,18 @@ if source_sha != "ea07d47cc81756d258152fe889419e3719702dd64e575638870e5dc5774cdc
 
 exec(compile(source.decode("utf-8"), __file__, "exec"))
 
+# The generated C# interpolation needs two backslashes in source so TimeSpan's
+# escaped colon survives C# string parsing: hh\\:mm. The implementation payload
+# emitted only one, which produces CS1009. Apply the minimal source fix here.
 if len(sys.argv) > 1:
     main_form = Path(sys.argv[1]) / "FishingAutomation" / "MainForm.cs"
     if main_form.is_file():
-        lines = main_form.read_text(encoding="utf-8").splitlines()
-        print("V75 MAINFORM DIAGNOSTIC BEGIN")
-        for n in range(476, min(490, len(lines) + 1)):
-            print(f"V75 MAINFORM {n}: {lines[n-1]}")
-        print("V75 MAINFORM DIAGNOSTIC END")
+        text = main_form.read_text(encoding="utf-8")
+        bad = r"{_autoStopTime:hh\:mm}"
+        good = r"{_autoStopTime:hh\\:mm}"
+        if bad in text:
+            text = text.replace(bad, good, 1)
+            main_form.write_text(text, encoding="utf-8")
+            print("V75 FIXED MainForm auto-stop TimeSpan format escape")
+        elif good not in text:
+            raise RuntimeError("V0.1.2 auto-stop TimeSpan format marker not found")
