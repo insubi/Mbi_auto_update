@@ -14,26 +14,31 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download and compare fishing sources
+      - name: Compare v28 capture/window path
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           Invoke-WebRequest -Uri 'https://github.com/user-attachments/files/32151849/CombinedFishingDungeon_v28_PhoneAlert_Fixed.zip' -OutFile v28.zip
-          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.10/CombinedFishingDungeon_V0.1.10_StabilityRemote.zip' -OutFile cur.zip
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.11/CombinedFishingDungeon_V0.1.11_v28Fishing.zip' -OutFile cur.zip
           Expand-Archive v28.zip -DestinationPath v28
           Expand-Archive cur.zip -DestinationPath cur
           $v28root = Get-ChildItem v28 -Directory | Select-Object -First 1
           $curroot = Get-ChildItem cur -Directory | Select-Object -First 1
-          foreach ($label in @('V28','CURRENT')) {
-            if ($label -eq 'V28') { $root = $v28root.FullName } else { $root = $curroot.FullName }
-            $f = Join-Path $root 'FishingAutomation/FishingBot.cs'
-            Write-Host "===== $label FishingBot API/METHODS ====="
-            Select-String -Path $f -Pattern '^\s*(public|private|internal|protected)\s+.*\(' | ForEach-Object { $_.Line.Trim() }
+          $a = Join-Path $v28root.FullName 'FishingAutomation/CaptureService.cs'
+          $b = Join-Path $curroot.FullName 'FishingAutomation/CaptureService.cs'
+          Write-Host '===== V28 CaptureService ====='
+          Get-Content -LiteralPath $a
+          Write-Host '===== V0.1.11 CaptureService ====='
+          Get-Content -LiteralPath $b
+          Write-Host '===== WINDOW RELATED FILES V28 ====='
+          Get-ChildItem (Join-Path $v28root.FullName 'FishingAutomation') -File -Filter *.cs | ForEach-Object {
+            if (Select-String -Path $_.FullName -Pattern 'class GameWindow|class Window|ClientScreenOrigin|ClientToScreen|GetClientRect|SetForegroundWindow' -Quiet) {
+              Write-Host "--- $($_.Name) ---"; Get-Content -LiteralPath $_.FullName
+            }
           }
-          Write-Host '===== TEMPLATE HASHES ====='
-          foreach ($t in @('hook.png','compass.png','gauge.png','healthbar.png')) {
-            $a = Get-ChildItem $v28root.FullName -Recurse -File -Filter $t | Select-Object -First 1
-            $b = Get-ChildItem $curroot.FullName -Recurse -File -Filter $t | Select-Object -First 1
-            if ($a) { Write-Host "v28 $t $((Get-FileHash $a.FullName -Algorithm SHA256).Hash.ToLower()) $($a.Length)" }
-            if ($b) { Write-Host "cur $t $((Get-FileHash $b.FullName -Algorithm SHA256).Hash.ToLower()) $($b.Length)" }
+          Write-Host '===== WINDOW RELATED FILES V0.1.11 ====='
+          Get-ChildItem (Join-Path $curroot.FullName 'FishingAutomation') -File -Filter *.cs | ForEach-Object {
+            if (Select-String -Path $_.FullName -Pattern 'class GameWindow|class Window|ClientScreenOrigin|ClientToScreen|GetClientRect|SetForegroundWindow' -Quiet) {
+              Write-Host "--- $($_.Name) ---"; Get-Content -LiteralPath $_.FullName
+            }
           }
