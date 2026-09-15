@@ -1,0 +1,33 @@
+name: Inspect v76 updater
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v76-updater.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download v76 source and print updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path source-download,source-work | Out-Null
+          gh release download v76 --repo $env:REPO --pattern 'CombinedFishingDungeon_v76_StabilityRemote.zip' --dir source-download
+          tar -xf source-download/CombinedFishingDungeon_v76_StabilityRemote.zip -C source-work
+          $root = Get-ChildItem source-work -Directory | Select-Object -First 1
+          if ($null -eq $root) { throw 'v76 source root not found' }
+          $file = Join-Path $root.FullName 'FishingAutomation/UpdateManager.cs'
+          if (-not (Test-Path -LiteralPath $file)) { throw 'UpdateManager.cs not found' }
+          Write-Host '===== V76 UPDATE MANAGER START ====='
+          Get-Content -LiteralPath $file
+          Write-Host '===== V76 UPDATE MANAGER END ====='
