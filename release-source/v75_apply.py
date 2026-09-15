@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import base64, gzip, hashlib, struct
+import base64, gzip, hashlib, struct, sys
 
-# V0.1.2 verified split payload loader. Rebuild trigger with package delegate path fix.
+# V0.1.2 verified split payload loader. Includes generated-source compile diagnostic.
 base = Path(__file__).resolve().parent
 
 def rebuild_b64(target_name: str, prefix: str, count: int):
@@ -52,3 +52,12 @@ if source_sha != "ea07d47cc81756d258152fe889419e3719702dd64e575638870e5dc5774cdc
     raise RuntimeError(f"V0.1.2 implementation SHA mismatch: {source_sha}")
 
 exec(compile(source.decode("utf-8"), __file__, "exec"))
+
+if len(sys.argv) > 1:
+    main_form = Path(sys.argv[1]) / "FishingAutomation" / "MainForm.cs"
+    if main_form.is_file():
+        lines = main_form.read_text(encoding="utf-8").splitlines()
+        print("V75 MAINFORM DIAGNOSTIC BEGIN")
+        for n in range(476, min(490, len(lines) + 1)):
+            print(f"V75 MAINFORM {n}: {lines[n-1]}")
+        print("V75 MAINFORM DIAGNOSTIC END")
