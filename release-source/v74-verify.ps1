@@ -38,11 +38,20 @@ foreach ($required in @(
     '클리어 화면 동시 이미지 연속 확인 {abyssClearConsecutive}/3',
     'if (abyssClearConsecutive < 3)',
     'var clearVisual = await DetectAbyssConfirmedClearAsync(frame, ct);',
-    'private async Task<DetectionResult> DetectAbyssClearVisualAsync')) {
-    if (-not $engine.Contains($required)) { throw "V0.1.1 Abyss clear guard missing: $required" }
+    'private async Task<DetectionResult> DetectAbyssClearVisualAsync',
+    'long lastTouchClick = 0;',
+    'long lastExitClick = 0;',
+    'long lastPopupClick = 0;',
+    '종료 화면 미확인 -> 전투/진행 화면으로 보고 실제 클리어까지 대기 중')) {
+    if (-not $engine.Contains($required)) { throw "V0.1.1 Abyss clear/recovery guard missing: $required" }
 }
 if ($engine.Contains('found = await DetectAbyssClearVisualAsync(frame, ct);')) {
     throw 'Initial Abyss completion check still accepts OR clear detection'
+}
+if ($engine.Contains('long lastTouchClick = long.MinValue;') -or
+    $engine.Contains('long lastExitClick = long.MinValue;') -or
+    $engine.Contains('long lastPopupClick = long.MinValue;')) {
+    throw 'Smart Recovery cooldown timestamps still use overflow-prone long.MinValue'
 }
 
 $targetsPath = Join-Path $app 'abyss/config/targets.json'
@@ -69,4 +78,4 @@ foreach ($required in @('TextAt(g, UpdateManager.CurrentVersion','Text = "자동
 }
 $manifest = Get-Content -LiteralPath (Join-Path $app 'app.manifest') -Raw
 if ($manifest -notmatch 'requestedExecutionLevel\s+level="requireAdministrator"') { throw 'Administrator elevation was lost' }
-Write-Host 'V0.1.1 SOURCE VERIFIED: Abyss completion requires BOTH clear-title and touch-prompt images in 3 consecutive frames; V0.1 UI/runtime otherwise preserved.'
+Write-Host 'V0.1.1 SOURCE VERIFIED: BOTH+3 Abyss completion guard and Smart Recovery cooldown/false-state fixes; V0.1 UI otherwise preserved.'
