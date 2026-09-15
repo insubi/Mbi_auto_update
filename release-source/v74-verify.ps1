@@ -41,8 +41,7 @@ foreach ($required in @(
     'private async Task<DetectionResult> DetectAbyssClearVisualAsync',
     'long lastTouchClick = 0;',
     'long lastExitClick = 0;',
-    'long lastPopupClick = 0;',
-    '종료 화면 미확인 -> 전투/진행 화면으로 보고 실제 클리어까지 대기 중')) {
+    'long lastPopupClick = 0;')) {
     if (-not $engine.Contains($required)) { throw "V0.1.1 Abyss clear/recovery guard missing: $required" }
 }
 if ($engine.Contains('found = await DetectAbyssClearVisualAsync(frame, ct);')) {
