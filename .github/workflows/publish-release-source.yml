@@ -126,6 +126,18 @@ jobs:
           EOF
           fi
 
+          if [ "$VERSION" -eq 73 ]; then
+            TITLE="Mabi Auto V0.1 · updater bridge"
+            cat > "$NOTES_FILE" <<EOF
+          MABI AUTO V0.1 - 기존 v72 사용자를 위한 업데이트 브리지
+
+          이 v73 태그는 기존 정수 버전 업데이트 경로를 유지하기 위한 1회성 기술 태그입니다.
+          실제 사용자 표시 버전과 실행 파일 버전은 V0.1 / 0.1.0.0 입니다.
+          검증 완료 후 별도의 정식 공개 릴리스 V0.1이 자동 생성됩니다.
+          상단 Mabi_Auto 배너와 자동 정지 UI만 정돈하며 v72의 기능/어비스 이미지/자동복구 로직은 유지합니다.
+          EOF
+          fi
+
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             if [ "$VERSION" -ge 58 ] && [ "$(gh release view "$TAG" --repo "$REPO" --json isDraft --jq '.isDraft')" != true ]; then
               echo "Refusing to replace already published $TAG. Use a new version."
