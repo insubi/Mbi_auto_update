@@ -1,0 +1,59 @@
+name: Inspect V0.1.18 Abyss Misclick
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/inspect-v0118-abyss-misclick.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and inspect V0.1.18 source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.18/CombinedFishingDungeon_V0.1.18_CompassRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          $out = New-Object System.Collections.Generic.List[string]
+          $out.Add('=== FILE TREE (abyss/dungeon) ===')
+          Get-ChildItem $fish -Recurse -File | Where-Object { $_.FullName -match '\\(abyss|dungeon)\\' } | ForEach-Object { $out.Add($_.FullName.Substring($root.FullName.Length+1)) }
+          $out.Add('')
+          $out.Add('=== TARGETS.JSON ===')
+          $targets=Join-Path $fish 'abyss/config/targets.json'
+          if(Test-Path $targets){ $out.Add((Get-Content -Raw $targets)) }
+          $out.Add('')
+          $out.Add('=== SCENARIO FILES ===')
+          Get-ChildItem (Join-Path $fish 'abyss') -Recurse -File -Include *.json,*.cs | ForEach-Object {
+            $out.Add("--- $($_.FullName.Substring($root.FullName.Length+1)) ---")
+            $out.Add((Get-Content -Raw $_.FullName))
+          }
+          $out.Add('')
+          $out.Add('=== SEARCH: menu/click/selected/abyss/던전/어비스/망령 ===')
+          Get-ChildItem $fish -Recurse -File -Include *.cs,*.json | ForEach-Object {
+            $p=$_.FullName
+            $lines=Get-Content $p
+            for($i=0;$i -lt $lines.Count;$i++){
+              if($lines[$i] -match 'abyss|menu|click|selected|던전|어비스|망령'){
+                $out.Add(('{0}:{1}: {2}' -f $p.Substring($root.FullName.Length+1),($i+1),$lines[$i]))
+              }
+            }
+          }
+          New-Item -ItemType Directory -Force inspection | Out-Null
+          $out | Set-Content inspection/v0118_abyss_misclick.txt -Encoding UTF8
+      - name: Commit inspection
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add inspection/v0118_abyss_misclick.txt
+          git commit -m 'Add V0.1.18 Abyss misclick inspection' || exit 0
+          git push
