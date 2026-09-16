@@ -1,0 +1,327 @@
+name: Build V0.1.19 Abyss Menu Guard
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0119-abyss-menu-guard.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch V0.1.18 Abyss menu misclick guard
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.18/CombinedFishingDungeon_V0.1.18_CompassRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          @'
+          from pathlib import Path
+
+          root = Path(r"ROOT_PLACEHOLDER")
+          engine_path = root / "FishingAutomation" / "dungeon" / "ScenarioEngine.cs"
+          engine = engine_path.read_text(encoding="utf-8-sig")
+
+          def replace_once(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one {label}, found {count}")
+              return text.replace(old, new, 1)
+
+          helper_marker = "    private async Task ExecuteStepAsync(ScenarioStep step, CancellationToken ct)\n"
+          helper = r'''    private async Task<bool> VerifyAbyssSelectionScreenAsync(CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        int consecutive = 0;
+        string[] ids =
+        {
+            "abyss_dungeon_hallucination_anchorage",
+            "abyss_dungeon_madness_cave",
+            "abyss_dungeon_scattered_waterway"
+        };
+
+        while (sw.Elapsed < TimeSpan.FromSeconds(6))
+        {
+            ct.ThrowIfCancellationRequested();
+            using var frame = await CaptureGameWindowAsync(ct);
+            bool foundAny = false;
+            string foundId = "";
+
+            foreach (string id in ids)
+            {
+                var r = await _detector.DetectAsync(id, frame, ct);
+                if (!r.Found) continue;
+                foundAny = true;
+                foundId = id;
+                break;
+            }
+
+            if (foundAny)
+            {
+                consecutive++;
+                Log?.Invoke($"[어비스] 어비스 던전 선택 화면 확인 {consecutive}/2 ({foundId})");
+                if (consecutive >= 2)
+                    return true;
+            }
+            else
+            {
+                consecutive = 0;
+            }
+
+            await Task.Delay(Math.Max(250, _settings.PollIntervalMs), ct);
+        }
+
+        return false;
+    }
+
+'''
+          engine = replace_once(engine, helper_marker, helper + helper_marker, "Abyss selection verification helper insertion")
+
+          old_vars = '''        bool alternativeClicked = false;
+        int abyssClearConsecutive = 0;
+'''
+          new_vars = '''        bool alternativeClicked = false;
+        int abyssClearConsecutive = 0;
+        var abyssIconRejected = new List<Rectangle>();
+'''
+          engine = replace_once(engine, old_vars, new_vars, "Abyss icon rejected-candidate state")
+
+          old_detect = '''            else
+            {
+                if (await CheckMonitorsAsync(frame, ct))
+                    continue;
+                found = await _detector.DetectAsync(step.Target, frame, ct);
+            }
+'''
+          new_detect = '''            else
+            {
+                if (await CheckMonitorsAsync(frame, ct))
+                    continue;
+
+                if (step.Target.Equals("abyss_icon", StringComparison.OrdinalIgnoreCase) && abyssIconRejected.Count > 0)
+                {
+                    using var masked = (Bitmap)frame.Clone();
+                    using (var g = Graphics.FromImage(masked))
+                    {
+                        foreach (var rejected in abyssIconRejected)
+                            g.FillRectangle(Brushes.Black, rejected);
+                    }
+                    found = await _detector.DetectAsync(step.Target, masked, ct);
+                }
+                else
+                {
+                    found = await _detector.DetectAsync(step.Target, frame, ct);
+                }
+            }
+'''
+          engine = replace_once(engine, old_detect, new_detect, "Abyss icon rejected-candidate masking")
+
+          old_click = '''                    if (step.Target.Equals("abyss_touch_screen", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await AdvanceAbyssClearScreenAsync(found, ct);
+                    }
+                    else
+                    {
+                        _input.ClickClientPoint(_hwnd, found.Center);
+                        await Task.Delay(_settings.ClickSettleMs, ct);
+                    }
+'''
+          new_click = '''                    if (step.Target.Equals("abyss_touch_screen", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await AdvanceAbyssClearScreenAsync(found, ct);
+                    }
+                    else if (step.Target.Equals("abyss_icon", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _input.ClickClientPoint(_hwnd, found.Center);
+                        await Task.Delay(Math.Max(700, _settings.ClickSettleMs), ct);
+
+                        if (!await VerifyAbyssSelectionScreenAsync(ct))
+                        {
+                            var rejected = found.Bounds;
+                            rejected.Inflate(24, 24);
+                            abyssIconRejected.Add(rejected);
+                            Log?.Invoke($"[어비스] 어비스 클릭 검증 실패 {abyssIconRejected.Count}/4 @ {found.Bounds} score={found.Score:0.000} -> ESC 후 해당 후보 제외");
+
+                            _hwnd = await ResolveRequiredGameWindowAsync(ct);
+                            NativeMethods.SetForegroundWindow(_hwnd);
+                            _input.TapScanCode(0x01); // ESC: wrong content -> menu
+                            await Task.Delay(900, ct);
+
+                            if (abyssIconRejected.Count >= 4)
+                            {
+                                // Close the menu as well so Smart Recovery sees the outside HUD immediately.
+                                _input.TapScanCode(0x01);
+                                await Task.Delay(700, ct);
+                                throw new TimeoutException("어비스 아이콘 후보 4개를 클릭 검증했지만 어비스 던전 선택 화면이 확인되지 않았습니다.");
+                            }
+
+                            continue;
+                        }
+
+                        Log?.Invoke($"[어비스] 어비스 클릭 검증 성공 @ {found.Bounds} score={found.Score:0.000}");
+                    }
+                    else
+                    {
+                        _input.ClickClientPoint(_hwnd, found.Center);
+                        await Task.Delay(_settings.ClickSettleMs, ct);
+                    }
+'''
+          engine = replace_once(engine, old_click, new_click, "Abyss icon post-click verification")
+
+          required = [
+              "VerifyAbyssSelectionScreenAsync",
+              "abyssIconRejected = new List<Rectangle>()",
+              "g.FillRectangle(Brushes.Black, rejected)",
+              "어비스 클릭 검증 실패",
+              "_input.TapScanCode(0x01); // ESC: wrong content -> menu",
+              "어비스 아이콘 후보 4개",
+              "어비스 클릭 검증 성공",
+          ]
+          for marker in required:
+              if marker not in engine:
+                  raise SystemExit(f"required V0.1.19 marker missing: {marker}")
+
+          engine_path.write_text(engine, encoding="utf-8")
+          '@.Replace('ROOT_PLACEHOLDER', $root.FullName.Replace('\','\\')) | Set-Content patch_v0119.py -Encoding UTF8
+
+          python patch_v0119.py
+          if($LASTEXITCODE -ne 0){throw 'V0.1.19 Abyss guard patch failed'}
+
+          # Version bump only in runtime/config text. Preserve historical changelogs.
+          Get-ChildItem $root.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.cmd','.ps1') } | ForEach-Object {
+            $p=$_.FullName; $s=Get-Content -Raw -LiteralPath $p
+            $n=$s.Replace('V0.1.18','V0.1.19').Replace('0.1.18.0','0.1.19.0').Replace('0.1.18','0.1.19')
+            if($n -ne $s){Set-Content -LiteralPath $p -Value $n -Encoding UTF8}
+          }
+
+          # Verify the Abyss recognition asset/config involved in this bug is unchanged.
+          $abyssTemplate=Join-Path $fish 'abyss/templates/abyss.png'
+          $abyssHash=(Get-FileHash $abyssTemplate -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($abyssHash-ne'8ff4c90fe647fec8a7ba852395e79bb331247245296bee07d87318ef0b257868'){
+            throw "abyss template changed unexpectedly: $abyssHash"
+          }
+          $targets=Get-Content -Raw (Join-Path $fish 'abyss/config/targets.json')|ConvertFrom-Json
+          $abyssTarget=$targets|Where-Object {$_.Id-eq'abyss_icon'}
+          if($null-eq$abyssTarget -or [double]$abyssTarget.Threshold-ne0.8){throw 'abyss_icon target/threshold changed unexpectedly'}
+
+          # Fishing V0.1.18 protections must remain untouched.
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "fishing template changed: $t $h"}
+          }
+          $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
+          foreach($m in @(
+            'compass.Score >= 0.28 && hook.Score < 0.70 && compassCentered',
+            'compassRecoveryFrames >= 6',
+            'hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10',
+            'hardReadyWait.ElapsedMilliseconds >= 10000',
+            'stage1_hard_reset_10s'
+          )){if(-not $bot.Contains($m)){throw "fishing marker missing: $m"}}
+
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          foreach($m in @(
+            'VerifyAbyssSelectionScreenAsync',
+            'abyssIconRejected = new List<Rectangle>()',
+            'g.FillRectangle(Brushes.Black, rejected)',
+            '어비스 클릭 검증 실패',
+            'ESC: wrong content -> menu',
+            '어비스 클릭 검증 성공'
+          )){if(-not $engine.Contains($m)){throw "Abyss guard marker missing: $m"}}
+
+          @(
+            'MABI AUTO V0.1.19 - ABYSS MENU MISCLICK GUARD',
+            '',
+            'Base: V0.1.18.',
+            'Root cause: abyss_icon used a full-window grayscale best-match and the step returned immediately after any accepted click.',
+            'Fix: every Abyss icon click is now verified by the known Abyss dungeon-selection templates for two consecutive frames.',
+            'If verification fails, ESC returns to the menu, the false-positive rectangle is excluded, and the next-best candidate is tried.',
+            'After four rejected candidates, the menu is closed and Smart Recovery is triggered immediately instead of waiting on the wrong content screen.',
+            'Abyss template bytes and threshold 0.80 are unchanged. Fishing V0.1.18 logic/templates are unchanged.'
+          )|Set-Content (Join-Path $root.FullName 'CHANGES_V0.1.19_ABYSS_MENU_GUARD.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.19' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.19').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+          $runtimeAbyss=(Get-FileHash (Join-Path $release 'abyss/templates/abyss.png') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($runtimeAbyss-ne'8ff4c90fe647fec8a7ba852395e79bb331247245296bee07d87318ef0b257868'){
+            throw "runtime abyss template changed: $runtimeAbyss"
+          }
+
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 3
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.19_AbyssMenuGuard.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.19_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.19_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.19 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop';$tag='V0.1.19'
+          @(
+            'MABI AUTO V0.1.19 - 어비스 메뉴 오클릭 방지',
+            '',
+            '어비스 아이콘 클릭 후 실제 어비스 던전 선택 화면인지 2프레임 연속 확인합니다.',
+            '망령의 탑처럼 다른 콘텐츠가 열리면 즉시 ESC로 돌아가며, 잘못 인식한 후보 위치를 제외하고 다음 후보를 다시 찾습니다.',
+            '잘못된 화면에서 60초를 그대로 기다리지 않습니다.',
+            '후보 4개가 모두 실패하면 메뉴를 닫고 Smart Recovery로 즉시 넘깁니다.',
+            '어비스 인식 이미지 자체와 기존 낚시 V0.1.18 로직은 변경하지 않았습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.19_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@('out/CombinedFishingDungeon_V0.1.19_AbyssMenuGuard.zip','out/MabiAuto_V0.1.19_Windows_Lite.zip','out/MabiAuto_V0.1.19_Windows_Lite.zip.sha256')
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.19' --notes-file notes.txt
+          }
