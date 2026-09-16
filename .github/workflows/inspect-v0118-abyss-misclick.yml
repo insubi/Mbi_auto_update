@@ -49,11 +49,17 @@ jobs:
           }
           New-Item -ItemType Directory -Force inspection | Out-Null
           $out | Set-Content inspection/v0118_abyss_misclick.txt -Encoding UTF8
+          Copy-Item (Join-Path $fish 'dungeon/ScenarioEngine.cs') inspection/v0118_ScenarioEngine.cs.txt -Force
+          Copy-Item (Join-Path $fish 'dungeon/TargetDetector.cs') inspection/v0118_TargetDetector.cs.txt -Force
+          Copy-Item (Join-Path $fish 'dungeon/TemplateMatcher.cs') inspection/v0118_TemplateMatcher.cs.txt -Force
+          Copy-Item (Join-Path $fish 'MainForm.cs') inspection/v0118_MainForm.cs.txt -Force
+          Copy-Item (Join-Path $fish 'abyss/config/targets.json') inspection/v0118_abyss_targets.json.txt -Force
+          Copy-Item (Join-Path $fish 'abyss/config/scenario.json') inspection/v0118_abyss_scenario.json.txt -Force
       - name: Commit inspection
         shell: pwsh
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add inspection/v0118_abyss_misclick.txt
-          git commit -m 'Add V0.1.18 Abyss misclick inspection' || exit 0
+          git add inspection/v0118_*
+          git commit -m 'Expand V0.1.18 Abyss misclick inspection' || exit 0
           git push
