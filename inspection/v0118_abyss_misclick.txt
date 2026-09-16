@@ -1,0 +1,1051 @@
+=== FILE TREE (abyss/dungeon) ===
+FishingAutomation\abyss\config\appsettings.json
+FishingAutomation\abyss\config\scenario.json
+FishingAutomation\abyss\config\targets.json
+FishingAutomation\abyss\previews\hallucination_anchorage.jpg
+FishingAutomation\abyss\previews\madness_cave.jpg
+FishingAutomation\abyss\previews\scattered_waterway.jpg
+FishingAutomation\abyss\templates\abyss.png
+FishingAutomation\abyss\templates\dungeon_clear_v66.png
+FishingAutomation\abyss\templates\enter.png
+FishingAutomation\abyss\templates\exit.png
+FishingAutomation\abyss\templates\hallucination_anchorage.png
+FishingAutomation\abyss\templates\leave_dungeon.png
+FishingAutomation\abyss\templates\madness_cave.png
+FishingAutomation\abyss\templates\menu.png
+FishingAutomation\abyss\templates\outside_end_v75.png
+FishingAutomation\abyss\templates\outside_home_v75.png
+FishingAutomation\abyss\templates\outside_i_v75.png
+FishingAutomation\abyss\templates\outside_k_v75.png
+FishingAutomation\abyss\templates\popup_close.png
+FishingAutomation\abyss\templates\README.txt
+FishingAutomation\abyss\templates\scattered_waterway.png
+FishingAutomation\abyss\templates\scene_skip_phone.jpg
+FishingAutomation\abyss\templates\touch_screen.png
+FishingAutomation\abyss\templates\treasure_chest.png
+FishingAutomation\dungeon\FuzzyText.cs
+FishingAutomation\dungeon\InputController.cs
+FishingAutomation\dungeon\Models.cs
+FishingAutomation\dungeon\NativeMethods.cs
+FishingAutomation\dungeon\OcrRecognizer.cs
+FishingAutomation\dungeon\ScenarioEngine.cs
+FishingAutomation\dungeon\TargetDetector.cs
+FishingAutomation\dungeon\TemplateMatcher.cs
+FishingAutomation\dungeon\WindowCapture.cs
+FishingAutomation\dungeon\WindowTools.cs
+FishingAutomation\dungeon\config\appsettings.json
+FishingAutomation\dungeon\config\scenario.json
+FishingAutomation\dungeon\config\targets.json
+FishingAutomation\dungeon\templates\challenge_visual.png
+FishingAutomation\dungeon\templates\README.txt
+FishingAutomation\dungeon\templates\scene_skip_phone.jpg
+
+=== TARGETS.JSON ===
+[
+  {
+    "Id": "abyss_menu",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/menu.png",
+    "Threshold": 0.82
+  },
+  {
+    "Id": "abyss_icon",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/abyss.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_dungeon_hallucination_anchorage",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/hallucination_anchorage.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_dungeon_madness_cave",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/madness_cave.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_dungeon_scattered_waterway",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/scattered_waterway.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_enter",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/enter.png",
+    "Threshold": 0.84
+  },
+  {
+    "Id": "abyss_touch_screen",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/touch_screen.png",
+    "Threshold": 0.68,
+    "TemplateScaleMin": 0.6,
+    "TemplateScaleMax": 1.55,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_treasure_chest",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/treasure_chest.png",
+    "Threshold": 0.8
+  },
+  {
+    "Id": "abyss_exit",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/exit.png",
+    "Threshold": 0.72,
+    "Text": "나가기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true,
+    "TemplateScaleMin": 0.7,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.06
+  },
+  {
+    "Id": "abyss_leave_dungeon",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/leave_dungeon.png",
+    "Threshold": 0.68,
+    "Text": "던전 퇴장",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true,
+    "TemplateScaleMin": 0.6,
+    "TemplateScaleMax": 1.5,
+    "TemplateScaleStep": 0.06
+  },
+  {
+    "Id": "scene_skip",
+    "Kind": "template",
+    "Roi": {
+      "X": 430,
+      "Y": 20,
+      "Width": 350,
+      "Height": 180
+    },
+    "TemplatePath": "templates/scene_skip_phone.jpg",
+    "Threshold": 0.62,
+    "TemplateScaleMin": 0.5,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.08
+  },
+  {
+    "Id": "abyss_popup_close",
+    "Kind": "template",
+    "Roi": {
+      "X": 140,
+      "Y": 800,
+      "Width": 300,
+      "Height": 190
+    },
+    "TemplatePath": "templates/popup_close.png",
+    "Threshold": 0.72,
+    "TemplateScaleMin": 0.7,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_dungeon_clear_visual",
+    "Kind": "template",
+    "Roi": {
+      "X": 120,
+      "Y": 120,
+      "Width": 560,
+      "Height": 300
+    },
+    "TemplatePath": "templates/dungeon_clear_v66.png",
+    "Threshold": 0.64,
+    "TemplateScaleMin": 0.65,
+    "TemplateScaleMax": 1.35,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_home_key",
+    "Kind": "template",
+    "Roi": {
+      "X": 590,
+      "Y": 20,
+      "Width": 150,
+      "Height": 130
+    },
+    "TemplatePath": "templates/outside_home_v75.png",
+    "Threshold": 0.76,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_end_key",
+    "Kind": "template",
+    "Roi": {
+      "X": 630,
+      "Y": 20,
+      "Width": 150,
+      "Height": 130
+    },
+    "TemplatePath": "templates/outside_end_v75.png",
+    "Threshold": 0.7,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_k_hud",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 820,
+      "Width": 180,
+      "Height": 180
+    },
+    "TemplatePath": "templates/outside_k_v75.png",
+    "Threshold": 0.72,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_i_hud",
+    "Kind": "template",
+    "Roi": {
+      "X": 620,
+      "Y": 800,
+      "Width": 180,
+      "Height": 200
+    },
+    "TemplatePath": "templates/outside_i_v75.png",
+    "Threshold": 0.72,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  }
+]
+
+
+=== SCENARIO FILES ===
+--- FishingAutomation\abyss\config\appsettings.json ---
+{
+  "ClientWidth": 800,
+  "ClientHeight": 1000,
+  "ForceClientSizeAndTopRight": true,
+  "PollIntervalMs": 250,
+  "UseInterception": true,
+  "InterceptionMouseDevice": 0,
+  "InterceptionKeyboardDevice": 1,
+  "AllowSendInputFallback": false,
+  "ClickSettleMs": 350,
+  "SaveScreenshotOnTimeout": true,
+  "AutoRecoveryEnabled": true,
+  "AutoRecoveryMaxAttempts": 3,
+  "AutoRecoveryDelaySeconds": 2
+}
+
+--- FishingAutomation\abyss\config\scenario.json ---
+{
+  "Name": "Abyss infinite loop - 10min timeout exit recovery",
+  "Repeat": true,
+  "Monitors": [
+    {
+      "Target": "abyss_popup_close",
+      "Action": "click",
+      "CooldownMs": 3000,
+      "ScanIntervalMs": 1000
+    },
+    {
+      "Target": "scene_skip",
+      "Action": "click",
+      "CooldownMs": 2500,
+      "ScanIntervalMs": 1200
+    }
+  ],
+  "Steps": [
+    {
+      "Name": "1. 메뉴 클릭",
+      "Type": "wait_click",
+      "Target": "abyss_menu",
+      "TimeoutSeconds": 90
+    },
+    {
+      "Name": "2. 어비스 클릭",
+      "Type": "wait_click",
+      "Target": "abyss_icon",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Name": "3. 선택 던전 클릭",
+      "Type": "wait_click",
+      "Target": "abyss_selected_dungeon",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Name": "4. 입장하기 클릭",
+      "Type": "wait_click",
+      "Target": "abyss_enter",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Name": "5. 클리어 화면 대기 (최대 10분) / 초과 시 강제 퇴장",
+      "Type": "wait_click",
+      "Target": "abyss_touch_screen",
+      "TimeoutSeconds": 600,
+      "TimeoutClickTarget": "abyss_leave_dungeon",
+      "TimeoutClickTargetWaitSeconds": 90,
+      "TimeoutFollowupClickTarget": "abyss_exit",
+      "TimeoutFollowupWaitSeconds": 120,
+      "TimeoutRestartDelaySeconds": 30
+    },
+    {
+      "Name": "6. 보물상자 감지",
+      "Type": "wait",
+      "Target": "abyss_treasure_chest",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Name": "7. 나가기 클릭",
+      "Type": "wait_click",
+      "Target": "abyss_exit",
+      "TimeoutSeconds": 120
+    }
+  ]
+}
+
+--- FishingAutomation\abyss\config\targets.json ---
+[
+  {
+    "Id": "abyss_menu",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/menu.png",
+    "Threshold": 0.82
+  },
+  {
+    "Id": "abyss_icon",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/abyss.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_dungeon_hallucination_anchorage",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/hallucination_anchorage.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_dungeon_madness_cave",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/madness_cave.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_dungeon_scattered_waterway",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/scattered_waterway.png",
+    "Threshold": 0.8,
+    "TemplateScaleMin": 1.0,
+    "TemplateScaleMax": 1.0,
+    "TemplateScaleStep": 0.1
+  },
+  {
+    "Id": "abyss_enter",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/enter.png",
+    "Threshold": 0.84
+  },
+  {
+    "Id": "abyss_touch_screen",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/touch_screen.png",
+    "Threshold": 0.68,
+    "TemplateScaleMin": 0.6,
+    "TemplateScaleMax": 1.55,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_treasure_chest",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/treasure_chest.png",
+    "Threshold": 0.8
+  },
+  {
+    "Id": "abyss_exit",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/exit.png",
+    "Threshold": 0.72,
+    "Text": "나가기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true,
+    "TemplateScaleMin": 0.7,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.06
+  },
+  {
+    "Id": "abyss_leave_dungeon",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "TemplatePath": "templates/leave_dungeon.png",
+    "Threshold": 0.68,
+    "Text": "던전 퇴장",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true,
+    "TemplateScaleMin": 0.6,
+    "TemplateScaleMax": 1.5,
+    "TemplateScaleStep": 0.06
+  },
+  {
+    "Id": "scene_skip",
+    "Kind": "template",
+    "Roi": {
+      "X": 430,
+      "Y": 20,
+      "Width": 350,
+      "Height": 180
+    },
+    "TemplatePath": "templates/scene_skip_phone.jpg",
+    "Threshold": 0.62,
+    "TemplateScaleMin": 0.5,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.08
+  },
+  {
+    "Id": "abyss_popup_close",
+    "Kind": "template",
+    "Roi": {
+      "X": 140,
+      "Y": 800,
+      "Width": 300,
+      "Height": 190
+    },
+    "TemplatePath": "templates/popup_close.png",
+    "Threshold": 0.72,
+    "TemplateScaleMin": 0.7,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_dungeon_clear_visual",
+    "Kind": "template",
+    "Roi": {
+      "X": 120,
+      "Y": 120,
+      "Width": 560,
+      "Height": 300
+    },
+    "TemplatePath": "templates/dungeon_clear_v66.png",
+    "Threshold": 0.64,
+    "TemplateScaleMin": 0.65,
+    "TemplateScaleMax": 1.35,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_home_key",
+    "Kind": "template",
+    "Roi": {
+      "X": 590,
+      "Y": 20,
+      "Width": 150,
+      "Height": 130
+    },
+    "TemplatePath": "templates/outside_home_v75.png",
+    "Threshold": 0.76,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_end_key",
+    "Kind": "template",
+    "Roi": {
+      "X": 630,
+      "Y": 20,
+      "Width": 150,
+      "Height": 130
+    },
+    "TemplatePath": "templates/outside_end_v75.png",
+    "Threshold": 0.7,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_k_hud",
+    "Kind": "template",
+    "Roi": {
+      "X": 0,
+      "Y": 820,
+      "Width": 180,
+      "Height": 180
+    },
+    "TemplatePath": "templates/outside_k_v75.png",
+    "Threshold": 0.72,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "abyss_outside_i_hud",
+    "Kind": "template",
+    "Roi": {
+      "X": 620,
+      "Y": 800,
+      "Width": 180,
+      "Height": 200
+    },
+    "TemplatePath": "templates/outside_i_v75.png",
+    "Threshold": 0.72,
+    "TemplateScaleMin": 0.85,
+    "TemplateScaleMax": 1.15,
+    "TemplateScaleStep": 0.05
+  }
+]
+
+
+=== SEARCH: menu/click/selected/abyss/던전/어비스/망령 ===
+FishingAutomation\abyss\config\appsettings.json:10:   "ClickSettleMs": 350,
+FishingAutomation\abyss\config\scenario.json:2:   "Name": "Abyss infinite loop - 10min timeout exit recovery",
+FishingAutomation\abyss\config\scenario.json:6:       "Target": "abyss_popup_close",
+FishingAutomation\abyss\config\scenario.json:7:       "Action": "click",
+FishingAutomation\abyss\config\scenario.json:13:       "Action": "click",
+FishingAutomation\abyss\config\scenario.json:21:       "Type": "wait_click",
+FishingAutomation\abyss\config\scenario.json:22:       "Target": "abyss_menu",
+FishingAutomation\abyss\config\scenario.json:26:       "Name": "2. 어비스 클릭",
+FishingAutomation\abyss\config\scenario.json:27:       "Type": "wait_click",
+FishingAutomation\abyss\config\scenario.json:28:       "Target": "abyss_icon",
+FishingAutomation\abyss\config\scenario.json:32:       "Name": "3. 선택 던전 클릭",
+FishingAutomation\abyss\config\scenario.json:33:       "Type": "wait_click",
+FishingAutomation\abyss\config\scenario.json:34:       "Target": "abyss_selected_dungeon",
+FishingAutomation\abyss\config\scenario.json:39:       "Type": "wait_click",
+FishingAutomation\abyss\config\scenario.json:40:       "Target": "abyss_enter",
+FishingAutomation\abyss\config\scenario.json:45:       "Type": "wait_click",
+FishingAutomation\abyss\config\scenario.json:46:       "Target": "abyss_touch_screen",
+FishingAutomation\abyss\config\scenario.json:48:       "TimeoutClickTarget": "abyss_leave_dungeon",
+FishingAutomation\abyss\config\scenario.json:49:       "TimeoutClickTargetWaitSeconds": 90,
+FishingAutomation\abyss\config\scenario.json:50:       "TimeoutFollowupClickTarget": "abyss_exit",
+FishingAutomation\abyss\config\scenario.json:57:       "Target": "abyss_treasure_chest",
+FishingAutomation\abyss\config\scenario.json:62:       "Type": "wait_click",
+FishingAutomation\abyss\config\scenario.json:63:       "Target": "abyss_exit",
+FishingAutomation\abyss\config\targets.json:3:     "Id": "abyss_menu",
+FishingAutomation\abyss\config\targets.json:11:     "TemplatePath": "templates/menu.png",
+FishingAutomation\abyss\config\targets.json:15:     "Id": "abyss_icon",
+FishingAutomation\abyss\config\targets.json:23:     "TemplatePath": "templates/abyss.png",
+FishingAutomation\abyss\config\targets.json:30:     "Id": "abyss_dungeon_hallucination_anchorage",
+FishingAutomation\abyss\config\targets.json:45:     "Id": "abyss_dungeon_madness_cave",
+FishingAutomation\abyss\config\targets.json:60:     "Id": "abyss_dungeon_scattered_waterway",
+FishingAutomation\abyss\config\targets.json:75:     "Id": "abyss_enter",
+FishingAutomation\abyss\config\targets.json:87:     "Id": "abyss_touch_screen",
+FishingAutomation\abyss\config\targets.json:102:     "Id": "abyss_treasure_chest",
+FishingAutomation\abyss\config\targets.json:114:     "Id": "abyss_exit",
+FishingAutomation\abyss\config\targets.json:132:     "Id": "abyss_leave_dungeon",
+FishingAutomation\abyss\config\targets.json:142:     "Text": "던전 퇴장",
+FishingAutomation\abyss\config\targets.json:165:     "Id": "abyss_popup_close",
+FishingAutomation\abyss\config\targets.json:180:     "Id": "abyss_dungeon_clear_visual",
+FishingAutomation\abyss\config\targets.json:195:     "Id": "abyss_outside_home_key",
+FishingAutomation\abyss\config\targets.json:210:     "Id": "abyss_outside_end_key",
+FishingAutomation\abyss\config\targets.json:225:     "Id": "abyss_outside_k_hud",
+FishingAutomation\abyss\config\targets.json:240:     "Id": "abyss_outside_i_hud",
+FishingAutomation\dungeon\config\appsettings.json:10:   "ClickSettleMs": 350,
+FishingAutomation\dungeon\config\scenario.json:7:       "Action": "click",
+FishingAutomation\dungeon\config\scenario.json:18:       "AlternativeTarget": "selected",
+FishingAutomation\dungeon\config\scenario.json:19:       "ClickAlternativeThenWaitPrimary": true
+FishingAutomation\dungeon\config\scenario.json:23:       "Type": "wait_click",
+FishingAutomation\dungeon\config\scenario.json:29:       "Type": "wait_click",
+FishingAutomation\dungeon\config\scenario.json:35:       "Type": "wait_click",
+FishingAutomation\dungeon\config\targets.json:44:     "Id": "selected",
+FishingAutomation\dungeon\InputController.cs:8:     void ClickClientPoint(nint hwnd, Point clientPoint);
+FishingAutomation\dungeon\InputController.cs:48:     public void ClickClientPoint(nint hwnd, Point clientPoint)
+FishingAutomation\dungeon\InputController.cs:61:         // The click is only useful when Mabinogi Mobile is foreground.
+FishingAutomation\dungeon\InputController.cs:65:         // Move with the selected Interception mouse device.
+FishingAutomation\dungeon\InputController.cs:334:     public void ClickClientPoint(nint hwnd, Point clientPoint)
+FishingAutomation\dungeon\Models.cs:16:     public int ClickSettleMs { get; set; } = 350;
+FishingAutomation\dungeon\Models.cs:348:     public string Action { get; set; } = "stop"; // stop | click | restart_cycle
+FishingAutomation\dungeon\Models.cs:358:     public string Type { get; set; } = "wait_click"; // wait_click | wait
+FishingAutomation\dungeon\Models.cs:364:     public bool ClickAlternativeThenWaitPrimary { get; set; }
+FishingAutomation\dungeon\Models.cs:366:     // Optional timeout recovery flow. Used by Abyss to leave a dungeon when
+FishingAutomation\dungeon\Models.cs:368:     public string? TimeoutClickTarget { get; set; }
+FishingAutomation\dungeon\Models.cs:369:     public int TimeoutClickTargetWaitSeconds { get; set; } = 60;
+FishingAutomation\dungeon\Models.cs:370:     public string? TimeoutFollowupClickTarget { get; set; }
+FishingAutomation\dungeon\ScenarioEngine.cs:115:         bool abyss = string.Equals(new DirectoryInfo(_baseDir).Name, "abyss", StringComparison.OrdinalIgnoreCase);
+FishingAutomation\dungeon\ScenarioEngine.cs:116:         if (abyss)
+FishingAutomation\dungeon\ScenarioEngine.cs:117:             return await TryAbyssInternalRecoveryAsync(ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:119:         // Non-Abyss recovery remains unchanged.
+FishingAutomation\dungeon\ScenarioEngine.cs:132:     private async Task<bool> TryAbyssInternalRecoveryAsync(CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:136:         long lastTouchClick = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:137:         long lastExitClick = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:138:         long lastPopupClick = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:139:         int touchClicks = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:140:         int exitClicks = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:147:         Log?.Invoke("[어비스 자동복구] 상태 기반 복구 시작: 전투 대기 -> 클리어 터치 -> 보물상자 확인 -> 나가기 -> 던전 밖 HUD 확인");
+FishingAutomation\dungeon\ScenarioEngine.cs:155:             if (await DetectAbyssOutsideWorkflowAsync(frame, ct))
+FishingAutomation\dungeon\ScenarioEngine.cs:158:                 Log?.Invoke($"[어비스 자동복구] 던전 밖 HUD 확인 {outsideConsecutive}/3");
+FishingAutomation\dungeon\ScenarioEngine.cs:161:                     Log?.Invoke("[어비스 자동복구] 던전 밖 HUD 3회 연속 확인 완료 -> 처음부터 재시작");
+FishingAutomation\dungeon\ScenarioEngine.cs:169:             if (now - lastPopupClick >= 2500)
+FishingAutomation\dungeon\ScenarioEngine.cs:171:                 var popupClose = await _detector.DetectAsync("abyss_popup_close", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:176:                     Log?.Invoke($"[어비스 자동복구] 팝업 닫기 이미지 확인 -> 클릭 @ {popupClose.Bounds}");
+FishingAutomation\dungeon\ScenarioEngine.cs:177:                     _input.ClickClientPoint(_hwnd, popupClose.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:178:                     lastPopupClick = now;
+FishingAutomation\dungeon\ScenarioEngine.cs:179:                     await Task.Delay(Math.Max(700, _settings.ClickSettleMs), ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:184:             var clearVisual = await DetectAbyssConfirmedClearAsync(frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:190:                 var touch = await _detector.DetectAsync("abyss_touch_screen", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:191:                 if (touch.Found && now - lastTouchClick >= 1800)
+FishingAutomation\dungeon\ScenarioEngine.cs:195:                     touchClicks++;
+FishingAutomation\dungeon\ScenarioEngine.cs:196:                     Log?.Invoke($"[어비스 자동복구] 클리어 화면 동시 이미지 확인 완료 -> 화면 터치 {touchClicks}회 @ {touch.Bounds}");
+FishingAutomation\dungeon\ScenarioEngine.cs:197:                     _input.ClickClientPoint(_hwnd, touch.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:198:                     lastTouchClick = now;
+FishingAutomation\dungeon\ScenarioEngine.cs:199:                     await Task.Delay(Math.Max(900, _settings.ClickSettleMs), ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:208:                 var residual = await DetectAbyssClearVisualAsync(frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:212:                     Log?.Invoke($"[어비스 자동복구] 클리어 화면 사라짐 확인 {clearGoneConsecutive}/3");
+FishingAutomation\dungeon\ScenarioEngine.cs:216:                         Log?.Invoke("[어비스 자동복구] 클리어 화면 3회 연속 사라짐 확인 -> 보물상자/나가기 탐색");
+FishingAutomation\dungeon\ScenarioEngine.cs:232:                 var treasure = await _detector.DetectAsync("abyss_treasure_chest", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:236:                     Log?.Invoke($"[어비스 자동복구] 보물상자 확인 완료 @ {treasure.Bounds} -> 나가기 탐색");
+FishingAutomation\dungeon\ScenarioEngine.cs:240:             if (now - lastExitClick >= 2200)
+FishingAutomation\dungeon\ScenarioEngine.cs:242:                 var exit = await _detector.DetectAsync("abyss_exit", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:247:                     exitClicks++;
+FishingAutomation\dungeon\ScenarioEngine.cs:248:                     Log?.Invoke($"[어비스 자동복구] 나가기 확인 {exitClicks}회 -> 클릭 @ {exit.Bounds}");
+FishingAutomation\dungeon\ScenarioEngine.cs:249:                     _input.ClickClientPoint(_hwnd, exit.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:250:                     lastExitClick = now;
+FishingAutomation\dungeon\ScenarioEngine.cs:251:                     await Task.Delay(Math.Max(1000, _settings.ClickSettleMs), ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:260:         Log?.Invoke($"[어비스 자동복구] {RecoveryTimeoutSeconds}초 동안 던전 밖 복귀를 완료하지 못함");
+FishingAutomation\dungeon\ScenarioEngine.cs:330:             var selected = await _detector.DetectAsync("selected", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:332:             if (selected.Found)
+FishingAutomation\dungeon\ScenarioEngine.cs:335:                     $"[도전 안전확인] 선택됨 발견 -> 1회 클릭 후 재확인 @ {selected.Bounds}");
+FishingAutomation\dungeon\ScenarioEngine.cs:339:                 _input.ClickClientPoint(_hwnd, selected.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:341:                 await Task.Delay(_settings.ClickSettleMs, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:388:             var finalSelected =
+FishingAutomation\dungeon\ScenarioEngine.cs:389:                 await _detector.DetectAsync("selected", finalFrame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:391:             if (finalSelected.Found)
+FishingAutomation\dungeon\ScenarioEngine.cs:398:                 _input.ClickClientPoint(_hwnd, finalSelected.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:400:                 await Task.Delay(_settings.ClickSettleMs, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:438:         bool alternativeClicked = false;
+FishingAutomation\dungeon\ScenarioEngine.cs:439:         int abyssClearConsecutive = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:446:             // Abyss clear screen must win over the global scene-skip monitor.
+FishingAutomation\dungeon\ScenarioEngine.cs:449:             if (step.Target.Equals("abyss_touch_screen", StringComparison.OrdinalIgnoreCase))
+FishingAutomation\dungeon\ScenarioEngine.cs:451:                 found = await DetectAbyssConfirmedClearAsync(frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:454:                     abyssClearConsecutive = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:460:                     Log?.Invoke("[어비스] 클리어 화면 동시 이미지 확인 완료 -> 터치 문구 클릭 단계 진행");
+FishingAutomation\dungeon\ScenarioEngine.cs:461:                     abyssClearConsecutive = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:474:                 if (step.Type.Equals("wait_click", StringComparison.OrdinalIgnoreCase))
+FishingAutomation\dungeon\ScenarioEngine.cs:478:                     if (step.Target.Equals("abyss_touch_screen", StringComparison.OrdinalIgnoreCase))
+FishingAutomation\dungeon\ScenarioEngine.cs:480:                         await AdvanceAbyssClearScreenAsync(found, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:484:                         _input.ClickClientPoint(_hwnd, found.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:485:                         await Task.Delay(_settings.ClickSettleMs, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:488:                     if (step.Target.Equals("abyss_exit", StringComparison.OrdinalIgnoreCase))
+FishingAutomation\dungeon\ScenarioEngine.cs:489:                         await WaitForAbyssHomeAfterNormalExitAsync(ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:498:             if (!alternativeClicked && step.ClickAlternativeThenWaitPrimary && !string.IsNullOrWhiteSpace(step.AlternativeTarget))
+FishingAutomation\dungeon\ScenarioEngine.cs:506:                     _input.ClickClientPoint(_hwnd, alt.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:507:                     alternativeClicked = true;
+FishingAutomation\dungeon\ScenarioEngine.cs:508:                     await Task.Delay(_settings.ClickSettleMs, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:516:         // Optional timeout recovery: click a leave/escape control, click a
+FishingAutomation\dungeon\ScenarioEngine.cs:518:         if (!string.IsNullOrWhiteSpace(step.TimeoutClickTarget))
+FishingAutomation\dungeon\ScenarioEngine.cs:521:             await ClickTargetWithTimeoutAsync(
+FishingAutomation\dungeon\ScenarioEngine.cs:522:                 step.TimeoutClickTarget,
+FishingAutomation\dungeon\ScenarioEngine.cs:523:                 step.TimeoutClickTargetWaitSeconds,
+FishingAutomation\dungeon\ScenarioEngine.cs:524:                 $"{step.Name} / 던전 퇴장",
+FishingAutomation\dungeon\ScenarioEngine.cs:527:             if (!string.IsNullOrWhiteSpace(step.TimeoutFollowupClickTarget))
+FishingAutomation\dungeon\ScenarioEngine.cs:529:                 await ClickTargetWithTimeoutAsync(
+FishingAutomation\dungeon\ScenarioEngine.cs:530:                     step.TimeoutFollowupClickTarget,
+FishingAutomation\dungeon\ScenarioEngine.cs:536:             if (string.Equals(new DirectoryInfo(_baseDir).Name, "abyss", StringComparison.OrdinalIgnoreCase) &&
+FishingAutomation\dungeon\ScenarioEngine.cs:537:                 string.Equals(step.TimeoutFollowupClickTarget, "abyss_exit", StringComparison.OrdinalIgnoreCase))
+FishingAutomation\dungeon\ScenarioEngine.cs:539:                 Log?.Invoke("[어비스] 강제 퇴장 후 던전 밖 복귀 확인");
+FishingAutomation\dungeon\ScenarioEngine.cs:540:                 await WaitForAbyssHomeAfterNormalExitAsync(ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:545:                 Log?.Invoke($"[어비스] 강제 퇴장 완료 및 밖 확인 -> {step.TimeoutRestartDelaySeconds}초 대기 후 처음부터 재시작");
+FishingAutomation\dungeon\ScenarioEngine.cs:576:     private async Task<DetectionResult> DetectAbyssConfirmedClearAsync(Bitmap frame, CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:578:         var clearTitle = await _detector.DetectAsync("abyss_dungeon_clear_visual", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:579:         var touch = await _detector.DetectAsync("abyss_touch_screen", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:584:             Log?.Invoke($"[어비스] 클리어 후보 점수: title={clearTitle.Score:0.000}, touch={touch.Score:0.000}");
+FishingAutomation\dungeon\ScenarioEngine.cs:588:     private async Task<DetectionResult> DetectAbyssClearVisualAsync(Bitmap frame, CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:590:         var clearTitle = await _detector.DetectAsync("abyss_dungeon_clear_visual", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:592:         return await _detector.DetectAsync("abyss_touch_screen", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:595:     private async Task<DetectionResult> WaitForAbyssTouchPromptAsync(CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:605:             var touch = await _detector.DetectAsync("abyss_touch_screen", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:608:                 Log?.Invoke($"[어비스] 화면 터치 문구 확인 -> 해당 위치 클릭 준비 @ {touch.Bounds}");
+FishingAutomation\dungeon\ScenarioEngine.cs:612:             var clearTitle = await _detector.DetectAsync("abyss_dungeon_clear_visual", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:618:                     Log?.Invoke("[어비스] 터치 문구 대기 중 클리어 화면이 이미 3회 연속 사라짐 -> 전환 완료로 처리");
+FishingAutomation\dungeon\ScenarioEngine.cs:630:         throw new TimeoutException("어비스 클리어 화면은 감지했지만 '화면을 터치해 주세요' 이미지를 20초 안에 찾지 못했습니다.");
+FishingAutomation\dungeon\ScenarioEngine.cs:633:     private async Task WaitForAbyssClearScreenGoneAsync(CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:637:         int retryClicks = 0;
+FishingAutomation\dungeon\ScenarioEngine.cs:643:             var clear = await DetectAbyssClearVisualAsync(frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:648:                 Log?.Invoke($"[어비스] 클리어 화면 사라짐 확인 {goneConsecutive}/3");
+FishingAutomation\dungeon\ScenarioEngine.cs:651:                     Log?.Invoke("[어비스] 클리어 화면 3회 연속 사라짐 확인 -> 보물상자 단계 진행");
+FishingAutomation\dungeon\ScenarioEngine.cs:659:                 // If the result screen stayed up, retry once, but still click only the
+FishingAutomation\dungeon\ScenarioEngine.cs:660:                 // actual touch-prompt image. Never click the clear-title match.
+FishingAutomation\dungeon\ScenarioEngine.cs:661:                 if (retryClicks < 1 && sw.Elapsed >= TimeSpan.FromSeconds(2))
+FishingAutomation\dungeon\ScenarioEngine.cs:663:                     var touch = await _detector.DetectAsync("abyss_touch_screen", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:668:                         Log?.Invoke($"[어비스] 클리어 화면 유지 -> 터치 문구 위치 1회 재클릭 @ {touch.Bounds}");
+FishingAutomation\dungeon\ScenarioEngine.cs:669:                         _input.ClickClientPoint(_hwnd, touch.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:670:                         retryClicks++;
+FishingAutomation\dungeon\ScenarioEngine.cs:671:                         await Task.Delay(Math.Max(700, _settings.ClickSettleMs), ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:680:         throw new TimeoutException("어비스 클리어 화면 클릭 후 화면 전환을 20초 안에 확정하지 못했습니다. 보물상자 단계로 넘어가지 않습니다.");
+FishingAutomation\dungeon\ScenarioEngine.cs:683:     private async Task AdvanceAbyssClearScreenAsync(DetectionResult firstDetection, CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:685:         _ = firstDetection; // Recognition proves clear; it is never used as a click position in v67.
+FishingAutomation\dungeon\ScenarioEngine.cs:686:         Log?.Invoke("[어비스] 클리어 이미지 2회 확인 완료 -> 터치 문구 이미지를 별도로 찾음");
+FishingAutomation\dungeon\ScenarioEngine.cs:688:         var touch = await WaitForAbyssTouchPromptAsync(ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:694:         Log?.Invoke($"[어비스] '화면을 터치해 주세요' 위치 클릭 @ {touch.Bounds}");
+FishingAutomation\dungeon\ScenarioEngine.cs:695:         _input.ClickClientPoint(_hwnd, touch.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:696:         await Task.Delay(Math.Max(700, _settings.ClickSettleMs), ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:700:         await WaitForAbyssClearScreenGoneAsync(ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:703:     private async Task<bool> DetectAbyssOutsideWorkflowAsync(Bitmap frame, CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:705:         var home = await _detector.DetectAsync("abyss_outside_home_key", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:707:         var end = await _detector.DetectAsync("abyss_outside_end_key", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:709:         var kHud = await _detector.DetectAsync("abyss_outside_k_hud", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:711:         var iHud = await _detector.DetectAsync("abyss_outside_i_hud", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:715:         var clearTitle = await _detector.DetectAsync("abyss_dungeon_clear_visual", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:717:         var touch = await _detector.DetectAsync("abyss_touch_screen", frame, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:721:     private async Task WaitForAbyssHomeAfterNormalExitAsync(CancellationToken ct)
+FishingAutomation\dungeon\ScenarioEngine.cs:723:         Log?.Invoke("[어비스] 나가기 클릭 완료 -> 던전 밖 고정 HUD 복귀 확인 중");
+FishingAutomation\dungeon\ScenarioEngine.cs:731:             if (await DetectAbyssOutsideWorkflowAsync(frame, ct))
+FishingAutomation\dungeon\ScenarioEngine.cs:734:                 Log?.Invoke($"[어비스] 던전 밖 HUD 확인 {outsideConsecutive}/3");
+FishingAutomation\dungeon\ScenarioEngine.cs:737:                     Log?.Invoke("[어비스] 던전 밖 HUD 3회 연속 확인 완료 -> 다음 입장 준비");
+FishingAutomation\dungeon\ScenarioEngine.cs:748:         throw new TimeoutException("나가기 후 60초 안에 던전 밖 고정 HUD(Home+End+K+I)를 확인하지 못했습니다.");
+FishingAutomation\dungeon\ScenarioEngine.cs:751:     private async Task ClickTargetWithTimeoutAsync(
+FishingAutomation\dungeon\ScenarioEngine.cs:773:                 _input.ClickClientPoint(_hwnd, found.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:774:                 await Task.Delay(_settings.ClickSettleMs, ct);
+FishingAutomation\dungeon\ScenarioEngine.cs:807:                 case "click":
+FishingAutomation\dungeon\ScenarioEngine.cs:811:                     _input.ClickClientPoint(_hwnd, r.Center);
+FishingAutomation\dungeon\ScenarioEngine.cs:812:                     await Task.Delay(_settings.ClickSettleMs, ct);
+FishingAutomation\dungeon_config\appsettings.json:10:   "ClickSettleMs": 350,
+FishingAutomation\dungeon_config\scenario.json:7:       "Action": "click",
+FishingAutomation\dungeon_config\scenario.json:18:       "AlternativeTarget": "selected",
+FishingAutomation\dungeon_config\scenario.json:19:       "ClickAlternativeThenWaitPrimary": true
+FishingAutomation\dungeon_config\scenario.json:23:       "Type": "wait_click",
+FishingAutomation\dungeon_config\scenario.json:29:       "Type": "wait_click",
+FishingAutomation\dungeon_config\scenario.json:35:       "Type": "wait_click",
+FishingAutomation\dungeon_config\targets.json:18:         "Id": "selected",
+FishingAutomation\dungeon_config\targets.json:156:     "Id": "selected",
+FishingAutomation\InputSender.cs:133:             (int Device, string HardwareId) selected;
+FishingAutomation\InputSender.cs:140:                     selected = devices[0];
+FishingAutomation\InputSender.cs:142:                 else selected = requested;
+FishingAutomation\InputSender.cs:146:                 selected = devices[0];
+FishingAutomation\InputSender.cs:149:             log.Write($"Interception 준비 완료: keyboard device={selected.Device}, hwid={selected.HardwareId}");
+FishingAutomation\InputSender.cs:150:             return new InterceptionInput(ctx, selected.Device, selected.HardwareId, log);
+FishingAutomation\MainForm.cs:24:     private readonly ComboBox _abyssDungeon = new();
+FishingAutomation\MainForm.cs:25:     private readonly Label _abyssDungeonLabel = new();
+FishingAutomation\MainForm.cs:103:             if (SelectedMode == "낚시" && (_activeMode is null || _activeMode == "낚시"))
+FishingAutomation\MainForm.cs:116:             if (!s.Contains("[던전]"))
+FishingAutomation\MainForm.cs:126:         _mode.SelectedIndexChanged += (_, _) =>
+FishingAutomation\MainForm.cs:128:             UpdateAbyssSelectorVisibility();
+FishingAutomation\MainForm.cs:136:         _abyssDungeon.SelectedIndexChanged += (_, _) =>
+FishingAutomation\MainForm.cs:138:             if (_activeMode is null && SelectedMode == "어비스")
+FishingAutomation\MainForm.cs:140:                 _log.Write($"[어비스] 선택 던전: {SelectedAbyssDungeon}");
+FishingAutomation\MainForm.cs:161:     private string SelectedMode => _mode.SelectedItem?.ToString() ?? "낚시";
+FishingAutomation\MainForm.cs:162:     private string SelectedAbyssDungeon => _abyssDungeon.SelectedItem?.ToString() ?? "허상의 정박지";
+FishingAutomation\MainForm.cs:163:     private string SelectedAbyssTargetId => SelectedAbyssDungeon switch
+FishingAutomation\MainForm.cs:165:         "광기의 동굴" => "abyss_dungeon_madness_cave",
+FishingAutomation\MainForm.cs:166:         "흩어진 물길" => "abyss_dungeon_scattered_waterway",
+FishingAutomation\MainForm.cs:167:         _ => "abyss_dungeon_hallucination_anchorage"
+FishingAutomation\MainForm.cs:172:     private void UpdateAbyssSelectorVisibility()
+FishingAutomation\MainForm.cs:174:         bool show = SelectedMode == "어비스";
+FishingAutomation\MainForm.cs:175:         _abyssDungeonLabel.Visible = show;
+FishingAutomation\MainForm.cs:176:         _abyssDungeon.Visible = show;
+FishingAutomation\MainForm.cs:177:         _abyssDungeon.Enabled = show && _activeMode is null;
+FishingAutomation\MainForm.cs:178:         _referenceDashboard?.UpdateAbyssDungeonPickerVisibility();
+FishingAutomation\MainForm.cs:187:         layout.Controls.Add(CreateMainButton("시작 (F9)", Blue, Color.White, StartSelected, new Padding(0, 0, 6, 0)), 0, 0);
+FishingAutomation\MainForm.cs:188:         layout.Controls.Add(CreateMainButton("정지 (F10)", PanelBg, TitleText, StopSelected, new Padding(3, 0, 3, 0)), 1, 0);
+FishingAutomation\MainForm.cs:220:     private Control CreateMainButton(string text, Color bg, Color fg, Action onClick, Padding margin)
+FishingAutomation\MainForm.cs:225:         button.Click += (_, _) => onClick();
+FishingAutomation\MainForm.cs:244:     private void StartSelected()
+FishingAutomation\MainForm.cs:253:         if (SelectedMode == "낚시") StartFishing();
+FishingAutomation\MainForm.cs:254:         else if (SelectedMode == "던전") _ = StartScenarioAsync("던전", "dungeon");
+FishingAutomation\MainForm.cs:255:         else _ = StartScenarioAsync("어비스", "abyss");
+FishingAutomation\MainForm.cs:301:             if (modeName == "어비스")
+FishingAutomation\MainForm.cs:305:                     if (step.Target.Equals("abyss_selected_dungeon", StringComparison.OrdinalIgnoreCase))
+FishingAutomation\MainForm.cs:306:                         step.Target = SelectedAbyssTargetId;
+FishingAutomation\MainForm.cs:308:                 _log.Write($"[어비스] 무한 반복 · 선택 던전={SelectedAbyssDungeon}");
+FishingAutomation\MainForm.cs:311:             // v59: Dungeon/Abyss always use the canonical client geometry.
+FishingAutomation\MainForm.cs:318:             _abyssDungeon.Enabled = false;
+FishingAutomation\MainForm.cs:366:                             UpdateAbyssSelectorVisibility();
+FishingAutomation\MainForm.cs:380:             UpdateAbyssSelectorVisibility();
+FishingAutomation\MainForm.cs:485:         StopSelected();
+FishingAutomation\MainForm.cs:488:     private void StopSelected()
+FishingAutomation\MainForm.cs:498:             UpdateAbyssSelectorVisibility();
+FishingAutomation\MainForm.cs:504:             _log.Write($"[{_activeMode ?? "던전"}] 정지 요청(F10)");
+FishingAutomation\MainForm.cs:525:         if (SelectedMode == "낚시")
+FishingAutomation\MainForm.cs:533:             _log.Write($"[{SelectedMode}] 마비노기 모바일 창 새로고침: {windows.Count}개 발견");
+FishingAutomation\MainForm.cs:534:             SetStatus(windows.Count > 0 ? $"{SelectedMode} 준비 완료" : "게임 창 없음", windows.Count > 0 ? Green : Color.Firebrick);
+FishingAutomation\MainForm.cs:541:         if (SelectedMode == "낚시")
+FishingAutomation\MainForm.cs:550:             string readyText = SelectedMode == "어비스"
+FishingAutomation\MainForm.cs:551:                 ? $"어비스 준비 완료 · {SelectedAbyssDungeon}"
+FishingAutomation\MainForm.cs:552:                 : $"{SelectedMode} 준비 완료";
+FishingAutomation\MainForm.cs:567:         string mode = _activeMode ?? SelectedMode;
+FishingAutomation\MainForm.cs:568:         if (mode == "던전" || mode == "어비스")
+FishingAutomation\MainForm.cs:598:         if ((_activeMode ?? SelectedMode) == "낚시")
+FishingAutomation\MainForm.cs:619:                 _ = _notifier.SendAlertAsync("네트워크 오류 반복", $"네트워크 재시도가 {_networkRetryCount}회 연속 발생했습니다. 현재 모드: {_activeMode ?? SelectedMode}", true);
+FishingAutomation\MainForm.cs:650:             _ = _notifier.SendAlertAsync("던전 강제 퇴장 지연", "10분 제한 후 시작된 퇴장 절차가 설정 시간 안에 완료되지 않았습니다.", true);
+FishingAutomation\MainForm.cs:685:             else if (id == HOTKEY_START) StartSelected();
+FishingAutomation\MainForm.cs:686:             else if (id == HOTKEY_STOP) StopSelected();
+FishingAutomation\MainForm.cs:697:     // Reference UI buttons are custom drawn. Never allow a click/menu exception
+FishingAutomation\MainForm.Dashboard.cs:79:         b.Click += (_, _) => action();
+FishingAutomation\MainForm.Dashboard.cs:83:     private Button NavButton(string caption, Action action, bool selected = false)
+FishingAutomation\MainForm.Dashboard.cs:90:             BackColor = selected ? Color.FromArgb(15, 81, 157) : NavBg,
+FishingAutomation\MainForm.Dashboard.cs:91:             ForeColor = selected ? Color.White : Color.FromArgb(187, 209, 232),
+FishingAutomation\MainForm.Dashboard.cs:95:             Font = new Font("맑은 고딕", 10f, selected ? FontStyle.Bold : FontStyle.Regular),
+FishingAutomation\MainForm.Dashboard.cs:98:         b.FlatAppearance.BorderSize = selected ? 1 : 0;
+FishingAutomation\MainForm.Dashboard.cs:99:         b.FlatAppearance.BorderColor = selected ? Accent : NavBg;
+FishingAutomation\MainForm.Dashboard.cs:101:         b.Click += (_, _) => action();
+FishingAutomation\MainForm.Dashboard.cs:124:         _mode.Items.AddRange(new object[] { "낚시", "던전", "어비스" });
+FishingAutomation\MainForm.Dashboard.cs:125:         _mode.SelectedIndex = 0;
+FishingAutomation\MainForm.Dashboard.cs:126:         _abyssDungeon.Items.AddRange(new object[] { "허상의 정박지", "광기의 동굴", "흩어진 물길" });
+FishingAutomation\MainForm.Dashboard.cs:127:         _abyssDungeon.SelectedIndex = 0;
+FishingAutomation\MainForm.Dashboard.cs:154:         var stop = SmallButton("정지 (F10)", StopSelected); stop.BackColor = Color.FromArgb(126, 39, 55);
+FishingAutomation\MainForm.Dashboard.cs:209:         var menu = new TableLayoutPanel { Dock = DockStyle.Top, Height = 330, ColumnCount = 1, RowCount = 6 };
+FishingAutomation\MainForm.Dashboard.cs:210:         for (int i = 0; i < 6; i++) menu.RowStyles.Add(new RowStyle(SizeType.Percent, 16.666f));
+FishingAutomation\MainForm.Dashboard.cs:211:         menu.Controls.Add(NavButton("⌂   홈", () => { }, true), 0, 0);
+FishingAutomation\MainForm.Dashboard.cs:212:         menu.Controls.Add(NavButton("●   낚시", () => { if (!AnyRunning && _activeMode is null) _mode.SelectedIndex = 0; }), 0, 1);
+FishingAutomation\MainForm.Dashboard.cs:213:         menu.Controls.Add(NavButton("⚔   던전", () => { if (!AnyRunning && _activeMode is null) _mode.SelectedIndex = 1; }), 0, 2);
+FishingAutomation\MainForm.Dashboard.cs:214:         menu.Controls.Add(NavButton("◇   어비스", () => { if (!AnyRunning && _activeMode is null) _mode.SelectedIndex = 2; }), 0, 3);
+FishingAutomation\MainForm.Dashboard.cs:216:         menu.Controls.Add(life, 0, 4);
+FishingAutomation\MainForm.Dashboard.cs:217:         menu.Controls.Add(NavButton("⚙   설정", () => OpenPackagePath(Path.Combine("FishingAutomation", "config.json"))), 0, 5);
+FishingAutomation\MainForm.Dashboard.cs:230:         mini.Click += (_, _) => ToggleMini(true);
+FishingAutomation\MainForm.Dashboard.cs:233:         side.Controls.Add(menu);
+FishingAutomation\MainForm.Dashboard.cs:274:         var gallery = BuildAbyssDungeonGallery();
+FishingAutomation\MainForm.Dashboard.cs:333:             string path = Path.Combine(UpdateManager.FindPackageRoot(), "FishingAutomation", "abyss", "templates", "hallucination_anchorage.png");
+FishingAutomation\MainForm.Dashboard.cs:347:         row.Controls.Add(InfoCard("▣", "선택 던전", _currentDungeonValue), 1, 0);
+FishingAutomation\MainForm.Dashboard.cs:499:     private Control BuildAbyssDungeonGallery()
+FishingAutomation\MainForm.Dashboard.cs:507:         outer.Controls.Add(SectionTitle("🎮  어비스 던전 선택", 11f), 0, 0);
+FishingAutomation\MainForm.Dashboard.cs:520:                 bool selected = tile.Tag is int idx && idx == _abyssDungeon.SelectedIndex;
+FishingAutomation\MainForm.Dashboard.cs:521:                 using var pen = new Pen(selected ? Color.FromArgb(0, 190, 255) : Line, selected ? 4f : 1f);
+FishingAutomation\MainForm.Dashboard.cs:533:                 string path = Path.Combine(UpdateManager.FindPackageRoot(), "FishingAutomation", "abyss", "templates", files[i]);
+FishingAutomation\MainForm.Dashboard.cs:544:                 _mode.SelectedIndex = 2;
+FishingAutomation\MainForm.Dashboard.cs:545:                 _abyssDungeon.SelectedIndex = index;
+FishingAutomation\MainForm.Dashboard.cs:548:             tile.Click += (_, _) => select(); picture.Click += (_, _) => select(); name.Click += (_, _) => select(); description.Click += (_, _) => select(); choose.Click += (_, _) => select();
+FishingAutomation\MainForm.Dashboard.cs:564:         _logToggle.Click += (_, _) => { _logExpanded = !_logExpanded; ApplyLogVisibility(); };
+FishingAutomation\MainForm.Dashboard.cs:567:         _mainActionButton.Click += (_, _) => { if (AnyRunning) StopSelected(); else StartSelected(); };
+FishingAutomation\MainForm.Dashboard.cs:606:         if (text.Contains("abyss_dungeon_hallucination_anchorage")) { _stageProgress = Math.Max(_stageProgress, 30); _recentDetectText = "허상의 정박지.png"; }
+FishingAutomation\MainForm.Dashboard.cs:607:         if (text.Contains("abyss_dungeon_madness_cave")) { _stageProgress = Math.Max(_stageProgress, 30); _recentDetectText = "광기의 동굴.png"; }
+FishingAutomation\MainForm.Dashboard.cs:608:         if (text.Contains("abyss_dungeon_scattered_waterway")) { _stageProgress = Math.Max(_stageProgress, 30); _recentDetectText = "흩어진 물길.png"; }
+FishingAutomation\MainForm.Dashboard.cs:609:         if (text.Contains("abyss_menu")) _recentDetectText = "어비스 메뉴";
+FishingAutomation\MainForm.Dashboard.cs:611:         if (text.Contains("abyss_touch_screen")) _stageProgress = Math.Max(_stageProgress, 65);
+FishingAutomation\MainForm.Dashboard.cs:612:         if (text.Contains("abyss_treasure_chest")) { _stageProgress = Math.Max(_stageProgress, 82); _recentDetectText = "보물상자"; }
+FishingAutomation\MainForm.Dashboard.cs:613:         if (text.Contains("abyss_exit") || text.Contains("abyss_leave_dungeon")) _stageProgress = Math.Max(_stageProgress, 92);
+FishingAutomation\MainForm.Dashboard.cs:617:             if (text.Contains("abyss_touch_screen"))
+FishingAutomation\MainForm.Dashboard.cs:622:                 SetStatus("던전 진행 중 · 클리어 화면 대기", Blue);
+FishingAutomation\MainForm.Dashboard.cs:624:             else if (text.Contains("abyss_treasure_chest")) { _stageStartedAt = null; SetStatus("보상 확인 · 보물상자 대기", Blue); }
+FishingAutomation\MainForm.Dashboard.cs:625:             else if (text.Contains("abyss_exit") || text.Contains("abyss_leave_dungeon")) SetStatus("퇴장 중", Blue);
+FishingAutomation\MainForm.Dashboard.cs:630:         if (text.Contains("나가기 클릭 완료")) { _stageStartedAt = null; SetStatus("던전 밖 복귀 확인 중", Blue); }
+FishingAutomation\MainForm.Dashboard.cs:631:         if (text.Contains("던전 밖 복귀 확인 완료")) { _stageStartedAt = null; _stageProgress = 100; SetStatus("완료 · 다음 입장 준비", Green); }
+FishingAutomation\MainForm.Dashboard.cs:645:         bool abyss = (_activeMode ?? SelectedMode) == "어비스";
+FishingAutomation\MainForm.Dashboard.cs:646:         _currentModeValue.Text = _activeMode ?? SelectedMode;
+FishingAutomation\MainForm.Dashboard.cs:647:         _currentDungeonValue.Text = abyss ? SelectedAbyssDungeon : "—";
+FishingAutomation\MainForm.Dashboard.cs:649:         if (abyss && currentStepText.StartsWith("어비스 준비 완료", StringComparison.Ordinal))
+FishingAutomation\MainForm.Dashboard.cs:650:             currentStepText = $"어비스 준비 완료\n{SelectedAbyssDungeon}";
+FishingAutomation\MainForm.Dashboard.cs:653:         _timeoutValue.Text = abyss ? _timeoutExits.ToString() : "0";
+FishingAutomation\MainForm.Dashboard.cs:658:             bool selected = i == _abyssDungeon.SelectedIndex;
+FishingAutomation\MainForm.Dashboard.cs:660:             _dungeonButtons[i].Text = selected ? "●  선택됨" : "○  선택하기";
+FishingAutomation\MainForm.Dashboard.cs:661:             _dungeonButtons[i].BackColor = selected ? Color.FromArgb(11, 72, 132) : Color.FromArgb(8, 30, 51);
+FishingAutomation\MainForm.Dashboard.cs:662:             _dungeonButtons[i].ForeColor = selected ? Color.White : Color.FromArgb(190, 215, 239);
+FishingAutomation\MainForm.Dashboard.cs:672:         else _stageTime.Text = abyss ? "10분 초과 시 자동 퇴장 · 실패 시 Smart Recovery" : "F9 시작 · F10 정지 · F8 테스트";
+FishingAutomation\MainForm.Dashboard.cs:674:         _miniInfo.Text = $"{(abyss ? SelectedAbyssDungeon : _activeMode ?? SelectedMode)} · {_stageTime.Text}";
+FishingAutomation\MainForm.Dashboard.cs:729:                 && File.Exists(Path.Combine(package, "FishingAutomation", "abyss", "templates", "menu.png"));
+FishingAutomation\MainForm.ReferenceUI.cs:13:         _mode.Items.AddRange(new object[] { "낚시", "던전", "어비스" });
+FishingAutomation\MainForm.ReferenceUI.cs:14:         _mode.SelectedIndex = 0;
+FishingAutomation\MainForm.ReferenceUI.cs:15:         _abyssDungeon.Items.AddRange(new object[] { "허상의 정박지", "광기의 동굴", "흩어진 물길" });
+FishingAutomation\MainForm.ReferenceUI.cs:16:         _abyssDungeon.SelectedIndex = 0;
+FishingAutomation\MainForm.ReferenceUI.cs:43:         actions.Controls.Add(SmallButton("정지 (F10)", StopSelected), 0, 0);
+FishingAutomation\MainForm.ReferenceUI.cs:86:         private ContextMenuStrip? _openMenu;
+FishingAutomation\MainForm.ReferenceUI.cs:94:         private bool ShouldShowAbyssDungeonPicker =>
+FishingAutomation\MainForm.ReferenceUI.cs:95:             string.Equals(_owner._activeMode ?? _owner._mode.SelectedItem?.ToString(), "어비스", StringComparison.Ordinal);
+FishingAutomation\MainForm.ReferenceUI.cs:205:             AddButton("홈", new(18, 91, 170, 59), () => { owner._logExpanded = false; owner.ApplyLogVisibility(); }, "home", "nav-selected");
+FishingAutomation\MainForm.ReferenceUI.cs:207:             AddButton("던전", new(18, 231, 170, 59), () => SelectMode(1), "swords", "nav");
+FishingAutomation\MainForm.ReferenceUI.cs:208:             AddButton("어비스", new(18, 301, 170, 59), () => SelectMode(2), "abyss", "nav");
+FishingAutomation\MainForm.ReferenceUI.cs:212:             // Mode and dungeon selectors have native keyboard-focusable buttons and menus.
+FishingAutomation\MainForm.ReferenceUI.cs:213:             AddButton("현재 모드 선택", new(418, 249, 39, 63), ShowModeMenu, "chevron", "chrome");
+FishingAutomation\MainForm.ReferenceUI.cs:214:             AddButton("던전 선택", new(680, 249, 38, 63), ShowDungeonMenu, "chevron", "chrome");
+FishingAutomation\MainForm.ReferenceUI.cs:231:                 if (owner.AnyRunning) owner.StopSelected(); else owner.StartSelected();
+FishingAutomation\MainForm.ReferenceUI.cs:238:             UpdateAbyssDungeonPickerVisibility();
+FishingAutomation\MainForm.ReferenceUI.cs:248:                 _owner._mode.SelectedIndex = mode;
+FishingAutomation\MainForm.ReferenceUI.cs:255:             _owner.SafeUiAction("어비스 던전 선택", () =>
+FishingAutomation\MainForm.ReferenceUI.cs:258:                 if (index < 0 || index >= _owner._abyssDungeon.Items.Count) return;
+FishingAutomation\MainForm.ReferenceUI.cs:259:                 _owner._mode.SelectedIndex = 2;
+FishingAutomation\MainForm.ReferenceUI.cs:260:                 _owner._abyssDungeon.SelectedIndex = index;
+FishingAutomation\MainForm.ReferenceUI.cs:265:         private void ShowModeMenu()
+FishingAutomation\MainForm.ReferenceUI.cs:268:             ShowMenu(new[] { "낚시", "던전", "어비스" }, SelectMode, 418, 312);
+FishingAutomation\MainForm.ReferenceUI.cs:271:         private void ShowDungeonMenu()
+FishingAutomation\MainForm.ReferenceUI.cs:275:             // 허상의 정박지 / 광기의 동굴 / 흩어진 물길은 모두 어비스 전용이다.
+FishingAutomation\MainForm.ReferenceUI.cs:276:             // 현재 모드가 낚시 또는 던전이면 선택 던전 버튼을 눌러도
+FishingAutomation\MainForm.ReferenceUI.cs:277:             // 아무 메뉴도 표시하지 않는다. 왼쪽 낚시/던전 버튼으로
+FishingAutomation\MainForm.ReferenceUI.cs:279:             if (!string.Equals(_owner._mode.SelectedItem?.ToString(), "어비스", StringComparison.Ordinal))
+FishingAutomation\MainForm.ReferenceUI.cs:282:             ShowMenu(new[] { "허상의 정박지", "광기의 동굴", "흩어진 물길" }, SelectDungeon, 680, 312);
+FishingAutomation\MainForm.ReferenceUI.cs:285:         private void ShowMenu(string[] captions, Action<int> action, int x, int y)
+FishingAutomation\MainForm.ReferenceUI.cs:289:                 // Disposing a ContextMenuStrip synchronously from its Closed event can
+FishingAutomation\MainForm.ReferenceUI.cs:290:                 // race the final ToolStrip click/paint messages. Keep only one menu open
+FishingAutomation\MainForm.ReferenceUI.cs:291:                 // and let the closed menu be collected after WinForms has finished with it.
+FishingAutomation\MainForm.ReferenceUI.cs:292:                 if (_openMenu is { IsDisposed: false, Visible: true })
+FishingAutomation\MainForm.ReferenceUI.cs:293:                     _openMenu.Close();
+FishingAutomation\MainForm.ReferenceUI.cs:295:                 var menu = new ContextMenuStrip
+FishingAutomation\MainForm.ReferenceUI.cs:302:                 _openMenu = menu;
+FishingAutomation\MainForm.ReferenceUI.cs:307:                     menu.Items.Add(captions[i], null, (_, _) => _owner.SafeUiAction("선택 메뉴 항목", () => action(index)));
+FishingAutomation\MainForm.ReferenceUI.cs:310:                 menu.Closed += (_, _) =>
+FishingAutomation\MainForm.ReferenceUI.cs:312:                     if (ReferenceEquals(_openMenu, menu)) _openMenu = null;
+FishingAutomation\MainForm.ReferenceUI.cs:315:                 menu.Show(this, new Point((int)(x * ScaleX), (int)(y * ScaleY)));
+FishingAutomation\MainForm.ReferenceUI.cs:327:             button.Click += (_, _) => _owner.SafeUiAction(text, action);
+FishingAutomation\MainForm.ReferenceUI.cs:333:         public void UpdateAbyssDungeonPickerVisibility()
+FishingAutomation\MainForm.ReferenceUI.cs:335:             bool showButtons = ShouldShowAbyssDungeonPicker && !_owner._logExpanded;
+FishingAutomation\MainForm.ReferenceUI.cs:343:             UpdateAbyssDungeonPickerVisibility();
+FishingAutomation\MainForm.ReferenceUI.cs:365:             if (ShouldShowAbyssDungeonPicker && !_owner._logExpanded && y >= 685 && y <= 921 && x >= 235 && x < 1415)
+FishingAutomation\MainForm.ReferenceUI.cs:369:         protected override void OnMouseDoubleClick(MouseEventArgs e)
+FishingAutomation\MainForm.ReferenceUI.cs:371:             base.OnMouseDoubleClick(e);
+FishingAutomation\MainForm.ReferenceUI.cs:391:         private void Card(Graphics g, RectangleF r, bool selected = false)
+FishingAutomation\MainForm.ReferenceUI.cs:396:             if (selected)
+FishingAutomation\MainForm.ReferenceUI.cs:404:             using var pen = new Pen(selected ? _cyan : _line, selected ? 3 : 1);
+FishingAutomation\MainForm.ReferenceUI.cs:455:                 string path = Path.Combine(AppContext.BaseDirectory, "abyss", "previews", fileName);
+FishingAutomation\MainForm.ReferenceUI.cs:498:             Info(g, new(479, 241, 249, 83), "map", "선택 던전", _owner._currentDungeonValue.Text, 499);
+FishingAutomation\MainForm.ReferenceUI.cs:551:             if (ShouldShowAbyssDungeonPicker)
+FishingAutomation\MainForm.ReferenceUI.cs:555:                 TextAt(g, "어비스 던전 선택", new(286, 644, 1089, 37), 21, true, Color.White);
+FishingAutomation\MainForm.ReferenceUI.cs:562:                     Card(g, new(x, 685, tileWidth, 236), i == _owner._abyssDungeon.SelectedIndex);
+FishingAutomation\MainForm.ReferenceUI.cs:582:             // The abyss status strings shown in "현재 단계" are considerably longer
+FishingAutomation\MainForm.ReferenceUI.cs:584:             // the full card width for the value so all three abyss dungeons can show
+FishingAutomation\MainForm.ReferenceUI.cs:596:             float reserved = caption is "현재 모드" or "선택 던전" ? 42 : 10;
+FishingAutomation\MainForm.ReferenceUI.cs:626:                 case "abyss":
+FishingAutomation\MainForm.ReferenceUI.cs:662:                 try { _openMenu?.Dispose(); } catch { }
+FishingAutomation\MainForm.ReferenceUI.cs:693:                 bool selected = _kind == "choose" && Tag is int index && index == _ui._owner._abyssDungeon.SelectedIndex;
+FishingAutomation\MainForm.ReferenceUI.cs:696:                 bool strong = action || selected || _kind == "nav-selected";
+FishingAutomation\MainForm.ReferenceUI.cs:726:                         using var ring = new Pen(selected ? _ui._cyan : fg, 2);
+FishingAutomation\MainForm.ReferenceUI.cs:728:                         if (selected) _ui.Dot(g, 24, h / 2, 6, _ui._cyan);
+FishingAutomation\MainForm.ReferenceUI.cs:729:                         _ui.TextAt(g, selected ? "선택됨" : "선택하기", new(43, 0, w - 78, h), font, selected, fg, StringAlignment.Center);
+FishingAutomation\MainForm.Telegram.cs:13:                 Ui(StopSelected);
+FishingAutomation\MainForm.Telegram.cs:18:                 Ui(StopSelected);
+FishingAutomation\MainForm.Telegram.cs:25:                 Ui(StartSelected);
+FishingAutomation\MainForm.Telegram.cs:39:         string mode = _activeMode ?? SelectedMode;
+FishingAutomation\MainForm.Telegram.cs:41:         string dungeon = mode == "어비스" ? $"\n던전: {SelectedAbyssDungeon}" : "";
+FishingAutomation\MainForm.Telegram.cs:42:         string started = mode is "던전" or "어비스"
+FishingAutomation\NativeMethods.cs:23:     [DllImport("user32.dll", SetLastError = true)] public static extern bool AdjustWindowRectEx(ref RECT lpRect, uint dwStyle, bool bMenu, uint dwExStyle);
