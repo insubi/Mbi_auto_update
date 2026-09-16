@@ -1,0 +1,210 @@
+name: Build V0.1.18 Tolerant Compass Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0118-compass-recovery.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch V0.1.17 compass recovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.17/CombinedFishingDungeon_V0.1.17_GuardedHook.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          @'
+          from pathlib import Path
+
+          root = Path(r"ROOT_PLACEHOLDER")
+          bot_path = root / "FishingAutomation" / "FishingBot.cs"
+          bot = bot_path.read_text(encoding="utf-8-sig")
+
+          old_ready = '''                bool recoveryCompass = compass is not null && readyWait.ElapsedMilliseconds >= 1000 &&
+                              compass.Score >= 0.55 && hook.Score < 0.70 && compassCentered && compass.Scale >= 0.75 && compass.Scale <= 1.15;'''
+          new_ready = '''                bool recoveryCompassShape = compass is not null && readyWait.ElapsedMilliseconds >= 1000 &&
+                              hook.Score < 0.70 && compassCentered && compass.Scale >= 0.75 && compass.Scale <= 1.15;
+                bool recoveryCompass = recoveryCompassShape && compass.Score >= 0.40;
+                bool weakRecoveryCompass = recoveryCompassShape && compass.Score >= 0.28;'''
+          if old_ready not in bot:
+              raise SystemExit('stage1 recoveryCompass condition missing')
+          bot = bot.replace(old_ready, new_ready, 1)
+
+          old_return = '''                bool recoveryCompass = compass is not null && sw.ElapsedMilliseconds >= 1000 &&
+                              compass.Score >= 0.55 && hook.Score < 0.70 && compassCentered && compass.Scale >= 0.75 && compass.Scale <= 1.15;'''
+          new_return = '''                bool recoveryCompassShape = compass is not null && sw.ElapsedMilliseconds >= 1000 &&
+                              hook.Score < 0.70 && compassCentered && compass.Scale >= 0.75 && compass.Scale <= 1.15;
+                bool recoveryCompass = recoveryCompassShape && compass.Score >= 0.40;
+                bool weakRecoveryCompass = recoveryCompassShape && compass.Score >= 0.28;'''
+          if old_return not in bot:
+              raise SystemExit('round-return recoveryCompass condition missing')
+          bot = bot.replace(old_return, new_return, 1)
+
+          if bot.count('compassRecoveryFrames >= 6') != 2:
+              raise SystemExit('expected two 6-frame recovery checks')
+          bot = bot.replace('compassRecoveryFrames >= 6', 'compassRecoveryFrames >= 4')
+
+          old_else = '''                else
+                {
+                    compassFrames = 0;
+                    compassRecoveryFrames = 0;
+                }'''
+          new_else = '''                else if (weakRecoveryCompass)
+                {
+                    // A centered low-score compass frame (0.28-0.39) is treated as a brief
+                    // visual dip: keep the accumulated strong recovery frames, but do not add one.
+                    compassFrames = 0;
+                }
+                else
+                {
+                    compassFrames = 0;
+                    compassRecoveryFrames = 0;
+                }'''
+          if bot.count(old_else) < 2:
+              raise SystemExit(f'expected at least two compass reset blocks, found {bot.count(old_else)}')
+          bot = bot.replace(old_else, new_else, 2)
+
+          required = [
+              'if (hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10)',
+              'if (hookFrames >= 2)',
+              'hardReadyWait.ElapsedMilliseconds >= 10000',
+              'stage1_hard_reset_10s',
+              'timeoutMs = 10000',
+          ]
+          for marker in required:
+              if marker not in bot:
+                  raise SystemExit(f'required V0.1.17/V0.1.16 marker missing: {marker}')
+
+          if bot.count('bool recoveryCompass = recoveryCompassShape && compass.Score >= 0.40;') != 2:
+              raise SystemExit('0.40 strong compass recovery count mismatch')
+          if bot.count('bool weakRecoveryCompass = recoveryCompassShape && compass.Score >= 0.28;') != 2:
+              raise SystemExit('0.28 weak compass hold count mismatch')
+          if bot.count('compassRecoveryFrames >= 4') != 2:
+              raise SystemExit('4-frame recovery count mismatch')
+          if bot.count('else if (weakRecoveryCompass)') != 2:
+              raise SystemExit('weak compass hold branch count mismatch')
+
+          bot_path.write_text(bot, encoding='utf-8')
+          '@.Replace('ROOT_PLACEHOLDER', $root.FullName.Replace('\','\\')) | Set-Content patch_v0118.py -Encoding UTF8
+
+          python patch_v0118.py
+          if($LASTEXITCODE -ne 0){throw 'V0.1.18 compass patch failed'}
+
+          Get-ChildItem $root.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p=$_.FullName; $s=Get-Content -Raw -LiteralPath $p
+            $n=$s.Replace('V0.1.17','V0.1.18').Replace('0.1.17.0','0.1.18.0').Replace('0.1.17','0.1.18')
+            if($n -ne $s){Set-Content -LiteralPath $p -Value $n -Encoding UTF8}
+          }
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "template changed: $t $h"}
+          }
+
+          $cfg=Get-Content -Raw (Join-Path $fish 'config.json')|ConvertFrom-Json
+          if([double]$cfg.HookThreshold-ne0.85 -or [double]$cfg.CompassThreshold-ne0.85){throw 'global config thresholds changed unexpectedly'}
+          $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
+          foreach($m in @(
+            'hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10',
+            'recoveryCompassShape && compass.Score >= 0.40',
+            'recoveryCompassShape && compass.Score >= 0.28',
+            'compassRecoveryFrames >= 4',
+            'else if (weakRecoveryCompass)',
+            'hardReadyWait.ElapsedMilliseconds >= 10000',
+            'stage1_hard_reset_10s',
+            'timeoutMs = 10000'
+          )){if(-not $bot.Contains($m)){throw "bot marker missing: $m"}}
+
+          @(
+            'MABI AUTO V0.1.18 - TOLERANT LOW-SCORE COMPASS RECOVERY',
+            '',
+            'Base: V0.1.17.',
+            'Observed real compass telemetry fluctuated 0.47, 0.51, 0.30, 0.42, 0.47 while scale stayed near 0.90-0.95.',
+            'Low-score compass recovery now counts centered/valid-scale frames at score 0.40+ and triggers after 4 strong frames.',
+            'Centered/valid-scale weak frames at score 0.28-0.39 no longer erase already accumulated strong recovery frames; they simply do not add a frame.',
+            'A non-centered, wrong-scale, missing or otherwise invalid compass candidate still resets the recovery counter.',
+            'Primary CompassThreshold remains 0.85. V0.1.17 guarded Hook 0.80 + scale 0.90-1.10 + 2 frames is unchanged.',
+            'V0.1.16 10-second hard reset is unchanged. No pet-specific logic was added.'
+          )|Set-Content (Join-Path $root.FullName 'CHANGES_V0.1.18_COMPASS_RECOVERY.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.18' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.18').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime template changed: $t $h"}
+          }
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 3
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.18_CompassRecovery.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.18_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.18_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.18 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop';$tag='V0.1.18'
+          @(
+            'MABI AUTO V0.1.18 - 나침반 저점수 복구 보정',
+            '',
+            '실제 로그에서 Compass가 0.47, 0.51, 0.30, 0.42, 0.47처럼 흔들리는 것을 반영했습니다.',
+            '중앙/스케일 조건이 맞는 나침반은 0.40 이상을 강한 복구 프레임으로 누적하고 4프레임이면 S 복구를 수행합니다.',
+            '0.28~0.39의 약한 프레임은 기존 누적값을 지우지 않고 유지만 합니다. 중앙/스케일 조건이 틀리거나 후보가 사라지면 누적값은 초기화됩니다.',
+            '기본 CompassThreshold 0.85는 그대로이며, V0.1.17 훅 조건(0.80 + scale 0.90~1.10 + 2프레임)과 V0.1.16의 10초 강제 초기화도 그대로 유지합니다.',
+            '펫 관련 로직은 변경하지 않았습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.18_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@('out/CombinedFishingDungeon_V0.1.18_CompassRecovery.zip','out/MabiAuto_V0.1.18_Windows_Lite.zip','out/MabiAuto_V0.1.18_Windows_Lite.zip.sha256')
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.18' --notes-file notes.txt
+          }
