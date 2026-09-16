@@ -36,14 +36,27 @@ jobs:
           bot = bot_path.read_text(encoding="utf-8-sig")
 
           old = "if (hook.Score >= _cfg.HookThreshold)"
-          count = bot.count(old)
-          if count != 2:
-              raise SystemExit(f"expected exactly two primary Hook checks, found {count}")
-
           new = "if (hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10)"
-          bot = bot.replace(old, new)
 
-          # Preserve the V0.1.16 hard reset and V0.1.15 compass recovery unchanged.
+          def patch_method(text: str, signature: str) -> str:
+              start = text.find(signature)
+              if start < 0:
+                  raise SystemExit(f"method missing: {signature}")
+              end = text.find("\n    private ", start + len(signature))
+              if end < 0:
+                  end = len(text)
+              segment = text[start:end]
+              count = segment.count(old)
+              if count != 1:
+                  raise SystemExit(f"{signature}: expected one primary Hook check, found {count}")
+              segment = segment.replace(old, new, 1)
+              return text[:start] + segment + text[end:]
+
+          # Only change the two hook-icon states relevant to this issue:
+          # 1) initial cast-ready, 2) next-round return. Leave the third Hook check untouched.
+          bot = patch_method(bot, "private async Task<bool> WaitReadyAndCast")
+          bot = patch_method(bot, "private async Task WaitRoundReturn")
+
           required = [
               "hardReadyWait.ElapsedMilliseconds >= 10000",
               "stage1_hard_reset_10s",
@@ -57,7 +70,9 @@ jobs:
                   raise SystemExit(f"required recovery marker missing: {marker}")
 
           if bot.count(new) != 2:
-              raise SystemExit("guarded Hook condition was not applied to both paths")
+              raise SystemExit(f"guarded Hook condition count mismatch: {bot.count(new)}")
+          if bot.count(old) != 1:
+              raise SystemExit(f"unexpected change to unrelated Hook check; remaining old count={bot.count(old)}")
 
           bot_path.write_text(bot, encoding="utf-8")
           '@.Replace('ROOT_PLACEHOLDER', $root.FullName.Replace('\','\\')) | Set-Content patch_v0117.py -Encoding UTF8
@@ -88,6 +103,7 @@ jobs:
           $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
           $guard='if (hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10)'
           if(([regex]::Matches($bot,[regex]::Escape($guard))).Count-ne2){throw 'guarded 0.80 Hook condition count mismatch'}
+          if(([regex]::Matches($bot,[regex]::Escape('if (hook.Score >= _cfg.HookThreshold)'))).Count-ne1){throw 'unrelated Hook condition was changed'}
           foreach($m in @('if (hookFrames >= 2)','hardReadyWait.ElapsedMilliseconds >= 10000','stage1_hard_reset_10s','compass.Score >= 0.55','compassRecoveryFrames >= 6','timeoutMs = 10000')){
             if(-not $bot.Contains($m)){throw "bot marker missing: $m"}
           }
@@ -97,9 +113,9 @@ jobs:
             '',
             'Base: V0.1.16.',
             'Observed real Hook telemetry was 0.819 at scale 1.00, below the previous 0.85 threshold.',
-            'Hook is now accepted at score 0.80+ only when scale is 0.90-1.10 and it still requires 2 consecutive frames.',
+            'Initial cast-ready and round-return Hook are now accepted at score 0.80+ only when scale is 0.90-1.10 and still require 2 consecutive frames.',
             'This rejects the observed low-score 0.29-0.31 scale 0.65 false matches while accepting the real 0.819 scale 1.00 Hook.',
-            'The same guarded Hook condition is used for initial cast-ready and round-return Hook detection.',
+            'The unrelated third Hook check is intentionally left unchanged.',
             'V0.1.16 10-second hard reset, low-score compass recovery, templates and global config thresholds remain unchanged.',
             'No pet-interaction detection or pet-specific logic was added.'
           )|Set-Content (Join-Path $root.FullName 'CHANGES_V0.1.17_GUARDED_HOOK.txt') -Encoding UTF8
@@ -156,9 +172,9 @@ jobs:
             'MABI AUTO V0.1.17 - 훅 인식 조건 보정',
             '',
             '실제 로그에서 훅이 Hook 0.819 x1.00으로 2프레임 연속 잡혔지만 기존 0.85 기준 때문에 무시된 것을 반영했습니다.',
-            '훅 조건을 score 0.80 이상 + scale 0.90~1.10 + 기존 2프레임 연속 확인으로 변경했습니다.',
+            '시전 시작/다음 판 복귀의 훅 조건을 score 0.80 이상 + scale 0.90~1.10 + 기존 2프레임 연속 확인으로 변경했습니다.',
             '관측된 오인식 Hook 0.29~0.31 x0.65는 scale 조건에서 제외됩니다.',
-            '시전 시작과 다음 판 복귀의 훅 판정에 동일 조건을 적용합니다.',
+            '관련 없는 세 번째 Hook 판정은 건드리지 않았습니다.',
             'V0.1.16의 10초 강제 초기화와 나침반 복구는 그대로 유지하며 펫 관련 로직은 변경하지 않았습니다.',
             '',
             '일반 실행 파일: MabiAuto_V0.1.17_Windows_Lite.zip'
