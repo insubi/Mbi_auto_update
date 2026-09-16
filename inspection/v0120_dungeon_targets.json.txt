@@ -1,0 +1,126 @@
+﻿[
+  {
+    "Id": "challenge_confirm_strict",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 455,
+      "Y": 700,
+      "Width": 210,
+      "Height": 115
+    },
+    "Text": "도전",
+    "MaxEditDistance": 0,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "challenge",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 455,
+      "Y": 700,
+      "Width": 210,
+      "Height": 115
+    },
+    "Text": "도전",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "challenge_visual",
+    "Kind": "template",
+    "Roi": {
+      "X": 455,
+      "Y": 700,
+      "Width": 210,
+      "Height": 115
+    },
+    "TemplatePath": "templates/challenge_visual.png",
+    "Threshold": 0.68,
+    "TemplateScaleMin": 0.75,
+    "TemplateScaleMax": 1.25,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "selected",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 455,
+      "Y": 700,
+      "Width": 210,
+      "Height": 115
+    },
+    "Text": "선택됨",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "enter_bottom",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 0,
+      "Y": 900,
+      "Width": 800,
+      "Height": 100
+    },
+    "Text": "입장하기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "enter_confirm",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 140,
+      "Y": 880,
+      "Width": 560,
+      "Height": 120
+    },
+    "Text": "입장하기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "touch_result",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 240,
+      "Y": 900,
+      "Width": 360,
+      "Height": 100
+    },
+    "Text": "터치해",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "retry",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 340,
+      "Y": 900,
+      "Width": 360,
+      "Height": 100
+    },
+    "Text": "다시하기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "scene_skip",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "Text": "장면 넘기기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true,
+    "TemplatePath": "templates/scene_skip_phone.jpg",
+    "Threshold": 0.62,
+    "TemplateScaleMin": 0.5,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.08
+  }
+]
