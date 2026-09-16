@@ -1,0 +1,153 @@
+name: Build V0.1.16 Hard Fishing Reset R2
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0116-hard-fishing-reset-r2.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Patch V0.1.15 with hard stage-1 reset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.15/CombinedFishingDungeon_V0.1.15_LowScoreCompassRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          @'
+          from pathlib import Path
+
+          root = Path(r"ROOT_PLACEHOLDER")
+          fish = root / "FishingAutomation"
+          bot_path = fish / "FishingBot.cs"
+          bot = bot_path.read_text(encoding="utf-8-sig")
+
+          method = bot.find("private async Task<bool> WaitReadyAndCast")
+          if method < 0:
+              raise SystemExit("WaitReadyAndCast missing")
+
+          ready = bot.find("Stopwatch readyWait = Stopwatch.StartNew();", method)
+          if ready < 0:
+              raise SystemExit("readyWait missing")
+          ready_line = bot.rfind("\n", 0, ready) + 1
+          ready_indent = bot[ready_line:ready]
+          ready_end = bot.find("\n", ready)
+          if ready_end < 0:
+              raise SystemExit("readyWait line end missing")
+          bot = bot[:ready_end + 1] + ready_indent + "Stopwatch hardReadyWait = Stopwatch.StartNew();\n" + bot[ready_end + 1:]
+
+          method = bot.find("private async Task<bool> WaitReadyAndCast")
+          delay = bot.find("await Task.Delay(80, ct);", method)
+          if delay < 0:
+              raise SystemExit("WaitReady 80ms delay missing")
+          line_start = bot.rfind("\n", 0, delay) + 1
+          indent = bot[line_start:delay]
+          block_lines = [
+              "// Final safety net: stage 1 must never wait forever.",
+              "// Normal hook/compass recovery keeps priority for 10 seconds.",
+              "// If unresolved, send one S, clear OCR, return false and let RunAsync start fresh.",
+              "if (hardReadyWait.ElapsedMilliseconds >= 10000 && hook.Score < _cfg.HookThreshold)",
+              "{",
+              "    string hardCompass = lastCompass is null ? \"없음\" : $\"{lastCompass.Score:F2} x{lastCompass.Scale:F2}\";",
+              "    Status(\"시전 대기 10초 초과 · 초기화 후 재시작\");",
+              "    _log.Write($\"시전 대기/복구 10초 초과: Hook={hook.Score:F3} x{hook.Scale:F2}; Compass={hardCompass} -> S 복구 후 처음부터 재시작\");",
+              "    SaveDebug(f.Bitmap, \"stage1_hard_reset_10s\");",
+              "    WindowLocator.ActivateForInput(window);",
+              "    _input.TapS();",
+              "    _ocr.ClearSignal();",
+              "    await Task.Delay(500, ct);",
+              "    return false;",
+              "}",
+              "",
+          ]
+          rendered = ""
+          for line in block_lines:
+              if line.startswith("    "):
+                  rendered += indent + line + "\n"
+              elif line in ("{", "}"):
+                  rendered += indent + line + "\n"
+              elif line == "":
+                  rendered += "\n"
+              else:
+                  rendered += indent + line + "\n"
+          bot = bot[:line_start] + rendered + bot[line_start:]
+          bot_path.write_text(bot, encoding="utf-8")
+          '@.Replace('ROOT_PLACEHOLDER', $root.FullName.Replace('\','\\')) | Set-Content patch_v0116.py -Encoding UTF8
+          python patch_v0116.py
+          if($LASTEXITCODE -ne 0){throw 'V0.1.16 patch failed'}
+
+          Get-ChildItem $root.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p=$_.FullName; $s=Get-Content -Raw -LiteralPath $p
+            $n=$s.Replace('V0.1.15','V0.1.16').Replace('0.1.15.0','0.1.16.0').Replace('0.1.15','0.1.16')
+            if($n -ne $s){Set-Content -LiteralPath $p -Value $n -Encoding UTF8}
+          }
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){$h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant();if($h-ne$expected[$t]){throw "template changed: $t $h"}}
+          $cfg=Get-Content -Raw (Join-Path $fish 'config.json')|ConvertFrom-Json
+          if([double]$cfg.HookThreshold-ne0.85 -or [double]$cfg.CompassThreshold-ne0.85){throw 'primary v28 thresholds changed'}
+          $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
+          foreach($m in @('Stopwatch hardReadyWait = Stopwatch.StartNew();','hardReadyWait.ElapsedMilliseconds >= 10000','stage1_hard_reset_10s','초기화 후 재시작','compass.Score >= 0.55','compassRecoveryFrames >= 6','timeoutMs = 10000')){if(-not $bot.Contains($m)){throw "bot marker missing: $m"}}
+
+          @(
+            'MABI AUTO V0.1.16 - HARD FISHING RESET',
+            '',
+            'Base: V0.1.15 / exact v28 fishing runtime and low-score compass recovery.',
+            'WaitReadyAndCast has a separate 10-second hard timer that is never restarted by compass recovery S taps.',
+            'Normal hook and compass detection keep priority. If stage 1 is still unresolved at 10 seconds and Hook is below the primary threshold, the bot saves a debug frame, presses S once, clears OCR state, returns false, and RunAsync starts a fresh stage-1 cycle.',
+            'This prevents an unrecognized hook/compass state from leaving the macro in an endless cast-wait loop.',
+            'V0.1.15 thresholds, templates, 6-frame low-score compass recovery and 10-second round-return timeout remain unchanged.'
+          )|Set-Content (Join-Path $root.FullName 'CHANGES_V0.1.16_HARD_FISHING_RESET.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.16' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.16').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){dotnet publish $watch @args -o stage/watchdog;if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'};if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}}
+          $release=Join-Path $pkg 'release';if(Test-Path $release){Remove-Item $release -Recurse -Force};Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+          foreach($t in $expected.Keys){$h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant();if($h-ne$expected[$t]){throw "runtime template changed: $t $h"}}
+          $exe=Join-Path $release 'FishingAutomation.exe';$p=Start-Process $exe -WorkingDirectory $release -PassThru;Start-Sleep 3;$p.Refresh();if($p.HasExited){throw "smoke test exit $($p.ExitCode)"};Stop-Process $p.Id -Force -ErrorAction SilentlyContinue;Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.16_HardFishingReset.zip';Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.16_Windows_Lite.zip';Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant();"$hash  MabiAuto_V0.1.16_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII;Write-Host "LITE_SHA256=$hash"
+      - name: Publish V0.1.16 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop';$tag='V0.1.16'
+          @(
+            'MABI AUTO V0.1.16 - 시전 대기 강제 초기화 안전장치',
+            '',
+            'V0.1.15의 나침반 저점수 복구 로직은 그대로 유지합니다.',
+            '시전 대기/나침반 복구 상태가 전체 10초를 넘기면 더 이상 무한 대기하지 않습니다.',
+            '10초 초과 시 디버그 화면을 저장하고 S를 한 번 보내 현재 낚시/UI 상태를 정리한 뒤 OCR 상태를 비우고, 메인 루프로 복귀해서 처음부터 다시 시도합니다.',
+            '나침반 복구 중 S를 눌러도 이 강제 10초 타이머는 리셋되지 않습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.16_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@('out/CombinedFishingDungeon_V0.1.16_HardFishingReset.zip','out/MabiAuto_V0.1.16_Windows_Lite.zip','out/MabiAuto_V0.1.16_Windows_Lite.zip.sha256')
+          if(gh release view $tag --repo $env:REPO *> $null){gh release upload $tag @assets --repo $env:REPO --clobber}else{gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.16' --notes-file notes.txt}
