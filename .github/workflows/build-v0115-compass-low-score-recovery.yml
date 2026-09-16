@@ -1,0 +1,154 @@
+name: Build V0.1.15 Low Score Compass Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0115-compass-low-score-recovery.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Patch V0.1.14 compass recovery for 0.59-score case
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.14/CombinedFishingDungeon_V0.1.14_CompassRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          @'
+          from pathlib import Path
+          import json
+
+          root = Path(r"ROOT_PLACEHOLDER")
+          fish = root / "FishingAutomation"
+          bot_path = fish / "FishingBot.cs"
+          main_path = fish / "MainForm.cs"
+          tg_path = fish / "TelegramNotifier.cs"
+          notif_path = fish / "notification.json"
+
+          bot = bot_path.read_text(encoding="utf-8-sig")
+
+          replacements = [
+              ('readyWait.ElapsedMilliseconds >= 1500', 'readyWait.ElapsedMilliseconds >= 1000'),
+              ('sw.ElapsedMilliseconds >= 1500', 'sw.ElapsedMilliseconds >= 1000'),
+              ('compass.Score >= 0.68 && hook.Score < 0.70 && compassCentered;',
+               'compass.Score >= 0.55 && hook.Score < 0.70 && compassCentered && compass.Scale >= 0.75 && compass.Scale <= 1.15;'),
+              ('compassRecoveryFrames >= 4', 'compassRecoveryFrames >= 6'),
+              ('중앙 4프레임 -> S', '중앙 6프레임 -> S'),
+              ('await WaitRoundReturn(window, ct, 15000);', 'await WaitRoundReturn(window, ct, 10000);'),
+              ('private async Task WaitRoundReturn(GameWindow window, CancellationToken ct, int timeoutMs = 15000)',
+               'private async Task WaitRoundReturn(GameWindow window, CancellationToken ct, int timeoutMs = 10000)'),
+              ('다음 판 준비 15초 대기 만료', '다음 판 준비 10초 대기 만료'),
+          ]
+          for old, new in replacements:
+              if old not in bot:
+                  raise SystemExit(f"missing FishingBot marker: {old}")
+              bot = bot.replace(old, new)
+          bot_path.write_text(bot, encoding="utf-8")
+
+          main = main_path.read_text(encoding="utf-8-sig")
+          old = 'int seconds = Math.Clamp(_notifier.Settings.FishingStallSeconds, 10, 15);'
+          if old not in main:
+              raise SystemExit('stall clamp marker missing')
+          main = main.replace(old, 'int seconds = Math.Clamp(_notifier.Settings.FishingStallSeconds, 8, 10);', 1)
+          main_path.write_text(main, encoding="utf-8")
+
+          tg = tg_path.read_text(encoding="utf-8-sig")
+          old = 'public int FishingStallSeconds { get; set; } = 15;'
+          if old not in tg:
+              raise SystemExit('stall default marker missing')
+          tg = tg.replace(old, 'public int FishingStallSeconds { get; set; } = 10;', 1)
+          tg_path.write_text(tg, encoding="utf-8")
+
+          if notif_path.exists():
+              try:
+                  data = json.loads(notif_path.read_text(encoding="utf-8-sig"))
+                  data["FishingStallSeconds"] = 10
+                  notif_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+              except Exception:
+                  pass
+          '@.Replace('ROOT_PLACEHOLDER', $root.FullName.Replace('\','\\')) | Set-Content patch_v0115.py -Encoding UTF8
+          python patch_v0115.py
+          if($LASTEXITCODE -ne 0){throw 'V0.1.15 patch failed'}
+
+          Get-ChildItem $root.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p=$_.FullName; $s=Get-Content -Raw -LiteralPath $p
+            $n=$s.Replace('V0.1.14','V0.1.15').Replace('0.1.14.0','0.1.15.0').Replace('0.1.14','0.1.15')
+            if($n -ne $s){Set-Content -LiteralPath $p -Value $n -Encoding UTF8}
+          }
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){$h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant();if($h-ne$expected[$t]){throw "template changed: $t $h"}}
+          $cfg=Get-Content -Raw (Join-Path $fish 'config.json')|ConvertFrom-Json
+          if([double]$cfg.HookThreshold-ne0.85 -or [double]$cfg.CompassThreshold-ne0.85){throw 'primary v28 thresholds changed'}
+          $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
+          foreach($m in @('compass.Score >= 0.55','compass.Scale >= 0.75','compassRecoveryFrames >= 6','timeoutMs = 10000','다음 판 준비 10초 대기 만료')){if(-not $bot.Contains($m)){throw "bot marker missing: $m"}}
+          $main=Get-Content -Raw (Join-Path $fish 'MainForm.cs')
+          if($main -notmatch 'Math\.Clamp\(_notifier\.Settings\.FishingStallSeconds, 8, 10\)'){throw '10s stall clamp missing'}
+          $tg=Get-Content -Raw (Join-Path $fish 'TelegramNotifier.cs')
+          if($tg -notmatch 'FishingStallSeconds \{ get; set; \} = 10;'){throw '10s stall default missing'}
+
+          @(
+            'MABI AUTO V0.1.15 - LOW SCORE COMPASS RECOVERY',
+            '',
+            'Base: V0.1.14 / exact v28 fishing runtime.',
+            'The screenshot showed a visible compass while telemetry reported Compass 0.59 x0.90, below the previous 0.68 recovery threshold.',
+            'Primary v28 Compass 0.85 / 2-frame path and all v28 fishing templates remain unchanged.',
+            'Recovery path now starts after 1.0s and accepts centered Compass 0.55+ only when scale is 0.75-1.15 and Hook is below 0.70.',
+            'Low-score recovery requires 6 consecutive frames before pressing S to reduce false positives.',
+            'Round-return wait is reduced from 15s to 10s.',
+            'Fishing progress stall Telegram alert is capped at 10s (minimum 8s). Process watchdog remains unchanged.'
+          )|Set-Content (Join-Path $root.FullName 'CHANGES_V0.1.15_LOW_SCORE_COMPASS_RECOVERY.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.15' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.15').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){dotnet publish $watch @args -o stage/watchdog;if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'};if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}}
+          $release=Join-Path $pkg 'release';if(Test-Path $release){Remove-Item $release -Recurse -Force};Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+          foreach($t in $expected.Keys){$h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant();if($h-ne$expected[$t]){throw "runtime template changed: $t $h"}}
+          $exe=Join-Path $release 'FishingAutomation.exe';$p=Start-Process $exe -WorkingDirectory $release -PassThru;Start-Sleep 3;$p.Refresh();if($p.HasExited){throw "smoke test exit $($p.ExitCode)"};Stop-Process $p.Id -Force -ErrorAction SilentlyContinue;Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.15_LowScoreCompassRecovery.zip';Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.15_Windows_Lite.zip';Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant();"$hash  MabiAuto_V0.1.15_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII;Write-Host "LITE_SHA256=$hash"
+      - name: Publish V0.1.15 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop';$tag='V0.1.15'
+          @(
+            'MABI AUTO V0.1.15 - 나침반 저점수 복귀 보강',
+            '',
+            '실제 정지 화면에서 나침반은 보이지만 Compass 0.59 x0.90으로 기록되어 기존 복구 기준 0.68을 통과하지 못한 것을 반영했습니다.',
+            'v28 기본 Compass 0.85/2프레임 경로와 템플릿은 그대로 유지합니다.',
+            '1초 이상 대기 시 중앙 위치, scale 0.75~1.15, Hook 0.70 미만 조건에서 Compass 0.55 이상이 6프레임 연속 확인되면 S를 눌러 복귀합니다.',
+            '다음 판 복귀 대기는 10초로 단축했습니다.',
+            '낚시 진행 정지 텔레그램 알림은 기존 설정값과 관계없이 최대 10초(최소 8초)로 제한했습니다. 프로세스 Watchdog은 변경하지 않았습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.15_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@('out/CombinedFishingDungeon_V0.1.15_LowScoreCompassRecovery.zip','out/MabiAuto_V0.1.15_Windows_Lite.zip','out/MabiAuto_V0.1.15_Windows_Lite.zip.sha256')
+          if(gh release view $tag --repo $env:REPO *> $null){gh release upload $tag @assets --repo $env:REPO --clobber}else{gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.15' --notes-file notes.txt}
