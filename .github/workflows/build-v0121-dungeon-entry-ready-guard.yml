@@ -1,0 +1,159 @@
+name: Build V0.1.21 Dungeon Entry Ready Guard
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0121-dungeon-entry-ready-guard.yml'
+      - 'release-source/v0121_dungeon_entry_ready_guard.py'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch and build V0.1.21
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.20/CombinedFishingDungeon_V0.1.20_AbyssOutsideHudQuorum.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0121_dungeon_entry_ready_guard.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.21 patch failed'}
+
+          $scenario=Get-Content -Raw (Join-Path $fish 'dungeon/config/scenario.json')|ConvertFrom-Json
+          $step1=$scenario.Steps[0]
+          if($step1.Name-ne'1. 입장 준비 확인' -or $step1.Target-ne'enter_bottom' -or $step1.AlternativeTarget-ne'challenge' -or -not $step1.ClickAlternativeThenWaitPrimary){
+            throw 'dungeon step1 entry-ready configuration mismatch'
+          }
+          if([int]$step1.TimeoutSeconds-ne45){throw 'dungeon step1 timeout is not 45s'}
+
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')|ConvertFrom-Json
+          $challenge=$targets|Where-Object {$_.Id-eq'challenge'}
+          if($null-eq$challenge -or $challenge.Kind-ne'hybrid' -or $challenge.TemplatePath-ne'templates/challenge_visual.png'){
+            throw 'challenge hybrid visual fallback missing'
+          }
+          if([double]$challenge.Threshold-ne0.68){throw 'challenge visual threshold changed unexpectedly'}
+
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          foreach($m in @(
+            'DUNGEON_ENTRY_READY_GUARD_V3',
+            '도전 버튼 확인 -> 선택 위해 클릭',
+            '입장하기 확인 {readyConsecutive}/{RequiredConsecutive}',
+            '선택됨OCR=',
+            '!finalChallenge.Found && finalEnter.Found',
+            '45초 동안 도전 선택/입장하기 준비 상태',
+            'VerifyAbyssSelectionScreenAsync',
+            '던전 밖 HUD 3/4 이상 확인',
+            '어비스 클릭 검증 실패'
+          )){if(-not $engine.Contains($m)){throw "V0.1.21 engine marker missing: $m"}}
+          if($engine.Contains('선택됨이 보이면 절대로 입장하지 않는다')){throw 'old selected-state rejection still present'}
+
+          $challengeTpl=(Get-FileHash (Join-Path $fish 'dungeon/templates/challenge_visual.png') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($challengeTpl-ne'c65298e3661f9e6000581b0e65e3ebb4c26c123deb9fe3a3c74ef4b8a57f73db'){throw "challenge template changed: $challengeTpl"}
+          $abyssTpl=(Get-FileHash (Join-Path $fish 'abyss/templates/abyss.png') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($abyssTpl-ne'8ff4c90fe647fec8a7ba852395e79bb331247245296bee07d87318ef0b257868'){throw "abyss template changed: $abyssTpl"}
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "fishing template changed: $t $h"}
+          }
+          $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
+          foreach($m in @(
+            'compass.Score >= 0.28 && hook.Score < 0.70 && compassCentered',
+            'compassRecoveryFrames >= 6',
+            'hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10',
+            'hardReadyWait.ElapsedMilliseconds >= 10000',
+            'stage1_hard_reset_10s'
+          )){if(-not $bot.Contains($m)){throw "fishing marker missing: $m"}}
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.21' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.21').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+
+          $runtimeChallenge=(Get-FileHash (Join-Path $release 'dungeon/templates/challenge_visual.png') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($runtimeChallenge-ne'c65298e3661f9e6000581b0e65e3ebb4c26c123deb9fe3a3c74ef4b8a57f73db'){throw "runtime challenge template changed: $runtimeChallenge"}
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 3
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.21_DungeonEntryReadyGuard.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.21_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.21_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.21 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.21'
+          @(
+            'MABI AUTO V0.1.21 - 심층 던전 입장 상태 인식 안정화',
+            '',
+            '문제 화면은 이미 선택됨 + 입장하기 상태인데 1단계가 작은 선택됨 OCR을 잡지 못해 90초 타임아웃이 발생했습니다.',
+            '도전 인식은 기존 challenge_visual.png 이미지 템플릿을 우선 사용하고 OCR을 보조로 사용합니다.',
+            '1단계는 작은 도전/선택됨 글자 대신 화면 아래의 큰 입장하기 문구를 기준으로 준비 상태를 확인합니다.',
+            '입장 직전에는 도전 버튼이 보이면 자동으로 한 번 눌러 선택 상태로 만들고, 도전 버튼이 사라진 상태에서 입장하기가 3회 연속 확인될 때만 입장을 허용합니다.',
+            '선택됨 OCR은 로그용으로만 남겨 작은 글자 OCR 실패가 진행을 막지 않게 했습니다.',
+            '검증 제한시간은 90초에서 45초로 줄였고 상태 로그를 추가했습니다.',
+            'V0.1.20 어비스 던전 밖 HUD 보정, V0.1.19 어비스 오클릭 방지, 기존 낚시 로직은 유지했습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.21_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@(
+            'out/CombinedFishingDungeon_V0.1.21_DungeonEntryReadyGuard.zip',
+            'out/MabiAuto_V0.1.21_Windows_Lite.zip',
+            'out/MabiAuto_V0.1.21_Windows_Lite.zip.sha256'
+          )
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.21' --notes-file notes.txt
+          }
