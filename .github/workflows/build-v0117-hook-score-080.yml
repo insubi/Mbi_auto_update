@@ -1,0 +1,171 @@
+name: Build V0.1.17 Guarded Hook Recognition
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0117-hook-score-080.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch V0.1.16 hook recognition
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.16/CombinedFishingDungeon_V0.1.16_HardFishingReset.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null -eq $root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          @'
+          from pathlib import Path
+
+          root = Path(r"ROOT_PLACEHOLDER")
+          bot_path = root / "FishingAutomation" / "FishingBot.cs"
+          bot = bot_path.read_text(encoding="utf-8-sig")
+
+          old = "if (hook.Score >= _cfg.HookThreshold)"
+          count = bot.count(old)
+          if count != 2:
+              raise SystemExit(f"expected exactly two primary Hook checks, found {count}")
+
+          new = "if (hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10)"
+          bot = bot.replace(old, new)
+
+          # Preserve the V0.1.16 hard reset and V0.1.15 compass recovery unchanged.
+          required = [
+              "hardReadyWait.ElapsedMilliseconds >= 10000",
+              "stage1_hard_reset_10s",
+              "compass.Score >= 0.55",
+              "compassRecoveryFrames >= 6",
+              "timeoutMs = 10000",
+              "if (hookFrames >= 2)",
+          ]
+          for marker in required:
+              if marker not in bot:
+                  raise SystemExit(f"required recovery marker missing: {marker}")
+
+          if bot.count(new) != 2:
+              raise SystemExit("guarded Hook condition was not applied to both paths")
+
+          bot_path.write_text(bot, encoding="utf-8")
+          '@.Replace('ROOT_PLACEHOLDER', $root.FullName.Replace('\','\\')) | Set-Content patch_v0117.py -Encoding UTF8
+
+          python patch_v0117.py
+          if($LASTEXITCODE -ne 0){throw 'V0.1.17 Hook patch failed'}
+
+          Get-ChildItem $root.FullName -Recurse -File | Where-Object { $_.Extension -in @('.cs','.csproj','.json','.txt','.cmd','.ps1') } | ForEach-Object {
+            $p=$_.FullName; $s=Get-Content -Raw -LiteralPath $p
+            $n=$s.Replace('V0.1.16','V0.1.17').Replace('0.1.16.0','0.1.17.0').Replace('0.1.16','0.1.17')
+            if($n -ne $s){Set-Content -LiteralPath $p -Value $n -Encoding UTF8}
+          }
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "template changed: $t $h"}
+          }
+
+          $cfg=Get-Content -Raw (Join-Path $fish 'config.json')|ConvertFrom-Json
+          if([double]$cfg.HookThreshold-ne0.85 -or [double]$cfg.CompassThreshold-ne0.85){throw 'global config thresholds changed unexpectedly'}
+
+          $bot=Get-Content -Raw (Join-Path $fish 'FishingBot.cs')
+          $guard='if (hook.Score >= 0.80 && hook.Scale >= 0.90 && hook.Scale <= 1.10)'
+          if(([regex]::Matches($bot,[regex]::Escape($guard))).Count-ne2){throw 'guarded 0.80 Hook condition count mismatch'}
+          foreach($m in @('if (hookFrames >= 2)','hardReadyWait.ElapsedMilliseconds >= 10000','stage1_hard_reset_10s','compass.Score >= 0.55','compassRecoveryFrames >= 6','timeoutMs = 10000')){
+            if(-not $bot.Contains($m)){throw "bot marker missing: $m"}
+          }
+
+          @(
+            'MABI AUTO V0.1.17 - GUARDED HOOK RECOGNITION',
+            '',
+            'Base: V0.1.16.',
+            'Observed real Hook telemetry was 0.819 at scale 1.00, below the previous 0.85 threshold.',
+            'Hook is now accepted at score 0.80+ only when scale is 0.90-1.10 and it still requires 2 consecutive frames.',
+            'This rejects the observed low-score 0.29-0.31 scale 0.65 false matches while accepting the real 0.819 scale 1.00 Hook.',
+            'The same guarded Hook condition is used for initial cast-ready and round-return Hook detection.',
+            'V0.1.16 10-second hard reset, low-score compass recovery, templates and global config thresholds remain unchanged.',
+            'No pet-interaction detection or pet-specific logic was added.'
+          )|Set-Content (Join-Path $root.FullName 'CHANGES_V0.1.17_GUARDED_HOOK.txt') -Encoding UTF8
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.17' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.17').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime template changed: $t $h"}
+          }
+
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 3
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.17_GuardedHook.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.17_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.17_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.17 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.17'
+          @(
+            'MABI AUTO V0.1.17 - 훅 인식 조건 보정',
+            '',
+            '실제 로그에서 훅이 Hook 0.819 x1.00으로 2프레임 연속 잡혔지만 기존 0.85 기준 때문에 무시된 것을 반영했습니다.',
+            '훅 조건을 score 0.80 이상 + scale 0.90~1.10 + 기존 2프레임 연속 확인으로 변경했습니다.',
+            '관측된 오인식 Hook 0.29~0.31 x0.65는 scale 조건에서 제외됩니다.',
+            '시전 시작과 다음 판 복귀의 훅 판정에 동일 조건을 적용합니다.',
+            'V0.1.16의 10초 강제 초기화와 나침반 복구는 그대로 유지하며 펫 관련 로직은 변경하지 않았습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.17_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@('out/CombinedFishingDungeon_V0.1.17_GuardedHook.zip','out/MabiAuto_V0.1.17_Windows_Lite.zip','out/MabiAuto_V0.1.17_Windows_Lite.zip.sha256')
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.17' --notes-file notes.txt
+          }
