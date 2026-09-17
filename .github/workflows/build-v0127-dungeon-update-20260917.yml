@@ -1,0 +1,151 @@
+name: Build V0.1.27 Dungeon Update 2026-09-17
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0127-dungeon-update-20260917.yml'
+      - 'release-source/v0127_dungeon_update_20260917.py'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch and build V0.1.27
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.26/CombinedFishingDungeon_V0.1.26_RestoreDungeonSceneSkip.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0127_dungeon_update_20260917.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.27 patch failed'}
+
+          $scenario=Get-Content -Raw (Join-Path $fish 'dungeon/config/scenario.json')|ConvertFrom-Json
+          $sceneMon=@($scenario.Monitors|Where-Object {$_.Target-eq'scene_skip'})
+          if($sceneMon.Count-ne1){throw 'scene_skip monitor was not preserved'}
+          if($sceneMon[0].Action-ne'click' -or [int]$sceneMon[0].CooldownMs-ne2500 -or [int]$sceneMon[0].ScanIntervalMs-ne1200){throw 'scene_skip settings changed'}
+
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')|ConvertFrom-Json
+          $retry=$targets|Where-Object {$_.Id-eq'retry'}
+          if($null-eq$retry -or $retry.Text-ne'다시 하기' -or [int]$retry.MaxEditDistance-ne2){throw 'updated retry OCR missing'}
+          if([int]$retry.Roi.Y-gt830 -or [int]$retry.Roi.Height-lt150){throw 'retry ROI not widened'}
+
+          $selected=$targets|Where-Object {$_.Id-eq'selected'}
+          $selectedStrict=$targets|Where-Object {$_.Id-eq'selected_ocr_strict'}
+          $challenge=$targets|Where-Object {$_.Id-eq'challenge'}
+          $challengeStrict=$targets|Where-Object {$_.Id-eq'challenge_confirm_strict'}
+          foreach($t in @($selected,$selectedStrict,$challenge,$challengeStrict)){
+            if($null-eq$t){throw 'entry-state target missing'}
+            if([int]$t.Roi.Width-lt350 -or [int]$t.Roi.Height-lt200){throw 'entry-state ROI not widened'}
+          }
+          $enter=$targets|Where-Object {$_.Id-eq'enter_bottom'}
+          if($null-eq$enter -or [int]$enter.Roi.Y-gt825 -or [int]$enter.Roi.Height-lt170){throw 'enter ROI not widened'}
+
+          $scene=@($targets|Where-Object {$_.Id-eq'scene_skip'})
+          if($scene.Count-ne1 -or $scene[0].Kind-ne'hybrid'){throw 'scene_skip target not preserved'}
+          if(-not (Test-Path (Join-Path $fish 'dungeon/templates/scene_skip_phone.jpg'))){throw 'scene_skip template missing'}
+
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          foreach($m in @(
+            'DUNGEON_CHALLENGE_DISAMBIGUATION_V5',
+            'DUNGEON_UPDATE_20260917_MENU_FALLBACK',
+            '첫 ESC 후 알려진 단계 미확인',
+            'DetectKnownDungeonRecoveryStepAsync',
+            '던전 밖 HUD 3/4 이상 확인',
+            '어비스 클릭 검증 실패'
+          )){if(-not $engine.Contains($m)){throw "engine marker missing: $m"}}
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "fishing template changed: $t $h"}
+          }
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.27' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.27').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+
+          if(-not (Test-Path (Join-Path $release 'dungeon/templates/scene_skip_phone.jpg'))){throw 'runtime scene_skip template missing'}
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 3
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.27_DungeonUpdate20260917.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.27_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.27_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.27 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.27'
+          @(
+            'MABI AUTO V0.1.27 - 2026-09-17 심층 던전 UI 대응',
+            '',
+            '업데이트 후 보라색 선택됨/도전 UI 인식을 위해 상태 확인 영역을 넓혔습니다.',
+            '선택됨 -> 1회 클릭 -> 도전 확인 -> 입장하기 규칙은 그대로 유지합니다.',
+            '클리어 화면의 다시 하기(띄어쓰기 포함) OCR을 보강하고 기존 다시하기 표시도 허용합니다.',
+            '첫 ESC가 메인 메뉴를 여는 경우 ESC 1회 더 입력해 메뉴를 닫고 알려진 던전 단계를 다시 판별합니다.',
+            'V0.1.26 장면 넘기기 감시/자동 클릭은 그대로 유지합니다.',
+            '어비스 자동복구와 낚시 로직은 변경하지 않았습니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.27_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@(
+            'out/CombinedFishingDungeon_V0.1.27_DungeonUpdate20260917.zip',
+            'out/MabiAuto_V0.1.27_Windows_Lite.zip',
+            'out/MabiAuto_V0.1.27_Windows_Lite.zip.sha256'
+          )
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.27' --notes-file notes.txt
+          }
