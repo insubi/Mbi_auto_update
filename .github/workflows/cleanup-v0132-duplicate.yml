@@ -26,7 +26,7 @@ jobs:
           for run_id in 35272170621 35272374893; do
             gh api -X POST "repos/${REPO}/actions/runs/${run_id}/cancel" || true
           done
-          for release_id in 391047325 391048217; do
+          for release_id in 391047325 391048217 391053912; do
             gh api -X DELETE "repos/${REPO}/releases/${release_id}" || true
           done
           echo "Stale V0.1.32 runs/drafts cleanup requested."
