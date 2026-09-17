@@ -25,14 +25,13 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 # Restore the fixture ZIP assembled from real screenshots previously supplied by the user.
 parts_dir = Path(__file__).resolve().parent / "visual-test-assets"
-parts = [parts_dir / f"assets.b64.part{i}" for i in range(4)]
-for p in parts:
-    if not p.exists():
-        raise RuntimeError(f"visual-test asset part missing: {p}")
+parts = sorted(parts_dir.glob("assets-tight.b64.part*"))
+if not parts:
+    raise RuntimeError("visual-test tight asset parts are missing")
 encoded = "".join(p.read_text(encoding="ascii").strip() for p in parts)
 asset_zip = base64.b64decode(encoded)
 asset_sha = hashlib.sha256(asset_zip).hexdigest()
-EXPECTED_ASSET_ZIP_SHA = "71e7d8d3e79de65402f9470da8651e08fa55e33eb8122f582fc1baa3755abde1"
+EXPECTED_ASSET_ZIP_SHA = "155cedc6c1673e1f6e2ceaad910f4f2a04869d611dcc23d94e26760623cb02b2"
 if asset_sha != EXPECTED_ASSET_ZIP_SHA:
     raise RuntimeError(f"visual-test asset ZIP hash mismatch: {asset_sha}")
 
@@ -42,14 +41,14 @@ with zipfile.ZipFile(io.BytesIO(asset_zip), "r") as zf:
     zf.extractall(asset_dir)
 
 expected_assets = {
-    "peaca_label.jpg": "9895e9c908ed2bde6304d4a198262449a3cbabf41709a6b9e8423653ad4566fd",
-    "fiod_label.jpg": "f5f7ad07f865cc6d6681fa23bed0c0dd1a2736dc6f2d68fd061dbf31e5e3ee8d",
-    "peaca_popup_title.jpg": "a063b8119d63fcc7d3e5bdbbdd46753421536d79c7f0b1f7b20a52101972a157",
-    "go_here.jpg": "ea7925ec2da3309f2f20356236aa399399ede909ced3f7a3e6353aab14b6fd4b",
-    "d1_slots.jpg": "4ffa935bbff772d9fe747989d8ed4bdf58ec820e84e4b277581320cabdce5a3a",
-    "d2_slots.jpg": "77f9fe7f1c1bf5c4edd33d152d34df2feaae31a68d943623a7883bb8829e42dc",
-    "d2_enter.jpg": "2c6c3755d59f602d7f7a1f2e6240a3bc9c7bef7cc5dcef5a4459331c1ae4b364",
-    "retry_candidate.jpg": "3a2d363578acf137e733f7cf128479648e1710645f0bb7da50ffe7c068bd45c4",
+    "peaca_label.jpg": "10d2eb1ac7df81dd25555a70aab4db903169d98fa8a50adc0138f64a7d4d109d",
+    "fiod_label.jpg": "78685b19df71aad991c9ee6486ae9dfe956fb7007da9bb60e0f82ccfdac3c71d",
+    "peaca_popup_title.jpg": "dd6538c2fe9c92253bd289cedb779a1c25d3e97f6affb33050c06e4aabdb2da2",
+    "go_here.jpg": "496e016e295a8d63de38e2ece039f7efdbffa7babc10e6ce39843183aeadad4f",
+    "d1_slots.jpg": "9fd8bf057e4b1b5d956210e6b569e3bf5383116deb0c1a23241273fda78d4a32",
+    "d2_slots.jpg": "62e6ca80ad9510e9d31d8bf354575c9ec1fef0811837c0d39b67de9993e7c9d6",
+    "d2_enter.jpg": "92b1a509ba745c220115dadeb7b8d086e563e9c3a932a906465e7aa24429b74a",
+    "retry_candidate.jpg": "1757c54deec2ffbc4f3f7bffc7e85f372a0532f682460c005f443d9d2c418800",
 }
 for name, expected in expected_assets.items():
     p = asset_dir / name
