@@ -1,0 +1,38 @@
+name: Inspect V0.1.33 Entry Small
+
+on:
+  push:
+    branches:
+      - v0133-result-retry-fix
+    paths:
+      - '.github/workflows/inspect-v0133-entry-small.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print exact entry timeout block
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.32 patch failed'}
+          $path=Join-Path $root.FullName 'FishingAutomation/dungeon/ScenarioEngine.cs'
+          $lines=Get-Content $path
+          $hit=Select-String -Path $path -Pattern '45초 동안 선택됨' -SimpleMatch | Select-Object -First 1
+          if($null-eq$hit){throw '45-second entry timeout text not found'}
+          $start=[Math]::Max(1,$hit.LineNumber-75)
+          $end=[Math]::Min($lines.Count,$hit.LineNumber+35)
+          Write-Host "ENTRY_TIMEOUT_HIT=$($hit.LineNumber)"
+          for($i=$start;$i-le$end;$i++){
+            Write-Host ("{0,5}: {1}" -f $i,$lines[$i-1])
+          }
