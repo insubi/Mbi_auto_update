@@ -5,13 +5,13 @@ on:
     paths:
       - '.github/workflows/inspect-v0130-route-integration.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   inspect:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download and inspect V0.1.30 source
+      - name: Capture relevant V0.1.30 runtime source
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -20,10 +20,28 @@ jobs:
           $root=Get-ChildItem current -Directory | Select-Object -First 1
           if($null-eq$root){throw 'source root missing'}
           $fish=Join-Path $root.FullName 'FishingAutomation'
-          Write-Host "ROOT=$($root.FullName)"
-          Write-Host '=== FILES ==='
-          Get-ChildItem $fish -Recurse -File | ForEach-Object { $_.FullName.Substring($fish.Length+1) }
-          Write-Host '=== UI MATCHES ==='
-          Get-ChildItem $fish -Recurse -Filter '*.cs' | Select-String -Pattern '선택 던전|SelectedDungeon|DungeonPicker|_dungeonPicker|심층|ComboBox|SelectedAbyss|StartDungeon|ScenarioEngine' -Context 8,18 | ForEach-Object { $_.ToString() }
-          Write-Host '=== INPUT MATCHES ==='
-          Get-ChildItem $fish -Recurse -Filter '*.cs' | Select-String -Pattern 'TapScanCode|Mouse|Click|Move|Drag|SendInput|CaptureGameWindowAsync|DetectAsync|Ocr' -Context 4,10 | ForEach-Object { $_.ToString() }
+          $out='inspection/v0130-runtime'
+          if(Test-Path $out){Remove-Item $out -Recurse -Force}
+          New-Item -ItemType Directory -Path $out | Out-Null
+
+          $selected = New-Object System.Collections.Generic.List[System.IO.FileInfo]
+          Get-ChildItem $fish -File -Filter 'MainForm*.cs' | ForEach-Object { $selected.Add($_) }
+          Get-ChildItem (Join-Path $fish 'dungeon') -Recurse -File | Where-Object { $_.Extension -in @('.cs','.json') } | ForEach-Object { $selected.Add($_) }
+          Get-ChildItem $fish -Recurse -File -Filter '*.cs' | ForEach-Object {
+            $txt=Get-Content -Raw $_.FullName
+            if($txt -match 'TapScanCode|MouseClick|MouseMove|Drag|CaptureGameWindowAsync|class Input|class.*Detector|DetectAsync|Windows.Media.Ocr'){$selected.Add($_)}
+          }
+          $selected | Sort-Object FullName -Unique | ForEach-Object {
+            $rel=$_.FullName.Substring($fish.Length+1)
+            $dst=Join-Path $out $rel
+            New-Item -ItemType Directory -Path (Split-Path $dst) -Force | Out-Null
+            Copy-Item $_.FullName $dst -Force
+          }
+          Get-ChildItem $out -Recurse -File | ForEach-Object { Write-Host $_.FullName }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add $out
+          if(-not (git diff --cached --quiet)){
+            git commit -m 'Capture V0.1.30 runtime integration source'
+            git push origin HEAD:v0131-peaca-auto-route
+          }
