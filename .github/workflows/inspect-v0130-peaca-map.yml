@@ -1,0 +1,47 @@
+name: Inspect V0.1.30 for Peaca map navigation
+
+on:
+  push:
+    branches: [v0131-peaca-map-navigation]
+    paths:
+      - '.github/workflows/inspect-v0130-peaca-map.yml'
+      - 'release-source/v0131_peaca_map_navigation.py'
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect current V0.1.30 source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.30/CombinedFishingDungeon_V0.1.30_NoPolicyDetection.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          Write-Host '=== CS FILES ==='
+          Get-ChildItem $fish -Recurse -Filter '*.cs' | ForEach-Object { $_.FullName.Substring($fish.Length+1) }
+          Write-Host '=== DUNGEON/UI MATCHES ==='
+          Get-ChildItem $fish -Recurse -Filter '*.cs' | Select-String -Pattern '선택 던전|SelectedDungeon|Dungeon.*Select|ComboBox|SelectedAbyss|dungeonPicker|던전 선택' -Context 6,12 | ForEach-Object {
+            Write-Host ('FILE=' + $_.Path.Substring($fish.Length+1) + ' LINE=' + $_.LineNumber)
+            $_.Context.PreContext | ForEach-Object { Write-Host $_ }
+            Write-Host $_.Line
+            $_.Context.PostContext | ForEach-Object { Write-Host $_ }
+            Write-Host '---'
+          }
+          Write-Host '=== INPUT/CAPTURE/DETECT API MATCHES ==='
+          Get-ChildItem $fish -Recurse -Filter '*.cs' | Select-String -Pattern 'TapScanCode|CaptureGameWindowAsync|DetectAsync|Mouse|Click|Drag|MoveMouse|SendInput|SetForegroundWindow|Ocr' -Context 3,8 | ForEach-Object {
+            if($_.Path -match 'ScenarioEngine|MainForm|Input|Detector|Vision'){
+              Write-Host ('FILE=' + $_.Path.Substring($fish.Length+1) + ' LINE=' + $_.LineNumber)
+              $_.Context.PreContext | ForEach-Object { Write-Host $_ }
+              Write-Host $_.Line
+              $_.Context.PostContext | ForEach-Object { Write-Host $_ }
+              Write-Host '---'
+            }
+          }
+          Write-Host '=== DUNGEON CONFIG ==='
+          Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')
+          Write-Host '=== SCENARIO CONFIG ==='
+          Get-Content -Raw (Join-Path $fish 'dungeon/config/scenario.json')
