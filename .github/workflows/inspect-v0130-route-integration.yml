@@ -1,0 +1,29 @@
+name: Inspect V0.1.30 route integration
+on:
+  push:
+    branches: [v0131-peaca-auto-route]
+    paths:
+      - '.github/workflows/inspect-v0130-route-integration.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and inspect V0.1.30 source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.30/CombinedFishingDungeon_V0.1.30_NoPolicyDetection.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          Write-Host "ROOT=$($root.FullName)"
+          Write-Host '=== FILES ==='
+          Get-ChildItem $fish -Recurse -File | ForEach-Object { $_.FullName.Substring($fish.Length+1) }
+          Write-Host '=== UI MATCHES ==='
+          Get-ChildItem $fish -Recurse -Filter '*.cs' | Select-String -Pattern '선택 던전|SelectedDungeon|DungeonPicker|_dungeonPicker|심층|ComboBox|SelectedAbyss|StartDungeon|ScenarioEngine' -Context 8,18 | ForEach-Object { $_.ToString() }
+          Write-Host '=== INPUT MATCHES ==='
+          Get-ChildItem $fish -Recurse -Filter '*.cs' | Select-String -Pattern 'TapScanCode|Mouse|Click|Move|Drag|SendInput|CaptureGameWindowAsync|DetectAsync|Ocr' -Context 4,10 | ForEach-Object { $_.ToString() }
