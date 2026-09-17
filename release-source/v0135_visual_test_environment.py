@@ -42,14 +42,14 @@ with zipfile.ZipFile(io.BytesIO(asset_zip), "r") as zf:
     zf.extractall(asset_dir)
 
 expected_assets = {
-    "peaca_label.jpg": "10d2eb1ac7df81dd25555a70aab4db903169d98fa8a50adc0138f64a7d4d109d",
-    "fiod_label.jpg": "78685b19df71aad991c9ee6486ae9dfe956fb7007da9bb60e0f82ccfdac3c71d",
-    "peaca_popup_title.jpg": "dd6538c2fe9c92253bd289cedb779a1c25d3e97f6affb33050c06e4aabdb2da2",
-    "go_here.jpg": "496e016e295a8d63de38e2ece039f7efdbffa7babc10e6ce39843183aeadad4f",
-    "d1_slots.jpg": "9fd8bf057e4b1b5d956210e6b569e3bf5383116deb0c1a23241273fda78d4a32",
-    "d2_slots.jpg": "62e6ca80ad9510e9d31d8bf354575c9ec1fef0811837c0d39b67de9993e7c9d6",
-    "d2_enter.jpg": "92b1a509ba745c220115dadeb7b8d086e563e9c3a932a906465e7aa24429b74a",
-    "retry_candidate.jpg": "1757c54deec2ffbc4f3f7bffc7e85f372a0532f682460c005f443d9d2c418800",
+    "peaca_label.jpg": "63d99c6c2fe22f3f4a3fe44212d7a3364a41ac38568f8318c72be92666dca265",
+    "fiod_label.jpg": "0971ad333a12c838b1aafc293a7fc58736011ae2c6c7866eaf29aa8c0adc8dd5",
+    "peaca_popup_title.jpg": "443f0641f40de0bf22104b0ec0fbac36391fe3cc9d4a6249142f87df7d26c87a",
+    "go_here.jpg": "fcc7d7a7f4faffb337bf1c61e99cab0ad86f0e111eeab56039d501c385a5e3a0",
+    "d1_slots.jpg": "3c29601f6ae65e5bb9de630dd680045f329d77c7f449116f79ddf01353163b12",
+    "d2_slots.jpg": "7c088ea22218859ce256e1e128a6cc44d3fde4e27c35915d5807c3666727eae3",
+    "d2_enter.jpg": "0edd926d7d79c947c9f3e96a0c7ab198697be395c3f36a5f18f80815cef868f3",
+    "retry_candidate.jpg": "9ab1ae566180278d157ebafdf3628f71ff8f73d076162ca3f2846af34ef4b16f",
 }
 for name, expected in expected_assets.items():
     p = asset_dir / name
