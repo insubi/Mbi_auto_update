@@ -179,13 +179,11 @@ jobs:
             Write-Host "Deleting stale V0.1.31 release id=$($r.id) draft=$($r.draft)"
             Invoke-RestMethod -Method Delete -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/$($r.id)"
           }
-          try{
-            Invoke-RestMethod -Method Delete -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/git/refs/tags/$tag"
+          gh api -X DELETE "repos/$env:REPO/git/refs/tags/$tag" 2>$null
+          if($LASTEXITCODE-ne0){
+            Write-Host 'No stale V0.1.31 tag (delete skipped)'
+          }else{
             Write-Host 'Deleted stale V0.1.31 tag'
-          }catch{
-            $status=$_.Exception.Response.StatusCode.value__
-            if($status-ne404){throw}
-            Write-Host 'No stale V0.1.31 tag'
           }
 
           @(
