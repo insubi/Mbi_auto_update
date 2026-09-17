@@ -61,8 +61,8 @@ jobs:
           }
           $d21=@($targets|Where-Object {$_.Id-eq'route_d2_1'})[0]
           $enterD21=@($targets|Where-Object {$_.Id-eq'route_enter_d2_1'})[0]
-          if($d21.Text -notmatch '2층 1구역'){throw 'D2-1 selection OCR text incorrect'}
-          if($enterD21.Text -notmatch '2층 1구역'){throw 'D2-1 entry OCR text incorrect'}
+          if($d21.Text-ne'D2-1'){throw "D2-1 selection OCR text incorrect: $($d21.Text)"}
+          if($enterD21.Text -notmatch '2층 1구역'){throw "D2-1 entry OCR text incorrect: $($enterD21.Text)"}
           foreach($id in @('retry','scene_skip','selected','challenge','enter_bottom')){
             if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "preserved target missing/duplicate: $id"}
           }
