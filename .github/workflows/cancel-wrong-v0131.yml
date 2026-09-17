@@ -16,14 +16,14 @@ jobs:
   cancel:
     runs-on: ubuntu-latest
     steps:
-      - name: Cancel incorrect D2-2 release runs
+      - name: Cancel superseded V0.1.31 runs
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -u
-          for run_id in 35244294361 35244852958; do
+          for run_id in 35244294361 35244852958 35246553468; do
             echo "Cancelling workflow run ${run_id}"
             gh api -X POST "repos/${REPO}/actions/runs/${run_id}/cancel" || true
           done
