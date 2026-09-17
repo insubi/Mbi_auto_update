@@ -1,0 +1,64 @@
+name: Inspect V0.1.30 Peaca Exact APIs
+
+on:
+  push:
+    branches: [v0131-peaca-map-navigation]
+    paths: ['.github/workflows/inspect-v0130-peaca-exact.yml']
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact snippets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.30/CombinedFishingDungeon_V0.1.30_NoPolicyDetection.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          function PrintAround($path,$pattern,$before,$after,$label){
+            $m=Select-String -Path $path -Pattern $pattern | Select-Object -First 1
+            if($null-eq$m){ Write-Host "=== $label NOT_FOUND ==="; return }
+            $lines=Get-Content $path
+            $s=[Math]::Max(1,$m.LineNumber-$before); $e=[Math]::Min($lines.Count,$m.LineNumber+$after)
+            Write-Host "=== $label :: $([IO.Path]::GetFileName($path)) lines $s-$e ==="
+            for($i=$s;$i-le$e;$i++){ Write-Host (('{0,4}: ' -f $i)+$lines[$i-1]) }
+            Write-Host "=== END $label ==="
+          }
+
+          $dash=Join-Path $fish 'MainForm.Dashboard.cs'
+          if(Test-Path $dash){
+            PrintAround $dash '_dungeonPicker' 30 70 'DUNGEON_PICKER'
+            PrintAround $dash 'SelectedIndexChanged|SelectedItem' 20 50 'DUNGEON_PICKER_SELECTION'
+          }
+
+          Get-ChildItem $fish -Filter 'MainForm*.cs' | ForEach-Object {
+            if(Select-String -Path $_.FullName -Pattern 'new ScenarioEngine' -Quiet){ PrintAround $_.FullName 'new ScenarioEngine' 45 75 'SCENARIO_ENGINE_CREATE' }
+            if(Select-String -Path $_.FullName -Pattern 'RunAsync' -Quiet){ PrintAround $_.FullName 'RunAsync' 35 55 'RUN_ASYNC_CALL' }
+          }
+
+          $eng=Join-Path $fish 'dungeon/ScenarioEngine.cs'
+          PrintAround $eng 'public ScenarioEngine\(' 15 55 'ENGINE_CTOR'
+          PrintAround $eng 'CaptureGameWindowAsync' 12 30 'CAPTURE_HELPER'
+          PrintAround $eng 'ResolveRequiredGameWindowAsync' 12 30 'WINDOW_HELPER'
+
+          $inputFile=(Get-ChildItem $fish -Recurse -Filter '*.cs' | Where-Object { Select-String -Path $_.FullName -Pattern 'class InputController' -Quiet } | Select-Object -First 1).FullName
+          if($inputFile){
+            PrintAround $inputFile 'class InputController' 5 120 'INPUT_CONTROLLER'
+            PrintAround $inputFile 'TapScanCode' 15 70 'INPUT_KEY'
+            PrintAround $inputFile 'Click|MouseDown|MoveMouse|Drag' 15 100 'INPUT_MOUSE'
+          }
+
+          $detFiles=Get-ChildItem $fish -Recurse -Filter '*.cs' | Where-Object { Select-String -Path $_.FullName -Pattern 'DetectAsync\(' -Quiet }
+          foreach($f in $detFiles){
+            if(Select-String -Path $f.FullName -Pattern 'class .*Detector|record .*Detection|class .*Detection|ReadText|Rectangle' -Quiet){
+              PrintAround $f.FullName 'class .*Detector|record .*Detection|class .*Detection' 8 85 ('DETECTOR_'+$f.BaseName)
+              PrintAround $f.FullName 'DetectAsync\(' 15 70 ('DETECT_ASYNC_'+$f.BaseName)
+            }
+          }
+
+          $modelFiles=Get-ChildItem $fish -Recurse -Filter '*.cs' | Where-Object { Select-String -Path $_.FullName -Pattern 'ReadText' -Quiet }
+          foreach($f in $modelFiles | Select-Object -First 3){ PrintAround $f.FullName 'ReadText' 15 45 ('READTEXT_'+$f.BaseName) }
