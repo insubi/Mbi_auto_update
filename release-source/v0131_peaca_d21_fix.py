@@ -40,16 +40,21 @@ replace_required(
     [("페카 심층 2-2", "페카 심층 2-1")],
 )
 
+# ScenarioEngine contains route IDs and destination text; exact entry text lives in targets.json.
+engine_path = app / "dungeon" / "ScenarioEngine.cs"
 replace_required(
-    app / "dungeon" / "ScenarioEngine.cs",
+    engine_path,
     [
         ("peaca_d2_2", "peaca_d2_1"),
         ("페카 심층 2-2", "페카 심층 2-1"),
         ("route_d2_2", "route_d2_1"),
         ("route_enter_d2_2", "route_enter_d2_1"),
-        ("심층 2층 2구역", "심층 2층 1구역"),
     ],
 )
+# Keep local variable naming consistent with the corrected route.
+engine = read_text(engine_path)
+engine = engine.replace("bool d22 =", "bool d21 =").replace("!d22", "!d21")
+write_text(engine_path, engine)
 
 targets_path = app / "dungeon" / "config" / "targets.json"
 targets = json.loads(read_text(targets_path))
@@ -63,7 +68,9 @@ for target in targets:
     if target_id in id_map:
         target["Id"] = id_map[target_id]
     if isinstance(target.get("Text"), str):
-        target["Text"] = target["Text"].replace("심층 2층 2구역", "심층 2층 1구역")
+        target["Text"] = (target["Text"]
+                          .replace("D2-2", "D2-1")
+                          .replace("심층 2층 2구역", "심층 2층 1구역"))
     if target.get("Id") in seen:
         raise RuntimeError(f"duplicate target after D2-1 correction: {target.get('Id')}")
     seen.add(target.get("Id"))
@@ -74,15 +81,23 @@ for required in ("route_d2_1", "route_enter_d2_1"):
 
 write_text(targets_path, json.dumps(targets, ensure_ascii=False, indent=2) + "\n")
 
+changes_path = root / "CHANGES_V0.1.31_PEACA_AUTO_ROUTE.txt"
+if changes_path.exists():
+    changes = read_text(changes_path).replace("D2-2", "D2-1")
+    write_text(changes_path, changes)
+
 for path in (
     app / "MainForm.cs",
     app / "MainForm.ReferenceUI.cs",
-    app / "dungeon" / "ScenarioEngine.cs",
+    engine_path,
     targets_path,
+    changes_path,
 ):
+    if not path.exists():
+        continue
     text = read_text(path)
-    for forbidden in ("페카 심층 2-2", "peaca_d2_2", "route_d2_2", "route_enter_d2_2", "심층 2층 2구역"):
+    for forbidden in ("페카 심층 2-2", "peaca_d2_2", "route_d2_2", "route_enter_d2_2", "D2-2", "심층 2층 2구역"):
         if forbidden in text:
             raise RuntimeError(f"D2-2 residue remains in {path.name}: {forbidden}")
 
-print("V0.1.31 D2-1 correction applied")
+print("V0.1.31 D2-1 correction applied: D1-1 / D2-1 only")
