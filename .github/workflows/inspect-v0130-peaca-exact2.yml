@@ -1,0 +1,44 @@
+name: Inspect V0.1.30 Peaca Exact APIs 2
+
+on:
+  push:
+    branches: [v0131-peaca-map-navigation]
+    paths: ['.github/workflows/inspect-v0130-peaca-exact2.yml']
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact snippets 2
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.30/CombinedFishingDungeon_V0.1.30_NoPolicyDetection.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          function Around($path,$pattern,$b,$a,$label){
+            $m=Select-String -Path $path -Pattern $pattern | Select-Object -First 1
+            if(!$m){Write-Host "=== $label NOT_FOUND ===";return}
+            $l=Get-Content $path;$s=[Math]::Max(1,$m.LineNumber-$b);$e=[Math]::Min($l.Count,$m.LineNumber+$a)
+            Write-Host "=== $label $($path.Substring($fish.Length+1)) $s-$e ==="
+            for($i=$s;$i-le$e;$i++){Write-Host (('{0,4}: '-f$i)+$l[$i-1])}
+            Write-Host "=== END $label ==="
+          }
+          Write-Host '=== ALL SELECTOR MATCH FILES ==='
+          Get-ChildItem $fish -Recurse -Filter '*.cs' | Select-String -Pattern '_abyssDungeon|SelectedAbyssDungeon|SelectedAbyssTargetId|선택 던전|던전 선택|_mode.Items|ComboBox' | ForEach-Object { Write-Host ($_.Path.Substring($fish.Length+1)+':'+$_.LineNumber+': '+$_.Line.Trim()) }
+          $main=Join-Path $fish 'MainForm.cs'
+          Around $main '_abyssDungeon' 35 90 'ABYSS_SELECTOR'
+          Around $main 'private async Task.*Start|async void.*Start|StartScenario|RunScenario' 20 100 'START_METHOD'
+          Around $main 'folderName' 35 55 'MODE_FOLDER_SELECTION'
+          $iface=(Get-ChildItem $fish -Recurse -Filter '*.cs'|Where-Object{Select-String $_.FullName -Pattern 'interface IInputController' -Quiet}|Select-Object -First 1).FullName
+          if($iface){Around $iface 'interface IInputController' 3 80 'INPUT_INTERFACE'}
+          $inter=(Get-ChildItem $fish -Recurse -Filter '*.cs'|Where-Object{Select-String $_.FullName -Pattern 'class InterceptionInput' -Quiet}|Select-Object -First 1).FullName
+          if($inter){Around $inter 'class InterceptionInput' 5 180 'INTERCEPTION_INPUT'}
+          $cap=(Get-ChildItem $fish -Recurse -Filter '*.cs'|Where-Object{Select-String $_.FullName -Pattern 'class WindowCapture' -Quiet}|Select-Object -First 1).FullName
+          if($cap){Around $cap 'class WindowCapture' 5 120 'WINDOW_CAPTURE'}
+          $ocr=(Get-ChildItem $fish -Recurse -Filter '*.cs'|Where-Object{Select-String $_.FullName -Pattern 'class OcrRecognizer' -Quiet}|Select-Object -First 1).FullName
+          if($ocr){Around $ocr 'FindTextAsync' 10 130 'OCR_FIND'}
+          $models=Join-Path $fish 'dungeon/Models.cs'; if(!(Test-Path $models)){$models=(Get-ChildItem $fish -Recurse -Filter 'Models.cs'|Select-Object -First 1).FullName}
+          Around $models 'class TargetDefinition' 10 70 'TARGET_DEF'
