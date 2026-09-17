@@ -1,0 +1,27 @@
+name: Inspect Current Updater
+
+on:
+  push:
+    branches: [v0134-package-layout-hotfix]
+    paths:
+      - '.github/workflows/inspect-current-updater.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print V0.1.31 UpdateManager
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile source.zip
+          Expand-Archive source.zip -DestinationPath src
+          $root=Get-ChildItem src -Directory | Select-Object -First 1
+          $file=Join-Path $root.FullName 'FishingAutomation/UpdateManager.cs'
+          Write-Host '===== UPDATE MANAGER ====='
+          Get-Content -LiteralPath $file
+          Write-Host '===== END ====='
