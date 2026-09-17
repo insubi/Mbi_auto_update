@@ -33,40 +33,39 @@ def remove_policy_targets(path: Path) -> None:
     write(path, json.dumps(kept, ensure_ascii=False, indent=2) + "\n")
 
 
-# Remove both OCR targets from regular dungeon and Abyss configs.
 remove_policy_targets(dungeon_targets_path)
 remove_policy_targets(abyss_targets_path)
 
 engine = read(engine_path)
 
-# Remove the V0.1.28 recovery-classifier policy/ERROR88 check.
-classifier_block = '''            // V0.1.28 safety gate: do not send recovery input on a policy shutdown screen.
-            var policy = await _detector.DetectAsync("policy_shutdown", frame, ct);
-            var error88 = await _detector.DetectAsync("policy_error88", frame, ct);
-            if (policy.Found || error88.Found)
-            {
-                Log?.Invoke("[던전 자동복구] 운영 정책/ERROR 88 종료 화면 감지 -> 모든 복구 입력 중지");
-                throw new InvalidOperationException("DUNGEON_POLICY_SHUTDOWN_DETECTED: 운영 정책/ERROR 88 화면 감지 -> 자동 입력 즉시 정지");
-            }
+# Remove the recovery-classifier safety block by stable boundaries rather than exact wording.
+policy_detect = '            var policy = await _detector.DetectAsync("policy_shutdown", frame, ct);\n'
+classifier_pos = engine.find(policy_detect)
+if classifier_pos < 0:
+    raise RuntimeError("recovery classifier policy detection not found")
+classifier_start = engine.rfind("\n", 0, classifier_pos)
+comment_pos = engine.rfind("            //", 0, classifier_pos)
+if comment_pos >= 0 and classifier_pos - comment_pos < 300:
+    classifier_start = comment_pos
+else:
+    classifier_start += 1
+classifier_end_marker = "            if (await CheckMonitorsAsync(frame, ct))\n"
+classifier_end = engine.find(classifier_end_marker, classifier_pos)
+if classifier_end < 0:
+    raise RuntimeError("recovery classifier policy block end not found")
+engine = engine[:classifier_start] + engine[classifier_end:]
 
-'''
-if classifier_block not in engine:
-    raise RuntimeError("recovery classifier policy block not found")
-engine = engine.replace(classifier_block, "", 1)
+# Remove the dedicated policy exception passthrough; leave the ordinary catch(Exception) block.
+catch_marker = '        catch (InvalidOperationException ex) when (ex.Message.StartsWith("DUNGEON_POLICY_SHUTDOWN_DETECTED", StringComparison.Ordinal))\n'
+catch_start = engine.find(catch_marker)
+if catch_start < 0:
+    raise RuntimeError("policy passthrough catch start not found")
+next_catch = engine.find("        catch (Exception ex)\n", catch_start)
+if next_catch < 0:
+    raise RuntimeError("ordinary recovery catch block not found")
+engine = engine[:catch_start] + engine[next_catch:]
 
-# Remove the special policy exception passthrough; ordinary recovery exceptions remain.
-catch_block = '''        catch (InvalidOperationException ex) when (ex.Message.StartsWith("DUNGEON_POLICY_SHUTDOWN_DETECTED", StringComparison.Ordinal))
-        {
-            // Intentionally escape Smart Recovery. RunAsync does not swallow this exception,
-            // so the dungeon automation stops instead of sending more game input.
-            throw;
-        }
-'''
-if catch_block not in engine:
-    raise RuntimeError("policy passthrough catch block not found")
-engine = engine.replace(catch_block, "", 1)
-
-# Remove the V0.1.29 global policy guard helper, but keep CheckMonitorsAsync itself.
+# Remove the V0.1.29 global policy guard helper while preserving CheckMonitorsAsync.
 helper_marker = "    // DUNGEON_GLOBAL_POLICY_GUARD_V7\n"
 check_sig = "    private async Task<bool> CheckMonitorsAsync(Bitmap frame, CancellationToken ct)\n    {\n"
 helper_start = engine.find(helper_marker)
@@ -80,7 +79,7 @@ if leading_guard not in engine:
     raise RuntimeError("monitor leading policy guard call not found")
 engine = engine.replace(leading_guard, check_sig, 1)
 
-# Keep two-frame scene-skip confirmation, but remove the policy OCR call from its confirm frame.
+# Preserve the two-frame scene-skip logic, only remove the policy OCR call from its confirm frame.
 confirm_guard = "                await ThrowIfDungeonPolicyShutdownAsync(confirmFrame, ct);\n"
 if confirm_guard not in engine:
     raise RuntimeError("scene-skip confirm policy guard call not found")
@@ -97,7 +96,6 @@ for forbidden in [
     if forbidden in engine:
         raise RuntimeError(f"policy detection residue remains in ScenarioEngine.cs: {forbidden}")
 
-# Preserve all unrelated V0.1.29 hardening and previous dungeon/Abyss behavior.
 for marker in [
     "DUNGEON_FULL_STABILITY_HARDENING_V7",
     "동일 단계 복구",
@@ -114,7 +112,6 @@ for marker in [
 
 write(engine_path, engine)
 
-# Runtime version bump only.
 for path in root.rglob("*"):
     if not path.is_file() or path.suffix.lower() not in {".cs", ".csproj", ".json", ".cmd", ".ps1"}:
         continue
