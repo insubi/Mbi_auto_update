@@ -1,0 +1,185 @@
+name: Build V0.1.29 Full Stability Hardening
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0129-stability-hardening
+    paths:
+      - '.github/workflows/build-v0129-full-stability-hardening.yml'
+      - 'release-source/v0129_full_stability_hardening.py'
+      - 'release-source/assets/retry_visual_v0129.jpg'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch and validate V0.1.29
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.28/CombinedFishingDungeon_V0.1.28_ScreenFirstRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0129_full_stability_hardening.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.29 patch failed'}
+
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')|ConvertFrom-Json
+          foreach($id in @('policy_shutdown','policy_error88','retry','scene_skip','selected','challenge','enter_bottom')){
+            if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "target missing/duplicate: $id"}
+          }
+          $retry=@($targets|Where-Object {$_.Id-eq'retry'})[0]
+          if($retry.Kind-ne'hybrid' -or $retry.Text-ne'다시 하기' -or $retry.TemplatePath-ne'templates/retry_visual_v0129.jpg'){
+            throw 'retry hybrid OCR/template validation failed'
+          }
+          if([double]$retry.Threshold-lt0.69){throw 'retry visual threshold unexpectedly loose'}
+          $retryTemplate=Join-Path $fish 'dungeon/templates/retry_visual_v0129.jpg'
+          if(-not(Test-Path $retryTemplate)){throw 'retry visual template missing from patched source'}
+          $retryHash=(Get-FileHash $retryTemplate -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($retryHash-ne'0089b636041b76b4eabd269b7c50b82d045ef11f66368797947b7f72adea59aa'){
+            throw "retry visual hash mismatch: $retryHash"
+          }
+
+          $abyssTargetsPath=Join-Path $fish 'abyss/config/targets.json'
+          if(Test-Path $abyssTargetsPath){
+            $abyssTargets=Get-Content -Raw $abyssTargetsPath|ConvertFrom-Json
+            foreach($id in @('policy_shutdown','policy_error88')){
+              if(@($abyssTargets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "abyss safety target missing/duplicate: $id"}
+            }
+          }
+
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          foreach($m in @(
+            'DUNGEON_FULL_STABILITY_HARDENING_V7',
+            'DUNGEON_GLOBAL_POLICY_GUARD_V7',
+            '동일 단계 복구',
+            '같은 복구 단계가',
+            'scene_skip 1/2 확인',
+            'scene_skip 2/2 연속 확인',
+            'DUNGEON_POLICY_SHUTDOWN_DETECTED: 운영 정책/ERROR 88 화면 감지',
+            'DUNGEON_SCREEN_FIRST_RECOVERY_V6',
+            'DUNGEON_CHALLENGE_DISAMBIGUATION_V5',
+            '던전 밖 HUD 3/4 이상 확인',
+            '어비스 클릭 검증 실패'
+          )){if(-not $engine.Contains($m)){throw "engine marker missing: $m"}}
+          if(-not $engine.Contains('await ThrowIfDungeonPolicyShutdownAsync(frame, ct);')){throw 'global policy guard not first in monitor path'}
+          if(-not $engine.Contains('using var confirmFrame = await CaptureGameWindowAsync(ct);')){throw 'scene-skip separate-frame confirmation missing'}
+          if(-not $engine.Contains('repeatedRecoveryCount >= max')){throw 'same-stage recovery cap missing'}
+
+          $scenario=Get-Content -Raw (Join-Path $fish 'dungeon/config/scenario.json')|ConvertFrom-Json
+          $sceneMon=@($scenario.Monitors|Where-Object {$_.Target-eq'scene_skip'})
+          if($sceneMon.Count-ne1){throw 'scene_skip monitor missing/duplicate'}
+          if([int]$sceneMon[0].CooldownMs-ne2500 -or [int]$sceneMon[0].ScanIntervalMs-ne1200){throw 'scene_skip timings changed unexpectedly'}
+
+          # Preserve the known-good fishing templates exactly.
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "fishing template changed: $t $h"}
+          }
+
+          # Full compile before packaging.
+          dotnet restore (Join-Path $fish 'FishingAutomation.csproj')
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation restore failed'}
+          dotnet build (Join-Path $fish 'FishingAutomation.csproj') -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+          $watchProj=Join-Path $root.FullName 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watchProj){
+            dotnet restore $watchProj
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog restore failed'}
+            dotnet build $watchProj -c Release --no-restore
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          }
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.29' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.29').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+          $runtimeRetry=Join-Path $release 'dungeon/templates/retry_visual_v0129.jpg'
+          if(-not(Test-Path $runtimeRetry)){throw 'runtime retry visual missing'}
+          $runtimeRetryHash=(Get-FileHash $runtimeRetry -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($runtimeRetryHash-ne'0089b636041b76b4eabd269b7c50b82d045ef11f66368797947b7f72adea59aa'){
+            throw "runtime retry visual hash mismatch: $runtimeRetryHash"
+          }
+
+          # Launch smoke test. A release-blocking startup crash must fail the workflow.
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 5
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.29_FullStabilityHardening.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.29_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.29_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.29 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.29'
+          @(
+            'MABI AUTO V0.1.29 - 전체 안정성 보강',
+            '',
+            '다시 하기는 기존 OCR과 업데이트된 초록 버튼 이미지 템플릿을 함께 사용합니다.',
+            '같은 던전 복구 단계가 AutoRecoveryMaxAttempts 횟수만큼 반복되면 무한 루프를 막기 위해 안전 정지합니다.',
+            '운영 정책 / ERROR 88은 일반 던전/어비스 monitor 입력보다 먼저 확인하며 감지 시 즉시 예외를 전파해 자동 입력을 중지하고 기존 텔레그램 오류 알림 경로로 전달합니다.',
+            '장면 넘기기는 서로 다른 2개 프레임에서 연속 확인된 경우에만 클릭합니다.',
+            'V0.1.27 보라색 선택됨/도전 대응, V0.1.28 화면 우선 자동복구, 기존 어비스/낚시/F10/로그/텔레그램 기능은 유지합니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.29_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@(
+            'out/CombinedFishingDungeon_V0.1.29_FullStabilityHardening.zip',
+            'out/MabiAuto_V0.1.29_Windows_Lite.zip',
+            'out/MabiAuto_V0.1.29_Windows_Lite.zip.sha256'
+          )
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.29' --notes-file notes.txt
+          }
