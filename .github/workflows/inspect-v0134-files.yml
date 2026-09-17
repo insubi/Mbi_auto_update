@@ -1,0 +1,36 @@
+name: Inspect V0.1.34 Uploader Files
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0134-runtime-error-upload]
+    paths: ['.github/workflows/inspect-v0134-files.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print integration files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          foreach($name in @('AppLog.cs','TelegramSettingsDialog.cs','Program.cs','AutomationConfig.cs','MainForm.Telegram.cs','FishingAutomation.csproj')){
+            $f=Join-Path $fish $name
+            if(Test-Path $f){Write-Host "===== $name ====="; Get-Content $f}
+          }
+          $main=Join-Path $fish 'MainForm.cs'
+          $lines=Get-Content $main
+          foreach($range in @(@(300,430),@(620,755))){
+            Write-Host "===== MainForm.cs $($range[0])-$($range[1]) ====="
+            for($i=$range[0];$i-le[Math]::Min($range[1],$lines.Count);$i++){Write-Host ("{0,5}: {1}" -f $i,$lines[$i-1])}
+          }
