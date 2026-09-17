@@ -1,0 +1,102 @@
+name: Finalize V0.1.34 Release R2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0134-runtime-error-upload]
+    paths: ['.github/workflows/finalize-v0134-release-r2.yml']
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  finalize:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MabiAuto_V0.1.34_Windows_Lite
+          path: out
+          github-token: ${{ github.token }}
+          run-id: 35281023229
+      - name: Verify and publish existing V0.1.34 draft
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.34'
+          $target='abce763a88bd5e1be2c79c62a1dbdb76e4581456'
+          $zip=(Resolve-Path 'out/MabiAuto_V0.1.34_Windows_Lite.zip').Path
+          $shaFile=(Resolve-Path 'out/MabiAuto_V0.1.34_Windows_Lite.zip.sha256').Path
+          $actual=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $declared=((Get-Content $shaFile -Raw).Trim().Split(' ',[System.StringSplitOptions]::RemoveEmptyEntries)[0]).ToLowerInvariant()
+          if($actual-ne$declared){throw "artifact SHA mismatch actual=$actual declared=$declared"}
+          if($actual-ne'0da5ae18cd8fb36bb2c93abdd8d69d8dea8d6e4d842fc4038bf12951be947b57'){throw "unexpected verified SHA: $actual"}
+          if((Get-Item $zip).Length-ne141187594){throw "unexpected ZIP size: $((Get-Item $zip).Length)"}
+          Write-Host "VERIFIED_SHA256=$actual"
+          Write-Host "VERIFIED_SIZE=$((Get-Item $zip).Length)"
+
+          $headers=@{
+            Authorization="Bearer $env:GH_TOKEN"
+            Accept='application/vnd.github+json'
+            'X-GitHub-Api-Version'='2022-11-28'
+          }
+
+          $release=$null
+          try { $release=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/391095725" } catch {}
+          if($null-eq$release -or $release.tag_name-ne$tag -or -not $release.draft){
+            $all=@(Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases?per_page=100")
+            $release=@($all|Where-Object {$_.tag_name-eq$tag})|Select-Object -First 1
+          }
+          if($null-eq$release){throw 'V0.1.34 draft release not found'}
+          if(-not $release.draft){throw 'V0.1.34 release is unexpectedly already public before asset verification'}
+          if($release.target_commitish-ne$target){throw "unexpected target commit: $($release.target_commitish)"}
+
+          foreach($asset in @($release.assets)){
+            Write-Host "Deleting stale asset $($asset.name)"
+            Invoke-RestMethod -Method Delete -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/assets/$($asset.id)"
+          }
+
+          $uploadBase=$release.upload_url -replace '\{\?name,label\}$',''
+          function Upload-Asset([string]$path,[string]$contentType){
+            $name=[IO.Path]::GetFileName($path)
+            $encoded=[Uri]::EscapeDataString($name)
+            $url="${uploadBase}?name=$encoded"
+            Write-Host "Uploading $name"
+            & curl.exe --fail-with-body --silent --show-error --location --max-time 300 --retry 4 --retry-delay 10 --retry-all-errors -X POST `
+              -H "Authorization: Bearer $env:GH_TOKEN" `
+              -H 'Accept: application/vnd.github+json' `
+              -H 'X-GitHub-Api-Version: 2022-11-28' `
+              -H "Content-Type: $contentType" `
+              --data-binary "@$path" $url
+            if($LASTEXITCODE-ne0){throw "direct upload failed: $name"}
+          }
+
+          Upload-Asset $zip 'application/zip'
+          Upload-Asset $shaFile 'text/plain'
+
+          $draft=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/$($release.id)"
+          $zipAsset=@($draft.assets|Where-Object {$_.name-eq'MabiAuto_V0.1.34_Windows_Lite.zip'})[0]
+          $shaAsset=@($draft.assets|Where-Object {$_.name-eq'MabiAuto_V0.1.34_Windows_Lite.zip.sha256'})[0]
+          if($null-eq$zipAsset -or $null-eq$shaAsset){throw 'draft assets missing after upload'}
+          if($zipAsset.digest-ne"sha256:$actual"){throw "draft release digest mismatch: $($zipAsset.digest)"}
+          if([int64]$zipAsset.size-ne141187594){throw "draft ZIP size mismatch: $($zipAsset.size)"}
+
+          gh release edit $tag --repo $env:REPO --draft=false --latest
+          if($LASTEXITCODE-ne0){throw 'release publish failed'}
+
+          $final=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/tags/$tag"
+          if($final.draft){throw 'final release is still draft'}
+          if($final.target_commitish-ne$target){throw "final target mismatch: $($final.target_commitish)"}
+          $finalZip=@($final.assets|Where-Object {$_.name-eq'MabiAuto_V0.1.34_Windows_Lite.zip'})[0]
+          $finalSha=@($final.assets|Where-Object {$_.name-eq'MabiAuto_V0.1.34_Windows_Lite.zip.sha256'})[0]
+          if($null-eq$finalZip -or $null-eq$finalSha){throw 'final assets missing'}
+          if($finalZip.digest-ne"sha256:$actual"){throw "final digest mismatch: $($finalZip.digest)"}
+          if([int64]$finalZip.size-ne141187594){throw "final ZIP size mismatch: $($finalZip.size)"}
+          Write-Host "FINAL_RELEASE_URL=$($final.html_url)"
+          Write-Host "FINAL_SHA256=$actual"
+          Write-Host "FINAL_TARGET=$($final.target_commitish)"
