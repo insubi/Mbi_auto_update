@@ -1,0 +1,64 @@
+name: Repair V0.1.34 Assertions
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0134-runtime-error-upload]
+    paths: ['.github/workflows/repair-v0134-assertions.yml']
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  repair:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v0134-runtime-error-upload
+          fetch-depth: 0
+      - name: Fix assertion scope commit and dispatch
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $p='release-source/v0134_runtime_error_upload.py'
+          $text=Get-Content -Raw $p
+          $old=@'
+          for marker in (
+              "RuntimeErrorUploader _errorUploader",
+              "SendRuntimeAlertAsync(",
+              "DUNGEON_RESULT_RETRY_FASTPATH_V8",
+              "var ullaBreadcrumbPoint = new Point(82, 66);",
+          ):
+              if marker not in main_check and marker not in error_ui_check:
+                  raise RuntimeError(f"required MainForm marker missing: {marker}")
+          '@
+          $new=@'
+          for marker in (
+              "RuntimeErrorUploader _errorUploader",
+              "SendRuntimeAlertAsync(",
+          ):
+              if marker not in main_check and marker not in error_ui_check:
+                  raise RuntimeError(f"required MainForm marker missing: {marker}")
+          engine_check = read(app / "dungeon" / "ScenarioEngine.cs")
+          for marker in (
+              "DUNGEON_RESULT_RETRY_FASTPATH_V8",
+              "var ullaBreadcrumbPoint = new Point(82, 66);",
+          ):
+              if marker not in engine_check:
+                  raise RuntimeError(f"required engine marker missing: {marker}")
+          '@
+          if(-not $text.Contains($old)){throw 'old assertion block not found'}
+          $text=$text.Replace($old,$new)
+          Set-Content -Path $p -Value $text -Encoding utf8NoBOM
+          python -m py_compile $p
+          if($LASTEXITCODE-ne0){throw 'patch syntax invalid after assertion repair'}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add $p
+          git commit -m 'Fix V0.1.34 patch assertion scope'
+          git push origin HEAD:v0134-runtime-error-upload
+          gh workflow run build-v0134-runtime-error-upload.yml --repo "${{ github.repository }}" --ref v0134-runtime-error-upload
