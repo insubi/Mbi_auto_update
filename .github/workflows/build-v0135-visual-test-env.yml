@@ -128,9 +128,16 @@ jobs:
           Write-Host 'SMOKE_TEST_OK'
 
           Copy-Item 'stage/release/*' 'package/release' -Recurse -Force
+
+          $sourceTools=Join-Path $root.FullName 'tools'
+          $applyScript=Join-Path $sourceTools 'ApplyUpdate.ps1'
+          if(-not(Test-Path $applyScript)){throw 'source tools/ApplyUpdate.ps1 missing'}
+          New-Item -ItemType Directory -Path 'package/tools' -Force | Out-Null
+          Copy-Item $applyScript 'package/tools/ApplyUpdate.ps1' -Force
+
           @(
             'MABI AUTO V0.1.35 Windows Lite',
-            'Updater-compatible root marker. Keep the release folder.'
+            'Updater-compatible root marker. Keep the release and tools folders.'
           ) | Set-Content 'package/WINDOWS_LITE.txt' -Encoding UTF8
 
           $zip=(Resolve-Path out).Path+'\MabiAuto_V0.1.35_Windows_Lite.zip'
@@ -144,7 +151,10 @@ jobs:
           if(-not(Test-Path (Join-Path $sourceRoot 'release/FishingAutomation.exe'))){
             throw 'updater simulation failed: release/FishingAutomation.exe missing'
           }
-          Write-Host "UPDATER_LAYOUT_OK children=$($children.Count)"
+          if(-not(Test-Path (Join-Path $sourceRoot 'tools/ApplyUpdate.ps1'))){
+            throw 'updater simulation failed: tools/ApplyUpdate.ps1 missing'
+          }
+          Write-Host "UPDATER_LAYOUT_OK children=$($children.Count) applyScript=OK"
 
           $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  MabiAuto_V0.1.35_Windows_Lite.zip"|Set-Content "$zip.sha256" -Encoding ASCII
