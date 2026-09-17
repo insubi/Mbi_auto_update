@@ -1,0 +1,98 @@
+name: Audit V0.1.28 Full Stability
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/audit-v0128-full-stability.yml'
+      - 'inspection/v0128_full_stability_audit.py'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Download V0.1.28 source package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.28/CombinedFishingDungeon_V0.1.28_ScreenFirstRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          "SOURCE_ROOT=$($root.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Static full-package audit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          python inspection/v0128_full_stability_audit.py "$env:SOURCE_ROOT" | Tee-Object -FilePath audit.txt
+
+      - name: Restore and build all projects
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $projects=Get-ChildItem "$env:SOURCE_ROOT" -Recurse -Filter *.csproj
+          if($projects.Count -eq 0){throw 'no csproj found'}
+          foreach($p in $projects){
+            Write-Host "=== BUILD $($p.FullName) ==="
+            dotnet restore $p.FullName
+            if($LASTEXITCODE-ne0){throw "restore failed: $($p.FullName)"}
+            dotnet build $p.FullName -c Release --no-restore
+            if($LASTEXITCODE-ne0){throw "build failed: $($p.FullName)"}
+          }
+
+      - name: Run tests if present
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $tests=Get-ChildItem "$env:SOURCE_ROOT" -Recurse -Filter *Tests.csproj
+          if($tests.Count -eq 0){
+            Write-Host 'NO_TEST_PROJECTS_FOUND'
+          } else {
+            foreach($p in $tests){
+              dotnet test $p.FullName -c Release --no-restore
+              if($LASTEXITCODE-ne0){throw "tests failed: $($p.FullName)"}
+            }
+          }
+
+      - name: Dependency vulnerability scan
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $projects=Get-ChildItem "$env:SOURCE_ROOT" -Recurse -Filter *.csproj
+          foreach($p in $projects){
+            Write-Host "=== VULNERABILITY SCAN $($p.FullName) ==="
+            dotnet list $p.FullName package --vulnerable --include-transitive
+          }
+
+      - name: Publish and smoke test main app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $proj=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          $out=Join-Path $env:RUNNER_TEMP 'v0128_publish'
+          dotnet publish $proj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:PublishTrimmed=false -p:PublishAot=false -p:DebugType=None -p:DebugSymbols=false -o $out
+          if($LASTEXITCODE-ne0){throw 'publish failed'}
+          $exe=Join-Path $out 'FishingAutomation.exe'
+          if(-not (Test-Path $exe)){throw 'published exe missing'}
+          $p=Start-Process $exe -WorkingDirectory $out -PassThru
+          Start-Sleep 5
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exited early: $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'SMOKE_TEST_OK'
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: v0128-full-stability-audit
+          path: audit.txt
