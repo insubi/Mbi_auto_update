@@ -1,0 +1,29 @@
+name: Inspect V0.1.30 Peaca Exact APIs 3
+
+on:
+  push:
+    branches: [v0131-peaca-map-navigation]
+    paths: ['.github/workflows/inspect-v0130-peaca-exact3.yml']
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact ranges
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.30/CombinedFishingDungeon_V0.1.30_NoPolicyDetection.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          function Range($rel,$s,$e,$label){$p=Join-Path $fish $rel;$l=Get-Content $p;Write-Host "=== $label ===";for($i=$s;$i-le[Math]::Min($e,$l.Count);$i++){Write-Host (('{0,4}: '-f$i)+$l[$i-1])};Write-Host "=== END $label ==="}
+          Range 'MainForm.cs' 118 190 'MAIN_SELECTOR_INIT'
+          Range 'MainForm.Dashboard.cs' 110 150 'DASH_INIT'
+          Range 'MainForm.Dashboard.cs' 480 570 'DASH_DUNGEON_GALLERY'
+          Range 'MainForm.Dashboard.cs' 630 685 'DASH_REFRESH'
+          Range 'MainForm.ReferenceUI.cs' 235 295 'REF_MENU_ACTIONS'
+          Range 'MainForm.ReferenceUI.cs' 540 580 'REF_MENU_DRAW'
+          Range 'dungeon/InputController.cs' 1 220 'DUNGEON_INPUT_ALL'
+          Range 'dungeon/NativeMethods.cs' 1 220 'DUNGEON_NATIVE'
