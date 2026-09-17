@@ -1,0 +1,78 @@
+name: Fix V0.1.34 Package Layout R2
+
+on:
+  push:
+    branches: [v0134-package-layout-hotfix]
+    paths:
+      - '.github/workflows/fix-v0134-package-layout-r2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-package:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repack exactly for ApplyUpdate.ps1
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.34'
+          $asset='MabiAuto_V0.1.34_Windows_Lite.zip'
+          $shaAsset="$asset.sha256"
+
+          New-Item -ItemType Directory -Path current,work,package,out | Out-Null
+          gh release download $tag --repo $env:REPO --pattern $asset --dir current --clobber
+          if($LASTEXITCODE-ne0){throw 'download current release asset failed'}
+
+          Expand-Archive (Join-Path current $asset) -DestinationPath work
+          if(-not(Test-Path 'work/release/FishingAutomation.exe')){
+            throw 'current hotfix package missing release/FishingAutomation.exe'
+          }
+
+          Copy-Item 'work/release' 'package/release' -Recurse -Force
+          @(
+            'MABI AUTO Windows Lite package',
+            'This root marker is intentionally present so ApplyUpdate.ps1 keeps the archive root.',
+            'Do not remove release/FishingAutomation.exe.'
+          ) | Set-Content 'package/WINDOWS_LITE.txt' -Encoding UTF8
+
+          $fixed=Join-Path (Resolve-Path out).Path $asset
+          Compress-Archive -Path 'package/*' -DestinationPath $fixed -CompressionLevel Optimal
+
+          function Assert-UpdaterLayout([string]$zipPath,[string]$dest){
+            Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-Archive -LiteralPath $zipPath -DestinationPath $dest -Force
+            $children=@(Get-ChildItem -LiteralPath $dest -Force)
+            $dirs=@($children|Where-Object{$_.PSIsContainer})
+            if($children.Count-eq1 -and $dirs.Count-eq1){$sourceRoot=$dirs[0].FullName}else{$sourceRoot=(Resolve-Path $dest).Path}
+            $incomingExe=Join-Path $sourceRoot 'release/FishingAutomation.exe'
+            Write-Host "UPDATER_SIM children=$($children.Count) dirs=$($dirs.Count) sourceRoot=$sourceRoot"
+            if(-not(Test-Path -LiteralPath $incomingExe)){throw "ApplyUpdate simulation failed: $incomingExe"}
+            if(-not(Test-Path (Join-Path $sourceRoot 'WINDOWS_LITE.txt'))){throw 'WINDOWS_LITE root marker missing'}
+          }
+
+          Assert-UpdaterLayout $fixed 'simulate1'
+
+          $hash=(Get-FileHash $fixed -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $asset"|Set-Content (Join-Path out $shaAsset) -Encoding ASCII
+          Write-Host "FIXED_SHA256=$hash"
+          Write-Host "FIXED_SIZE=$((Get-Item $fixed).Length)"
+
+          gh release upload $tag $fixed (Join-Path out $shaAsset) --repo $env:REPO --clobber
+          if($LASTEXITCODE-ne0){throw 'release asset replace failed'}
+
+          New-Item -ItemType Directory -Path verify | Out-Null
+          gh release download $tag --repo $env:REPO --pattern $asset --dir verify --clobber
+          if($LASTEXITCODE-ne0){throw 'redownload failed'}
+          $downloaded=Join-Path verify $asset
+          $verifyHash=(Get-FileHash $downloaded -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($verifyHash-ne$hash){throw "hash mismatch local=$hash release=$verifyHash"}
+
+          Assert-UpdaterLayout $downloaded 'simulate2'
+          Write-Host 'V0134_PACKAGE_LAYOUT_R2_OK'
