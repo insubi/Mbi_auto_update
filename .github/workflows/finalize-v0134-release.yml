@@ -1,0 +1,109 @@
+name: Finalize V0.1.34 Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0134-runtime-error-upload]
+    paths: ['.github/workflows/finalize-v0134-release.yml']
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  finalize:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cancel stuck publisher
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST repos/${{ github.repository }}/actions/runs/35281023229/cancel 2>$null
+          Write-Host "cancel_exit=$LASTEXITCODE"
+          exit 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: MabiAuto_V0.1.34_Windows_Lite
+          path: out
+          github-token: ${{ github.token }}
+          run-id: 35281023229
+      - name: Verify artifact and publish release with direct upload
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.34'
+          $target='abce763a88bd5e1be2c79c62a1dbdb76e4581456'
+          $zip=(Resolve-Path 'out/MabiAuto_V0.1.34_Windows_Lite.zip').Path
+          $shaFile=(Resolve-Path 'out/MabiAuto_V0.1.34_Windows_Lite.zip.sha256').Path
+          $actual=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $declared=((Get-Content $shaFile -Raw).Trim().Split(' ',[System.StringSplitOptions]::RemoveEmptyEntries)[0]).ToLowerInvariant()
+          if($actual-ne$declared){throw "artifact SHA mismatch actual=$actual declared=$declared"}
+          if((Get-Item $zip).Length-lt 1000000){throw 'artifact ZIP unexpectedly small'}
+          Write-Host "VERIFIED_SHA256=$actual"
+          Write-Host "VERIFIED_SIZE=$((Get-Item $zip).Length)"
+
+          $headers=@{
+            Authorization="Bearer $env:GH_TOKEN"
+            Accept='application/vnd.github+json'
+            'X-GitHub-Api-Version'='2022-11-28'
+          }
+          $existing=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases?per_page=100"
+          foreach($r in @($existing|Where-Object {$_.tag_name-eq$tag})){
+            Write-Host "Deleting stale release id=$($r.id) draft=$($r.draft)"
+            Invoke-RestMethod -Method Delete -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/$($r.id)"
+          }
+          gh api -X DELETE "repos/$env:REPO/git/refs/tags/$tag" 2>$null
+          $null=$LASTEXITCODE
+
+          @(
+            'MABI AUTO V0.1.34 - 실전 에러 자동 전송',
+            '',
+            '선택 기능: 실전 오류/자동복구 경고가 발생하면 사용자 지정 비공개 GitHub 저장소로 진단 자료를 자동 업로드할 수 있습니다.',
+            '업로드 자료: summary.json + 최근 로그 recent.log + 선택 시 게임 화면 screen.png.',
+            'Fine-grained token은 Windows DPAPI(CurrentUser)로 해당 PC에 암호화 저장하며 프로그램/릴리스/로그에 포함하지 않습니다.',
+            '에러 자동 전송은 기본 OFF이고 업로드 실패가 매크로 실행을 중단하지 않습니다.',
+            '기존 텔레그램 알림은 유지하며 같은 오류 이벤트를 GitHub 에러 전송으로 병행합니다.',
+            'V0.1.33 월드맵 울라 대륙 고정 클릭/화면전환 확인 및 결과 화면 다시 하기 우선 처리도 그대로 포함합니다.',
+            '',
+            '설정: 왼쪽 메뉴 에러 전송 -> 저장소 owner/repo + branch + Fine-grained token -> 연결 테스트 -> 사용 체크 -> 저장.'
+          )|Set-Content notes.txt -Encoding UTF8
+
+          gh release create $tag --repo $env:REPO --target $target --title 'Mabi Auto V0.1.34' --notes-file notes.txt --draft
+          if($LASTEXITCODE-ne0){throw 'draft creation failed'}
+          $release=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases?per_page=100" | Where-Object {$_.tag_name-eq$tag} | Select-Object -First 1
+          if($null-eq$release){throw 'draft release lookup failed'}
+          $uploadBase=$release.upload_url -replace '\{\?name,label\}$',''
+
+          function Upload-Asset([string]$path,[string]$contentType){
+            $name=[IO.Path]::GetFileName($path)
+            $encoded=[Uri]::EscapeDataString($name)
+            $url="${uploadBase}?name=$encoded"
+            & curl.exe --fail-with-body --silent --show-error --location --max-time 240 --retry 3 --retry-delay 8 --retry-all-errors -X POST `
+              -H "Authorization: Bearer $env:GH_TOKEN" `
+              -H 'Accept: application/vnd.github+json' `
+              -H 'X-GitHub-Api-Version: 2022-11-28' `
+              -H "Content-Type: $contentType" `
+              --data-binary "@$path" $url
+            if($LASTEXITCODE-ne0){throw "direct upload failed: $name"}
+            Write-Host "Uploaded $name"
+          }
+          Upload-Asset $zip 'application/zip'
+          Upload-Asset $shaFile 'text/plain'
+
+          gh release edit $tag --repo $env:REPO --draft=false --latest
+          if($LASTEXITCODE-ne0){throw 'release publish failed'}
+
+          $final=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/tags/$tag"
+          if($final.draft){throw 'final release is still draft'}
+          $zipAsset=@($final.assets|Where-Object {$_.name-eq'MabiAuto_V0.1.34_Windows_Lite.zip'})[0]
+          $shaAsset=@($final.assets|Where-Object {$_.name-eq'MabiAuto_V0.1.34_Windows_Lite.zip.sha256'})[0]
+          if($null-eq$zipAsset -or $null-eq$shaAsset){throw 'final assets missing'}
+          if($zipAsset.digest-ne"sha256:$actual"){throw "release digest mismatch: $($zipAsset.digest)"}
+          Write-Host "FINAL_RELEASE_URL=$($final.html_url)"
+          Write-Host "FINAL_SHA256=$actual"
+          Write-Host "FINAL_TARGET=$($final.target_commitish)"
