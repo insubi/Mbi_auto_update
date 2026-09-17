@@ -1,0 +1,32 @@
+name: Inspect V0.1.33 Entry Head
+
+on:
+  push:
+    branches:
+      - v0133-result-retry-fix
+    paths:
+      - '.github/workflows/inspect-v0133-entry-head.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Print entry method head
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.32 patch failed'}
+          $path=Join-Path $root.FullName 'FishingAutomation/dungeon/ScenarioEngine.cs'
+          $lines=Get-Content $path
+          for($i=690;$i-le770;$i++){
+            Write-Host ("{0,5}: {1}" -f $i,$lines[$i-1])
+          }
