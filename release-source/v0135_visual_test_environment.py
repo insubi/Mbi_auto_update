@@ -200,9 +200,9 @@ public sealed class VisualRecognitionTester
             ? new VisualTestOutcome
             {
                 Id = id, Label = label, Status = "PASS", Method = method,
-                Detail = string.IsNullOrWhiteSpace(result.Text)
+                Detail = string.IsNullOrWhiteSpace(result.ReadText)
                     ? $"검출 성공 · score={result.Score:0.000}"
-                    : $"검출 성공 · OCR=\"{result.Text}\"",
+                    : $"검출 성공 · OCR=\"{result.ReadText}\"",
                 Score = result.Score, Bounds = result.Bounds
             }
             : Fail(id, label, method,
@@ -243,7 +243,7 @@ public sealed class VisualRecognitionTester
             ? new VisualTestOutcome
             {
                 Id = id, Label = label, Status = "PASS", Method = "ocr",
-                Detail = $"검출 성공 · OCR=\"{result.Text}\"",
+                Detail = $"검출 성공 · OCR=\"{result.ReadText}\"",
                 Score = result.Score, Bounds = result.Bounds
             }
             : Fail(id, label, "ocr", $"OCR 실패 · wanted=\"{wanted}\"", frame, result.Score, result.Bounds);
