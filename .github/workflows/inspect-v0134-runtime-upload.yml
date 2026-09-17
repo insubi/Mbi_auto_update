@@ -1,0 +1,50 @@
+name: Inspect V0.1.34 Runtime Upload Hooks
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0134-runtime-error-upload
+    paths:
+      - '.github/workflows/inspect-v0134-runtime-upload.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct V0.1.33 and inspect error hooks
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.32 patch failed'}
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.33 patch failed'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          Write-Host '===== FILES ====='
+          Get-ChildItem $fish -Recurse -File | ForEach-Object {$_.FullName.Substring($fish.Length+1)}
+          Write-Host '===== ERROR/TELEGRAM/LOG SETTINGS MATCHES ====='
+          $patterns=@('Telegram','Notify','SendMessage','오류','자동복구','Recovery','Exception','Log?.Invoke','runtime.log','settings','AppSettings','JsonSerializer','SaveSettings','LoadSettings','CaptureGameWindowAsync')
+          $files=Get-ChildItem $fish -Recurse -File -Include *.cs,*.json
+          foreach($p in $patterns){
+            Write-Host "==== $p ===="
+            foreach($hit in Select-String -Path $files.FullName -Pattern $p -SimpleMatch){
+              Write-Host ("{0}:{1}: {2}" -f $hit.Path.Substring($fish.Length+1),$hit.LineNumber,$hit.Line.Trim())
+            }
+          }
+          Write-Host '===== IMPORTANT FILE CONTENTS ====='
+          foreach($name in @('MainForm.cs','MainForm.ReferenceUI.cs','AppSettings.cs','Settings.cs','TelegramNotifier.cs','MacroSettings.cs')){
+            $f=Get-ChildItem $fish -Recurse -File -Filter $name | Select-Object -First 1
+            if($f){
+              Write-Host "===== FILE $($f.FullName.Substring($fish.Length+1)) ====="
+              Get-Content $f.FullName | Select-Object -First 450
+            }
+          }
