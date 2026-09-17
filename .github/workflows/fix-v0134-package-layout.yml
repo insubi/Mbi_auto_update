@@ -54,7 +54,7 @@ jobs:
           Add-Type -AssemblyName System.IO.Compression.FileSystem
           $zip = [System.IO.Compression.ZipFile]::OpenRead($fixed)
           try {
-            $entries = @($zip.Entries | ForEach-Object { $_.FullName.Replace('','/') })
+            $entries = @($zip.Entries | ForEach-Object { $_.FullName })
             if ($entries -notcontains 'release/FishingAutomation.exe') {
               throw 'Corrected package still lacks release/FishingAutomation.exe'
             }
