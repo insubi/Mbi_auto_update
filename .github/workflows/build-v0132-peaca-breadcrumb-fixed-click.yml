@@ -38,10 +38,28 @@ jobs:
           $input=Get-Content -Raw (Join-Path $fish 'dungeon/InputController.cs')
           $main=Get-Content -Raw (Join-Path $fish 'MainForm.cs')
           $refui=Get-Content -Raw (Join-Path $fish 'MainForm.ReferenceUI.cs')
-          foreach($required in @('var ullaBreadcrumbPoint = new Point(82, 66);','M 입력 후 화면변화=','울라 대륙 클릭 후 화면변화=','화면 변화 거의 없음 2회 연속 -> 좌상단 끝 도달 확정','좌상단 기준 지그재그 탐색 시작','페카 심층 1-1','페카 심층 2-1','peaca_d1_1','peaca_d2_1')){
+          foreach($required in @(
+            'var ullaBreadcrumbPoint = new Point(82, 66);',
+            'M 입력 후 화면변화=',
+            '울라 대륙 클릭 후 화면변화=',
+            '화면 변화 거의 없음 2회 연속 -> 좌상단 끝 도달 확정',
+            '좌상단 기준 지그재그 탐색 시작',
+            '페카 심층 1-1',
+            '페카 심층 2-1',
+            'peaca_d1_1',
+            'peaca_d2_1'
+          )){
             if(-not (($engine+$main+$refui).Contains($required))){throw "required marker missing: $required"}
           }
-          foreach($forbidden in @(\"M 입력 후 좌측 상단 '울라 대륙'을 확인하지 못했습니다\",'DetectAsync("route_ulla_continent", first','ulla.Center','페카 심층 2-2','peaca_d2_2','route_d2_2','route_enter_d2_2')){
+          foreach($forbidden in @(
+            "M 입력 후 좌측 상단 '울라 대륙'을 확인하지 못했습니다",
+            'DetectAsync("route_ulla_continent", first',
+            'ulla.Center',
+            '페카 심층 2-2',
+            'peaca_d2_2',
+            'route_d2_2',
+            'route_enter_d2_2'
+          )){
             if(($engine+$main+$refui).Contains($forbidden)){throw "forbidden residue: $forbidden"}
           }
           if(-not $input.Contains('DragClientPoint')){throw 'Interception drag support missing'}
