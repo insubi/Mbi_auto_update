@@ -560,7 +560,7 @@ for marker in (
     "RUNTIME_ERROR_GITHUB_UPLOAD_V9",
     "ProtectedData.Protect",
     "DataProtectionScope.CurrentUser",
-    '"runtime-errors/",
+    '"runtime-errors/',
     'summary.json',
     'recent.log',
     'screen.png',
@@ -576,3 +576,4 @@ if "github_pat_" in (main_check + uploader_check + error_ui_check):
     raise RuntimeError("token-like literal must never be embedded")
 
 print(f"V0.1.34 patch applied: runtime alert upload fan-out ({old_alert_count} existing alert call sites)")
+
