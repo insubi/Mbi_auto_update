@@ -25,6 +25,9 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 engine = read(engine_path)
+method_start = engine.index("    private async Task VerifyChallengeBeforeEntryAsync(CancellationToken ct)")
+method_end = engine.index("    private async Task<bool> VerifyAbyssSelectionScreenAsync(CancellationToken ct)", method_start)
+method = engine[method_start:method_end]
 
 old_locals = '''        int challengeConsecutive = 0;
         long lastSelectedClick = 0;
@@ -37,7 +40,7 @@ new_locals = '''        int challengeConsecutive = 0;
         int normalResultRetryClicks = 0;
         var timer = Stopwatch.StartNew();
 '''
-engine = replace_once(engine, old_locals, new_locals, "entry verifier locals")
+method = replace_once(method, old_locals, new_locals, "entry verifier locals")
 
 old_loop = '''            ct.ThrowIfCancellationRequested();
             using var frame = await CaptureGameWindowAsync(ct);
@@ -83,7 +86,6 @@ new_loop = '''            ct.ThrowIfCancellationRequested();
                     var stillRetry = await _detector.DetectAsync("retry", afterRetryFrame, ct);
                     if (!stillRetry.Found)
                     {
-                        // Give the newly-started dungeon selection flow a fresh verification window.
                         timer.Restart();
                         lastSelectedClick = 0;
                         Log?.Invoke("[던전 결과] 다시 하기 화면 이탈 확인 -> 정상 진행, 45초 검증 타이머 재시작");
@@ -102,10 +104,10 @@ new_loop = '''            ct.ThrowIfCancellationRequested();
 
             if (await CheckMonitorsAsync(frame, ct))
 '''
-engine = replace_once(engine, old_loop, new_loop, "entry verifier result fast path")
+method = replace_once(method, old_loop, new_loop, "entry verifier result fast path")
+engine = engine[:method_start] + method + engine[method_end:]
 write(engine_path, engine)
 
-# Bump runtime-facing version labels from the already-applied V0.1.32 source.
 for path in root.rglob("*"):
     if not path.is_file() or path.suffix.lower() not in {".cs", ".csproj", ".json", ".cmd", ".ps1", ".txt"}:
         continue
