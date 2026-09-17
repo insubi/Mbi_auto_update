@@ -1,0 +1,141 @@
+name: Build V0.1.28 Dungeon Screen-First Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-v0128-dungeon-screen-first-recovery.yml'
+      - 'release-source/v0128_dungeon_screen_first_recovery.py'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch and build V0.1.28
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.27/CombinedFishingDungeon_V0.1.27_DungeonUpdate20260917.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0128_dungeon_screen_first_recovery.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.28 patch failed'}
+
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')|ConvertFrom-Json
+          foreach($id in @('policy_shutdown','policy_error88','retry','scene_skip','selected','challenge','enter_bottom')){
+            if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "target missing/duplicate: $id"}
+          }
+          $retry=@($targets|Where-Object {$_.Id-eq'retry'})[0]
+          if($retry.Text-ne'다시 하기' -or [int]$retry.MaxEditDistance-ne2){throw 'V0.1.27 retry compatibility lost'}
+          $scene=@($targets|Where-Object {$_.Id-eq'scene_skip'})[0]
+          if($scene.Kind-ne'hybrid' -or $scene.Text-ne'장면 넘기기'){throw 'scene_skip preservation failed'}
+
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          foreach($m in @(
+            'DUNGEON_SCREEN_FIRST_RECOVERY_V6',
+            'ESC 없이 현재 화면 먼저 판별',
+            '최후 수단 ESC 1회 입력 후 재판별',
+            '추가 ESC 없음',
+            'DUNGEON_POLICY_SHUTDOWN_DETECTED',
+            'DUNGEON_CHALLENGE_DISAMBIGUATION_V5',
+            '던전 밖 HUD 3/4 이상 확인',
+            '어비스 클릭 검증 실패'
+          )){if(-not $engine.Contains($m)){throw "engine marker missing: $m"}}
+          if($engine.Contains('DUNGEON_UPDATE_20260917_MENU_FALLBACK')){throw 'old blind second-ESC fallback still present'}
+
+          $scenario=Get-Content -Raw (Join-Path $fish 'dungeon/config/scenario.json')|ConvertFrom-Json
+          $sceneMon=@($scenario.Monitors|Where-Object {$_.Target-eq'scene_skip'})
+          if($sceneMon.Count-ne1){throw 'scene_skip monitor missing'}
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "fishing template changed: $t $h"}
+          }
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.28' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.28').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 3
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.28_ScreenFirstRecovery.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.28_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.28_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.28 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.28'
+          @(
+            'MABI AUTO V0.1.28 - 심층 던전 화면 우선 자동복구',
+            '',
+            '자동복구가 타임아웃 직후 ESC를 누르지 않고 현재 화면을 먼저 판별합니다.',
+            '다시 하기 / 터치 결과 / 선택됨 / 도전 / 입장하기가 보이면 해당 단계에서 바로 재개합니다.',
+            '8초 동안 알려진 화면을 찾지 못한 경우에만 최후 수단으로 ESC 1회를 입력하고 다시 판별합니다.',
+            '같은 복구 시도에서 두 번째 ESC는 누르지 않습니다.',
+            '운영 정책 또는 ERROR 88 화면을 OCR로 감지하면 복구 입력을 중지하고 안전 정지합니다.',
+            'V0.1.27 보라색 입장 UI/다시 하기 대응, V0.1.26 장면 넘기기, 어비스 자동복구, 낚시 로직은 유지합니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.28_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@(
+            'out/CombinedFishingDungeon_V0.1.28_ScreenFirstRecovery.zip',
+            'out/MabiAuto_V0.1.28_Windows_Lite.zip',
+            'out/MabiAuto_V0.1.28_Windows_Lite.zip.sha256'
+          )
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --title 'Mabi Auto V0.1.28' --notes-file notes.txt
+          }
