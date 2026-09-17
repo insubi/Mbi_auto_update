@@ -1,0 +1,27 @@
+name: Inspect V0.1.28 Retry Template
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/inspect-v0128-retry-template.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.28/CombinedFishingDungeon_V0.1.28_ScreenFirstRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          $templates=Join-Path $root.FullName 'FishingAutomation/dungeon/templates'
+          Write-Host '=== DUNGEON TEMPLATE FILES ==='
+          Get-ChildItem $templates -File | Sort-Object Name | ForEach-Object { Write-Host $_.Name }
+          Write-Host '=== RETRY-LIKE FILES ==='
+          Get-ChildItem $templates -File | Where-Object { $_.Name -match 'retry|again|restart|다시' } | ForEach-Object { Write-Host ("MATCH: " + $_.Name) }
+          Write-Host '=== RETRY TARGET CONFIG ==='
+          Get-Content (Join-Path $root.FullName 'FishingAutomation/dungeon/config/targets.json') | Select-String -Pattern '"Id": "retry"' -Context 0,16 | ForEach-Object { $_.ToString() }
