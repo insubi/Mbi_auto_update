@@ -1,0 +1,29 @@
+name: Inspect Updater Error Path
+
+on:
+  push:
+    branches: [v0134-package-layout-hotfix]
+    paths:
+      - '.github/workflows/inspect-updater-error-path.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find updater error string
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile source.zip
+          Expand-Archive source.zip -DestinationPath src
+          $matches=Get-ChildItem src -Recurse -File | Select-String -SimpleMatch '업데이트 패키지에'
+          if(-not $matches){throw 'error string not found'}
+          foreach($m in $matches){
+            Write-Host "===== FILE: $($m.Path) ====="
+            Get-Content -LiteralPath $m.Path
+            Write-Host '===== END FILE ====='
+          }
