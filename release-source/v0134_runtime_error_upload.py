@@ -549,11 +549,16 @@ project_check = read(csproj_path)
 for marker in (
     "RuntimeErrorUploader _errorUploader",
     "SendRuntimeAlertAsync(",
-    "DUNGEON_RESULT_RETRY_FASTPATH_V8",
-    "var ullaBreadcrumbPoint = new Point(82, 66);",
 ):
     if marker not in main_check and marker not in error_ui_check:
         raise RuntimeError(f"required MainForm marker missing: {marker}")
+engine_check = read(app / "dungeon" / "ScenarioEngine.cs")
+for marker in (
+    "DUNGEON_RESULT_RETRY_FASTPATH_V8",
+    "var ullaBreadcrumbPoint = new Point(82, 66);",
+):
+    if marker not in engine_check:
+        raise RuntimeError(f"required engine marker missing: {marker}")
 if "_notifier.SendAlertAsync(" in main_check:
     raise RuntimeError("raw MainForm Telegram alert call remains; runtime uploader would be bypassed")
 for marker in (
@@ -576,4 +581,5 @@ if "github_pat_" in (main_check + uploader_check + error_ui_check):
     raise RuntimeError("token-like literal must never be embedded")
 
 print(f"V0.1.34 patch applied: runtime alert upload fan-out ({old_alert_count} existing alert call sites)")
+
 
