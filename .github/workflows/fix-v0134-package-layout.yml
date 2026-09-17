@@ -1,0 +1,95 @@
+name: Fix V0.1.34 Package Layout
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0134-package-layout-hotfix
+    paths:
+      - '.github/workflows/fix-v0134-package-layout.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-package:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Repack V0.1.34 with release folder
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = 'V0.1.34'
+          $asset = 'MabiAuto_V0.1.34_Windows_Lite.zip'
+          $shaAsset = "$asset.sha256"
+
+          New-Item -ItemType Directory -Path work, old, wrapped, out | Out-Null
+
+          gh release download $tag --repo $env:REPO --pattern $asset --dir old --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to download current V0.1.34 package' }
+
+          Expand-Archive -Path (Join-Path old $asset) -DestinationPath work
+
+          $rootExe = Join-Path work 'FishingAutomation.exe'
+          $nestedExe = Join-Path work 'release/FishingAutomation.exe'
+
+          if (Test-Path $nestedExe) {
+            throw 'Package already has release/FishingAutomation.exe; refusing unexpected double-wrap'
+          }
+          if (-not (Test-Path $rootExe)) {
+            throw 'Current package does not contain root FishingAutomation.exe'
+          }
+
+          New-Item -ItemType Directory -Path 'wrapped/release' | Out-Null
+          Copy-Item -Path 'work/*' -Destination 'wrapped/release' -Recurse -Force
+
+          $fixed = Join-Path (Resolve-Path out).Path $asset
+          Compress-Archive -Path 'wrapped/*' -DestinationPath $fixed -CompressionLevel Optimal
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($fixed)
+          try {
+            $entries = @($zip.Entries | ForEach-Object { $_.FullName.Replace('','/') })
+            if ($entries -notcontains 'release/FishingAutomation.exe') {
+              throw 'Corrected package still lacks release/FishingAutomation.exe'
+            }
+            if ($entries -contains 'FishingAutomation.exe') {
+              throw 'Corrected package still exposes root FishingAutomation.exe'
+            }
+            Write-Host "ZIP_LAYOUT_OK entries=$($entries.Count)"
+          }
+          finally {
+            $zip.Dispose()
+          }
+
+          $hash = (Get-FileHash $fixed -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $asset" | Set-Content (Join-Path out $shaAsset) -Encoding ASCII
+          Write-Host "FIXED_SHA256=$hash"
+          Write-Host "FIXED_SIZE=$((Get-Item $fixed).Length)"
+
+          gh release upload $tag $fixed (Join-Path out $shaAsset) --repo $env:REPO --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to replace V0.1.34 release assets' }
+
+          Remove-Item -Recurse -Force verify -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path verify | Out-Null
+          gh release download $tag --repo $env:REPO --pattern $asset --dir verify --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to redownload corrected package' }
+
+          $downloaded = Join-Path verify $asset
+          $verifyHash = (Get-FileHash $downloaded -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($verifyHash -ne $hash) {
+            throw "Release asset hash mismatch: local=$hash release=$verifyHash"
+          }
+
+          Remove-Item -Recurse -Force verifyExtract -ErrorAction SilentlyContinue
+          Expand-Archive -Path $downloaded -DestinationPath verifyExtract
+          if (-not (Test-Path 'verifyExtract/release/FishingAutomation.exe')) {
+            throw 'Redownloaded release asset lacks release/FishingAutomation.exe'
+          }
+
+          Write-Host 'V0134_PACKAGE_LAYOUT_HOTFIX_OK'
