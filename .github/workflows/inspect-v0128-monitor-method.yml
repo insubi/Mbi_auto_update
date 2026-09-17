@@ -1,0 +1,35 @@
+name: Inspect V0.1.28 Monitor Method
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/inspect-v0128-monitor-method.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source and print internals
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.28/CombinedFishingDungeon_V0.1.28_ScreenFirstRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          $engine=Join-Path $root.FullName 'FishingAutomation/dungeon/ScenarioEngine.cs'
+          $lines=Get-Content $engine
+          Write-Host '=== CHECKMONITORS ==='
+          $matches=Select-String -Path $engine -Pattern 'CheckMonitorsAsync' | Select-Object -ExpandProperty LineNumber
+          foreach($n in $matches){
+            $s=[Math]::Max(1,$n-8);$e=[Math]::Min($lines.Count,$n+90)
+            for($i=$s;$i-le$e;$i++){Write-Host ("{0,5}: {1}" -f $i,$lines[$i-1])}
+          }
+          Write-Host '=== CAPTURE OCCURRENCES ==='
+          Select-String -Path $engine -Pattern 'CaptureGameWindowAsync\(ct\)' | ForEach-Object { Write-Host ($_.LineNumber.ToString()+': '+$_.Line.Trim()) }
+          Write-Host '=== RUNASYNC TOP ==='
+          for($i=45;$i-le180 -and $i-le$lines.Count;$i++){Write-Host ("{0,5}: {1}" -f $i,$lines[$i-1])}
