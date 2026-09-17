@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/build-v0131-peaca-map-navigation.yml'
       - 'release-source/v0131_peaca_map_navigation.py'
+      - 'release-source/v0131_peaca_drag_interface_fix.py'
 
 permissions:
   contents: write
@@ -33,6 +34,8 @@ jobs:
 
           python release-source/v0131_peaca_map_navigation.py $root.FullName
           if($LASTEXITCODE-ne0){throw 'V0.1.31 patch failed'}
+          python release-source/v0131_peaca_drag_interface_fix.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.31 drag compatibility fix failed'}
 
           $main=Get-Content -Raw (Join-Path $fish 'MainForm.cs')
           $ref=Get-Content -Raw (Join-Path $fish 'MainForm.ReferenceUI.cs')
@@ -52,6 +55,8 @@ jobs:
             '기존 던전 매크로로 인계'
           )){if(-not $engine.Contains($marker)){throw "Peaca navigation marker missing: $marker"}}
           if(-not $input.Contains('DragClientPoint')){throw 'verified map drag primitive missing'}
+          if($engine.Contains('_input.DragClientPoint(')){throw 'map drag still depends on fallback interface'}
+          if(-not $engine.Contains('if (_input is not InterceptionInput interception)')){throw 'Interception-only Peaca drag guard missing'}
 
           foreach($id in @('map_ula_header','peaca_map_name','peaca_detail_name','peaca_goto','peaca_deep_tab','peaca_deep_screen','peaca_entry_11','peaca_entry_22')){
             if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "Peaca OCR target missing/duplicate: $id"}
