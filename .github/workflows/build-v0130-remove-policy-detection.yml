@@ -1,0 +1,177 @@
+name: Build V0.1.30 Remove Policy Detection
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0130-remove-policy-detection
+    paths:
+      - '.github/workflows/build-v0130-remove-policy-detection.yml'
+      - 'release-source/v0130_remove_policy_detection.py'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch and validate V0.1.30
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.29/CombinedFishingDungeon_V0.1.29_FullStabilityHardening.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0130_remove_policy_detection.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.30 patch failed'}
+
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')|ConvertFrom-Json
+          foreach($id in @('policy_shutdown','policy_error88')){
+            if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne0){throw "dungeon policy target still present: $id"}
+          }
+          foreach($id in @('retry','scene_skip','selected','challenge','enter_bottom')){
+            if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "required target missing/duplicate: $id"}
+          }
+
+          $abyssTargetsPath=Join-Path $fish 'abyss/config/targets.json'
+          if(Test-Path $abyssTargetsPath){
+            $abyssTargets=Get-Content -Raw $abyssTargetsPath|ConvertFrom-Json
+            foreach($id in @('policy_shutdown','policy_error88')){
+              if(@($abyssTargets|Where-Object {$_.Id-eq$id}).Count-ne0){throw "abyss policy target still present: $id"}
+            }
+          }
+
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          foreach($forbidden in @('policy_shutdown','policy_error88','ThrowIfDungeonPolicyShutdownAsync','DUNGEON_POLICY_SHUTDOWN_DETECTED','DUNGEON_GLOBAL_POLICY_GUARD_V7','운영 정책/ERROR 88')){
+            if($engine.Contains($forbidden)){throw "policy detection residue: $forbidden"}
+          }
+          foreach($marker in @(
+            'DUNGEON_FULL_STABILITY_HARDENING_V7',
+            '동일 단계 복구',
+            '같은 복구 단계가',
+            'scene_skip 1/2 확인',
+            'scene_skip 2/2 연속 확인',
+            'DUNGEON_SCREEN_FIRST_RECOVERY_V6',
+            'DUNGEON_CHALLENGE_DISAMBIGUATION_V5',
+            '던전 밖 HUD 3/4 이상 확인',
+            '어비스 클릭 검증 실패'
+          )){if(-not $engine.Contains($marker)){throw "preserved marker missing: $marker"}}
+
+          $retry=@($targets|Where-Object {$_.Id-eq'retry'})[0]
+          if($retry.Kind-ne'hybrid' -or $retry.Text-ne'다시 하기' -or $retry.TemplatePath-ne'templates/retry_visual_v0129.jpg'){
+            throw 'retry hybrid behavior changed unexpectedly'
+          }
+          $retryTemplate=Join-Path $fish 'dungeon/templates/retry_visual_v0129.jpg'
+          if(-not(Test-Path $retryTemplate)){throw 'retry template missing'}
+          $retryHash=(Get-FileHash $retryTemplate -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($retryHash-ne'0089b636041b76b4eabd269b7c50b82d045ef11f66368797947b7f72adea59aa'){
+            throw "retry template changed: $retryHash"
+          }
+
+          $scenario=Get-Content -Raw (Join-Path $fish 'dungeon/config/scenario.json')|ConvertFrom-Json
+          $sceneMon=@($scenario.Monitors|Where-Object {$_.Target-eq'scene_skip'})
+          if($sceneMon.Count-ne1){throw 'scene_skip monitor missing/duplicate'}
+          if([int]$sceneMon[0].CooldownMs-ne2500 -or [int]$sceneMon[0].ScanIntervalMs-ne1200){throw 'scene_skip timing changed'}
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "fishing template changed: $t $h"}
+          }
+
+          dotnet restore (Join-Path $fish 'FishingAutomation.csproj')
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation restore failed'}
+          dotnet build (Join-Path $fish 'FishingAutomation.csproj') -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+
+          $watchProj=Join-Path $root.FullName 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watchProj){
+            dotnet restore $watchProj
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog restore failed'}
+            dotnet build $watchProj -c Release --no-restore
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          }
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.30' -Recurse
+          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.30').Path
+          $pkgFish=Join-Path $pkg 'FishingAutomation'
+          $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watch){
+            dotnet publish $watch @args -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=Join-Path $pkg 'release'
+          if(Test-Path $release){Remove-Item $release -Recurse -Force}
+          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
+
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+          if(-not(Test-Path (Join-Path $release 'dungeon/templates/retry_visual_v0129.jpg'))){throw 'runtime retry template missing'}
+
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 5
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'SMOKE_TEST_OK'
+
+          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.30_NoPolicyDetection.zip'
+          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.30_Windows_Lite.zip'
+          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.30_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+
+      - name: Publish V0.1.30 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.30'
+          @(
+            'MABI AUTO V0.1.30 - 운영 정책 / ERROR 88 감지 제거',
+            '',
+            'policy_shutdown 및 policy_error88 OCR 타깃과 관련 감지/예외 처리 코드를 일반 던전과 어비스에서 모두 제거했습니다.',
+            '게임 자체 종료 동작에 맡기며 봇은 해당 문구를 더 이상 감지하지 않습니다.',
+            'V0.1.29 다시 하기 OCR+이미지, 동일 단계 복구 반복 제한, 장면 넘기기 2프레임 확인, 기존 던전/어비스/낚시/F10/로그/텔레그램은 유지합니다.',
+            '',
+            '일반 실행 파일: MabiAuto_V0.1.30_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+          $assets=@(
+            'out/CombinedFishingDungeon_V0.1.30_NoPolicyDetection.zip',
+            'out/MabiAuto_V0.1.30_Windows_Lite.zip',
+            'out/MabiAuto_V0.1.30_Windows_Lite.zip.sha256'
+          )
+          if(gh release view $tag --repo $env:REPO *> $null){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+          }else{
+            gh release create $tag @assets --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.30' --notes-file notes.txt
+          }
