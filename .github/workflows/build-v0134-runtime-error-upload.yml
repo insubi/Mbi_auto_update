@@ -1,0 +1,248 @@
+name: Build V0.1.34 Runtime Error Upload
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0134-runtime-error-upload
+    paths:
+      - '.github/workflows/build-v0134-runtime-error-upload.yml'
+      - 'release-source/v0134_runtime_error_upload.py'
+      - 'release-source/v0133_result_retry_fastpath.py'
+      - 'release-source/v0132_ulla_fixed_click_final.py'
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: V0.1.34
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch validate build and package V0.1.34
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.32 Ula patch failed'}
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.33 retry patch failed'}
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.34 runtime upload patch failed'}
+
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          $main=Get-Content -Raw (Join-Path $fish 'MainForm.cs')
+          $errorMain=Get-Content -Raw (Join-Path $fish 'MainForm.ErrorUpload.cs')
+          $uploader=Get-Content -Raw (Join-Path $fish 'RuntimeErrorUploader.cs')
+          $dialog=Get-Content -Raw (Join-Path $fish 'ErrorUploadSettingsDialog.cs')
+          $refui=Get-Content -Raw (Join-Path $fish 'MainForm.ReferenceUI.cs')
+          $project=Get-Content -Raw (Join-Path $fish 'FishingAutomation.csproj')
+          $input=Get-Content -Raw (Join-Path $fish 'dungeon/InputController.cs')
+
+          foreach($required in @(
+            'RUNTIME_ERROR_GITHUB_UPLOAD_V9',
+            'RuntimeErrorUploader _errorUploader',
+            'SendRuntimeAlertAsync(',
+            'Task.WhenAll(',
+            'ProtectedData.Protect',
+            'ProtectedData.Unprotect',
+            'DataProtectionScope.CurrentUser',
+            'error-upload.json',
+            'runtime-errors/',
+            'summary.json',
+            'recent.log',
+            'screen.png',
+            '/contents/',
+            'Fine-grained token',
+            '연결 테스트',
+            '에러 전송',
+            'System.Security.Cryptography.ProtectedData',
+            '<Version>0.1.34</Version>',
+            'DUNGEON_RESULT_RETRY_FASTPATH_V8',
+            '다시 하기 2/2 연속 확인',
+            '45초 검증 타이머 재시작',
+            'var ullaBreadcrumbPoint = new Point(82, 66);',
+            'M 입력 후 화면변화=',
+            '울라 대륙 클릭 후 화면변화=',
+            '페카 심층 1-1',
+            '페카 심층 2-1'
+          )){
+            if(-not (($main+$errorMain+$uploader+$dialog+$refui+$project+$engine).Contains($required))){throw "required marker missing: $required"}
+          }
+          if($main.Contains('_notifier.SendAlertAsync(')){throw 'MainForm alert bypass remains'}
+          if(($main+$errorMain+$uploader+$dialog).Contains('github_pat_')){throw 'embedded PAT-like literal detected'}
+          foreach($forbidden in @('peaca_d2_2','route_d2_2','route_enter_d2_2','페카 심층 2-2','DUNGEON_POLICY_SHUTDOWN_DETECTED','ThrowIfDungeonPolicyShutdownAsync')){
+            if(($engine+$main+$refui).Contains($forbidden)){throw "forbidden regression returned: $forbidden"}
+          }
+          if($engine.Contains('DetectAsync("route_ulla_continent", first')){throw 'old Ula OCR hard gate remains'}
+          if($engine.Contains('ulla.Center')){throw 'old Ula OCR-center click remains'}
+          if(-not $input.Contains('DragClientPoint')){throw 'Interception drag support missing'}
+
+          foreach($marker in @('DUNGEON_FULL_STABILITY_HARDENING_V7','동일 단계 복구','scene_skip 1/2 확인','scene_skip 2/2 연속 확인','DUNGEON_SCREEN_FIRST_RECOVERY_V6','DUNGEON_CHALLENGE_DISAMBIGUATION_V5','던전 밖 HUD 3/4 이상 확인','어비스 클릭 검증 실패')){
+            if(-not $engine.Contains($marker)){throw "preserved engine marker missing: $marker"}
+          }
+
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')|ConvertFrom-Json
+          foreach($id in @('route_peaca_map','route_peaca_popup_title','route_go_here','route_peaca_title','route_deep_tab','route_d1_1','route_d2_1','route_enter_d1_1','route_enter_d2_1','retry','scene_skip','selected','challenge','enter_bottom')){
+            if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "target missing/duplicate: $id"}
+          }
+          foreach($id in @('route_d2_2','route_enter_d2_2','policy_shutdown','policy_error88')){
+            if(@($targets|Where-Object {$_.Id-eq$id}).Count-ne0){throw "forbidden target returned: $id"}
+          }
+          $retry=@($targets|Where-Object {$_.Id-eq'retry'})[0]
+          if($retry.Kind-ne'hybrid' -or $retry.Text-ne'다시 하기' -or $retry.TemplatePath-ne'templates/retry_visual_v0129.jpg'){throw 'retry target changed'}
+          $retryHash=(Get-FileHash (Join-Path $fish 'dungeon/templates/retry_visual_v0129.jpg') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($retryHash-ne'0089b636041b76b4eabd269b7c50b82d045ef11f66368797947b7f72adea59aa'){throw "retry template changed: $retryHash"}
+
+          $expected=@{
+            'compass.png'='af26e115ad824262ec890e51bb072b74098278d7cdbc40c6f1e7381fb3c467c3';
+            'gauge.png'='22d78ea16f21db75ff11cb7a576e3275204f051a4214f8791c9605d975a317f8';
+            'healthbar.png'='b79c90379ff0558ab19f77ac28a5e2dd64928f3d0ec46b1ce3fc5906a7956373';
+            'hook.png'='e584e44185e15edbb75c8505ea5002edcaf3c0e2e770d8f6417ba4ff4fde8949'
+          }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $fish "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "fishing template changed: $t $h"}
+          }
+
+          dotnet restore (Join-Path $fish 'FishingAutomation.csproj')
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation restore failed'}
+          dotnet build (Join-Path $fish 'FishingAutomation.csproj') -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+
+          $watchProj=Join-Path $root.FullName 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watchProj){
+            dotnet restore $watchProj
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog restore failed'}
+            dotnet build $watchProj -c Release --no-restore
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          }
+
+          New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $fish 'FishingAutomation.csproj') @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+          if(Test-Path $watchProj){
+            dotnet publish $watchProj @pubArgs -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          $release=(Resolve-Path 'stage/release').Path
+          $runtimeTargets=Get-Content -Raw (Join-Path $release 'dungeon/config/targets.json')|ConvertFrom-Json
+          foreach($id in @('route_peaca_map','route_go_here','route_deep_tab','route_d1_1','route_d2_1','route_enter_d1_1','route_enter_d2_1','retry','selected','challenge','enter_bottom')){
+            if(@($runtimeTargets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "runtime target missing: $id"}
+          }
+          if(-not(Test-Path (Join-Path $release 'dungeon/templates/retry_visual_v0129.jpg'))){throw 'runtime retry template missing'}
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+
+          $exe=Join-Path $release 'FishingAutomation.exe'
+          $p=Start-Process $exe -WorkingDirectory $release -PassThru
+          Start-Sleep 5
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'SMOKE_TEST_OK'
+
+          $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.34_Windows_Lite.zip'
+          Compress-Archive -Path (Join-Path $release '*') -DestinationPath $lite -CompressionLevel Optimal
+          $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.34_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+          Write-Host "LITE_SIZE=$((Get-Item $lite).Length)"
+
+      - name: Preserve V0.1.34 package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MabiAuto_V0.1.34_Windows_Lite
+          path: |
+            out/MabiAuto_V0.1.34_Windows_Lite.zip
+            out/MabiAuto_V0.1.34_Windows_Lite.zip.sha256
+          retention-days: 7
+          compression-level: 0
+
+      - name: Publish V0.1.34 with verified assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag=$env:RELEASE_TAG
+          $headers=@{
+            Authorization="Bearer $env:GH_TOKEN"
+            Accept='application/vnd.github+json'
+            'X-GitHub-Api-Version'='2022-11-28'
+          }
+
+          $existing=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases?per_page=100"
+          foreach($r in @($existing|Where-Object {$_.tag_name -eq $tag})){
+            Invoke-RestMethod -Method Delete -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/$($r.id)"
+          }
+          gh api -X DELETE "repos/$env:REPO/git/refs/tags/$tag" 2>$null
+          $null=$LASTEXITCODE
+
+          @(
+            'MABI AUTO V0.1.34 - 실전 에러 자동 전송',
+            '',
+            '선택 기능: 기존 실전 오류/자동복구 경고가 발생하면 사용자 지정 비공개 GitHub 저장소로 진단 자료를 자동 업로드할 수 있습니다.',
+            '업로드 자료: summary.json + 최근 로그 recent.log + 선택 시 게임 화면 screen.png.',
+            'GitHub Fine-grained token은 Windows DPAPI(CurrentUser)로 로컬 PC에 암호화 저장하며 프로그램/릴리스/로그에 포함하지 않습니다.',
+            '에러 자동 전송은 기본 OFF이며 업로드 실패가 매크로 실행을 중단하지 않습니다.',
+            '기존 텔레그램 알림은 그대로 유지하며 같은 경고를 GitHub 에러 전송으로 병행합니다.',
+            'V0.1.33 월드맵 울라 대륙 고정 클릭/화면전환 확인과 결과 화면 다시 하기 우선 처리도 포함합니다.',
+            '',
+            '설정: 왼쪽 메뉴 에러 전송 -> 비공개 저장소 owner/repo + branch + Fine-grained token 입력 -> 연결 테스트 -> 사용 체크 -> 저장.',
+            '테스트 실행 파일: MabiAuto_V0.1.34_Windows_Lite.zip'
+          )|Set-Content notes.txt -Encoding UTF8
+
+          gh release create $tag --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.34' --notes-file notes.txt --draft
+          if($LASTEXITCODE-ne0){throw 'V0.1.34 draft creation failed'}
+
+          $zipOk=$false
+          for($attempt=1;$attempt-le6;$attempt++){
+            gh release upload $tag out/MabiAuto_V0.1.34_Windows_Lite.zip --repo $env:REPO --clobber
+            if($LASTEXITCODE-eq0){$zipOk=$true;break}
+            Start-Sleep -Seconds (10*$attempt)
+          }
+          if(-not $zipOk){throw 'V0.1.34 ZIP upload failed'}
+
+          $shaOk=$false
+          for($attempt=1;$attempt-le3;$attempt++){
+            gh release upload $tag out/MabiAuto_V0.1.34_Windows_Lite.zip.sha256 --repo $env:REPO --clobber
+            if($LASTEXITCODE-eq0){$shaOk=$true;break}
+            Start-Sleep -Seconds 5
+          }
+          if(-not $shaOk){throw 'V0.1.34 SHA upload failed'}
+
+          gh release edit $tag --repo $env:REPO --draft=false --latest
+          if($LASTEXITCODE-ne0){throw 'V0.1.34 publish failed'}
+
+          $release=Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$env:REPO/releases/tags/$tag"
+          if($release.draft){throw 'V0.1.34 remained draft'}
+          $assetNames=@($release.assets|ForEach-Object {$_.name})
+          foreach($expectedName in @('MabiAuto_V0.1.34_Windows_Lite.zip','MabiAuto_V0.1.34_Windows_Lite.zip.sha256')){
+            if($assetNames -notcontains $expectedName){throw "published asset missing: $expectedName"}
+          }
+          $zip=@($release.assets|Where-Object {$_.name-eq'MabiAuto_V0.1.34_Windows_Lite.zip'})[0]
+          if([int64]$zip.size-lt 1000000){throw "published ZIP unexpectedly small: $($zip.size)"}
+          Write-Host "RELEASE_URL=$($release.html_url)"
+          Write-Host "RELEASE_DIGEST=$($zip.digest)"
+          Write-Host "RELEASE_ZIP_SIZE=$($zip.size)"
