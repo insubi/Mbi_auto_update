@@ -110,28 +110,26 @@ jobs:
           }
 
           New-Item -ItemType Directory -Path stage,stage/release,out | Out-Null
-          Copy-Item -LiteralPath $root.FullName -Destination 'stage/MabiAuto_V0.1.32' -Recurse
-          $pkg=(Resolve-Path 'stage/MabiAuto_V0.1.32').Path
-          $pkgFish=Join-Path $pkg 'FishingAutomation'
           $args=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
-          dotnet publish (Join-Path $pkgFish 'FishingAutomation.csproj') @args -o stage/release
+          dotnet publish (Join-Path $fish 'FishingAutomation.csproj') @args -o stage/release
           if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
 
-          $watch=Join-Path $pkg 'MacroWatchdog/MacroWatchdog.csproj'
-          if(Test-Path $watch){
-            dotnet publish $watch @args -o stage/watchdog
+          if(Test-Path $watchProj){
+            dotnet publish $watchProj @args -o stage/watchdog
             if($LASTEXITCODE-ne0){throw 'Watchdog publish failed'}
             if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
           }
 
-          $release=Join-Path $pkg 'release'
-          if(Test-Path $release){Remove-Item $release -Recurse -Force}
-          Copy-Item (Resolve-Path 'stage/release').Path -Destination $release -Recurse
-
+          $release=(Resolve-Path 'stage/release').Path
           $runtimeTargets=Get-Content -Raw (Join-Path $release 'dungeon/config/targets.json')|ConvertFrom-Json
           foreach($id in @('route_peaca_map','route_go_here','route_deep_tab','route_d1_1','route_d2_1','route_enter_d1_1','route_enter_d2_1')){
             if(@($runtimeTargets|Where-Object {$_.Id-eq$id}).Count-ne1){throw "runtime route target missing: $id"}
           }
+          foreach($t in $expected.Keys){
+            $h=(Get-FileHash (Join-Path $release "templates/$t") -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($h-ne$expected[$t]){throw "runtime fishing template changed: $t $h"}
+          }
+          if(-not(Test-Path (Join-Path $release 'dungeon/templates/retry_visual_v0129.jpg'))){throw 'runtime retry template missing'}
 
           $exe=Join-Path $release 'FishingAutomation.exe'
           $p=Start-Process $exe -WorkingDirectory $release -PassThru
@@ -142,13 +140,12 @@ jobs:
           Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
           Write-Host 'SMOKE_TEST_OK'
 
-          $source=(Resolve-Path out).Path+'\CombinedFishingDungeon_V0.1.32_PeacaBreadcrumbFix.zip'
-          Compress-Archive -LiteralPath $root.FullName -DestinationPath $source -CompressionLevel Optimal
           $lite=(Resolve-Path out).Path+'\MabiAuto_V0.1.32_Windows_Lite.zip'
-          Compress-Archive -LiteralPath $pkg -DestinationPath $lite -CompressionLevel Optimal
+          Compress-Archive -Path (Join-Path $release '*') -DestinationPath $lite -CompressionLevel Optimal
           $hash=(Get-FileHash $lite -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  MabiAuto_V0.1.32_Windows_Lite.zip"|Set-Content "$lite.sha256" -Encoding ASCII
           Write-Host "LITE_SHA256=$hash"
+          Write-Host "LITE_SIZE=$((Get-Item $lite).Length)"
 
       - name: Publish V0.1.32
         shell: pwsh
@@ -164,8 +161,9 @@ jobs:
             'V0.1.31에서 지도가 정상적으로 열렸는데도 좌측 상단 울라 대륙 OCR 실패로 정지하던 문제를 수정했습니다.',
             '이 단계는 OCR 대신 고정 위치(82,66)를 클릭하며, M 입력 전/후와 울라 대륙 클릭 전/후 화면 변화량을 각각 확인한 뒤 다음 단계로 진행합니다.',
             '월드맵 진입 후 좌상단 끝 2회 판정, 페카 고분 OCR 탐색, 여기로 가기, 심층 1-1/2-1, 기존 던전 매크로 인계는 그대로 유지합니다.',
+            '이번 테스트 ZIP은 실행에 필요한 runtime 파일만 포함해 업로드 크기를 줄였습니다.',
             '',
             '테스트 실행 파일: MabiAuto_V0.1.32_Windows_Lite.zip'
           )|Set-Content notes.txt -Encoding UTF8
-          gh release create $tag out/CombinedFishingDungeon_V0.1.32_PeacaBreadcrumbFix.zip out/MabiAuto_V0.1.32_Windows_Lite.zip out/MabiAuto_V0.1.32_Windows_Lite.zip.sha256 --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.32' --notes-file notes.txt
+          gh release create $tag out/MabiAuto_V0.1.32_Windows_Lite.zip out/MabiAuto_V0.1.32_Windows_Lite.zip.sha256 --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.32' --notes-file notes.txt
           if($LASTEXITCODE-ne0){throw 'V0.1.32 release publish failed'}
