@@ -1,0 +1,54 @@
+name: Inspect V0.1.28 Deep Diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/inspect-v0128-deep-diagnostics.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.28/CombinedFishingDungeon_V0.1.28_ScreenFirstRecovery.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          "SOURCE_ROOT=$($root.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Print diagnostic snippets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation'
+          Write-Host '=== SEARCH abyss_selected_dungeon ==='
+          Get-ChildItem $fish -Recurse -Filter *.cs | Select-String -Pattern 'abyss_selected_dungeon' -Context 8,14 | ForEach-Object { $_.ToString() }
+
+          function Show-Lines($path,$start,$end){
+            Write-Host "=== $path lines $start-$end ==="
+            $lines=Get-Content $path
+            for($i=$start;$i -le $end -and $i -le $lines.Count;$i++){
+              Write-Host ("{0,5}: {1}" -f $i,$lines[$i-1])
+            }
+          }
+
+          Show-Lines (Join-Path $fish 'FishingBot.cs') 180 230
+          Show-Lines (Join-Path $fish 'FishingBot.cs') 585 640
+          Show-Lines (Join-Path $fish 'MainForm.ReferenceUI.cs') 130 185
+          Show-Lines (Join-Path $fish 'dungeon/ScenarioEngine.cs') 90 210
+          Show-Lines (Join-Path $fish 'dungeon/ScenarioEngine.cs') 270 330
+          Show-Lines (Join-Path $fish 'dungeon/ScenarioEngine.cs') 620 660
+
+          Write-Host '=== EXECUTE STEP / SPECIAL TARGET SEARCH ==='
+          Get-Content (Join-Path $fish 'dungeon/ScenarioEngine.cs') | Select-String -Pattern 'ExecuteStepAsync|Target ==|Target.Equals|abyss_|selected_dungeon' -Context 3,8 | ForEach-Object { $_.ToString() }
+
+          Write-Host '=== SETTINGS AUTO RECOVERY ==='
+          Get-ChildItem $fish -Recurse -Include *.json,*.cs | Select-String -Pattern 'AutoRecoveryMaxAttempts|AutoRecoveryDelaySeconds|AutoRecoveryEnabled' -Context 2,4 | ForEach-Object { $_.ToString() }
