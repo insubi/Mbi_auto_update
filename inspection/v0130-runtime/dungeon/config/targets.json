@@ -1,0 +1,169 @@
+[
+  {
+    "Id": "challenge_confirm_strict",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "Text": "도전",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "challenge",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "Text": "도전",
+    "MaxEditDistance": 2,
+    "OcrRetryAt2x": true,
+    "TemplatePath": "templates/challenge_visual.png",
+    "Threshold": 0.68,
+    "TemplateScaleMin": 0.75,
+    "TemplateScaleMax": 1.25,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "challenge_visual",
+    "Kind": "template",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "TemplatePath": "templates/challenge_visual.png",
+    "Threshold": 0.68,
+    "TemplateScaleMin": 0.75,
+    "TemplateScaleMax": 1.25,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "selected",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "Text": "선택됨",
+    "MaxEditDistance": 2,
+    "OcrRetryAt2x": true,
+    "TemplatePath": "templates/selected_red_visual.png",
+    "Threshold": 0.6,
+    "TemplateScaleMin": 0.72,
+    "TemplateScaleMax": 1.28,
+    "TemplateScaleStep": 0.04
+  },
+  {
+    "Id": "enter_bottom",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 60,
+      "Y": 825,
+      "Width": 680,
+      "Height": 175
+    },
+    "Text": "입장하기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "enter_confirm",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 60,
+      "Y": 825,
+      "Width": 680,
+      "Height": 175
+    },
+    "Text": "입장하기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "touch_result",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 240,
+      "Y": 900,
+      "Width": 360,
+      "Height": 100
+    },
+    "Text": "터치해",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "retry",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 180,
+      "Y": 830,
+      "Width": 440,
+      "Height": 170
+    },
+    "Text": "다시 하기",
+    "MaxEditDistance": 2,
+    "OcrRetryAt2x": true,
+    "TemplatePath": "templates/retry_visual_v0129.jpg",
+    "Threshold": 0.7,
+    "TemplateScaleMin": 0.5,
+    "TemplateScaleMax": 1.3,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "selected_ocr_strict",
+    "Kind": "ocr",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "Text": "선택됨",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true
+  },
+  {
+    "Id": "selected_red_visual",
+    "Kind": "template",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "TemplatePath": "templates/selected_red_visual.png",
+    "Threshold": 0.7,
+    "TemplateScaleMin": 0.82,
+    "TemplateScaleMax": 1.18,
+    "TemplateScaleStep": 0.03
+  },
+  {
+    "Id": "scene_skip",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 0,
+      "Y": 0,
+      "Width": 800,
+      "Height": 1000
+    },
+    "Text": "장면 넘기기",
+    "MaxEditDistance": 1,
+    "OcrRetryAt2x": true,
+    "TemplatePath": "templates/scene_skip_phone.jpg",
+    "Threshold": 0.62,
+    "TemplateScaleMin": 0.5,
+    "TemplateScaleMax": 1.4,
+    "TemplateScaleStep": 0.08
+  }
+]
