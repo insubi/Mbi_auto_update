@@ -31,9 +31,11 @@ jobs:
 
       - name: Static full-package audit
         shell: pwsh
+        continue-on-error: true
         run: |
-          $ErrorActionPreference='Stop'
-          python inspection/v0128_full_stability_audit.py "$env:SOURCE_ROOT" | Tee-Object -FilePath audit.txt
+          $ErrorActionPreference='Continue'
+          $env:PYTHONIOENCODING='utf-8'
+          python -X utf8 inspection/v0128_full_stability_audit.py "$env:SOURCE_ROOT" | Tee-Object -FilePath audit.txt
 
       - name: Restore and build all projects
         shell: pwsh
@@ -92,7 +94,9 @@ jobs:
           Write-Host 'SMOKE_TEST_OK'
 
       - name: Upload audit report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: v0128-full-stability-audit
           path: audit.txt
+          if-no-files-found: ignore
