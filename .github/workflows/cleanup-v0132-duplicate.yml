@@ -16,13 +16,17 @@ jobs:
   cleanup:
     runs-on: ubuntu-latest
     steps:
-      - name: Cancel superseded run and delete its draft only
+      - name: Cancel superseded runs and delete stale drafts
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         shell: bash
         run: |
           set -u
-          gh api -X POST "repos/${REPO}/actions/runs/35272170621/cancel" || true
-          gh api -X DELETE "repos/${REPO}/releases/391047325" || true
-          echo "Superseded V0.1.32 draft/run cleanup requested. Current run/draft left untouched."
+          for run_id in 35272170621 35272374893; do
+            gh api -X POST "repos/${REPO}/actions/runs/${run_id}/cancel" || true
+          done
+          for release_id in 391047325 391048217; do
+            gh api -X DELETE "repos/${REPO}/releases/${release_id}" || true
+          done
+          echo "Stale V0.1.32 runs/drafts cleanup requested."
