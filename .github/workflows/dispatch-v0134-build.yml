@@ -1,0 +1,20 @@
+name: Dispatch Repaired V0.1.34 Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0134-runtime-error-upload]
+    paths: ['.github/workflows/dispatch-v0134-build.yml']
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch V0.1.34 build workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run build-v0134-runtime-error-upload.yml --repo "${{ github.repository }}" --ref v0134-runtime-error-upload
