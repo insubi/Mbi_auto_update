@@ -101,7 +101,7 @@ jobs:
             if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
           }
 
-          New-Item -ItemType Directory -Path stage,stage/release,package,package/release,out | Out-Null
+          New-Item -ItemType Directory -Path stage,stage/release,package,out | Out-Null
           $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
           dotnet publish (Join-Path $fish 'FishingAutomation.csproj') @pubArgs -o stage/release
           if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
@@ -127,34 +127,82 @@ jobs:
           Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
           Write-Host 'SMOKE_TEST_OK'
 
-          Copy-Item 'stage/release/*' 'package/release' -Recurse -Force
+          # Restore the complete Windows package layout used by the last known-good V0.1.31.
+          # The updater expects more than the published EXE: START.cmd, source/config folders,
+          # watchdog project, tools/ApplyUpdate.ps1, dungeon resources, and the release runtime.
+          $packageRoot=Join-Path (Resolve-Path package).Path 'MabiAuto_V0.1.35'
+          New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+          Copy-Item -Path (Join-Path $root.FullName '*') -Destination $packageRoot -Recurse -Force
 
-          $sourceTools=Join-Path $root.FullName 'tools'
-          $applyScript=Join-Path $sourceTools 'ApplyUpdate.ps1'
-          if(-not(Test-Path $applyScript)){throw 'source tools/ApplyUpdate.ps1 missing'}
-          New-Item -ItemType Directory -Path 'package/tools' -Force | Out-Null
-          Copy-Item $applyScript 'package/tools/ApplyUpdate.ps1' -Force
+          # Replace only the runtime release folder with the freshly published V0.1.35 output.
+          $packageRelease=Join-Path $packageRoot 'release'
+          Remove-Item $packageRelease -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $packageRelease -Force | Out-Null
+          Copy-Item 'stage/release/*' $packageRelease -Recurse -Force
+
+          $applyScript=Join-Path $packageRoot 'tools/ApplyUpdate.ps1'
+          if(-not(Test-Path $applyScript)){throw 'full package tools/ApplyUpdate.ps1 missing'}
 
           @(
             'MABI AUTO V0.1.35 Windows Lite',
-            'Updater-compatible root marker. Keep the release and tools folders.'
-          ) | Set-Content 'package/WINDOWS_LITE.txt' -Encoding UTF8
+            'Complete package layout restored from the known-good Windows distribution.',
+            'Keep START.cmd, FishingAutomation, MacroWatchdog, tools, dungeon, and release folders together.'
+          ) | Set-Content (Join-Path $packageRoot 'WINDOWS_LITE.txt') -Encoding UTF8
+
+          $requiredPackagePaths=@(
+            'START.cmd',
+            '1_INSTALL_INTERCEPTION.cmd',
+            'AUTO_UPDATE_README.txt',
+            'START_HERE.txt',
+            'FishingAutomation/FishingAutomation.csproj',
+            'MacroWatchdog/MacroWatchdog.csproj',
+            'tools/ApplyUpdate.ps1',
+            'dungeon/config/targets.json',
+            'release/FishingAutomation.exe',
+            'release/dungeon/config/targets.json',
+            'release/dungeon/templates/retry_visual_v0129.jpg',
+            'release/templates/hook.png',
+            'release/templates/gauge.png',
+            'release/templates/healthbar.png',
+            'release/templates/compass.png',
+            'release/visual-tests/assets/peaca_label.jpg',
+            'release/visual-tests/assets/fiod_label.jpg',
+            'release/visual-tests/assets/retry_candidate.jpg'
+          )
+          foreach($rel in $requiredPackagePaths){
+            if(-not(Test-Path (Join-Path $packageRoot $rel))){throw "complete package missing: $rel"}
+          }
+
+          $rootDirCount=@(Get-ChildItem $packageRoot -Directory -Force).Count
+          $rootFileCount=@(Get-ChildItem $packageRoot -File -Force).Count
+          $allFileCount=@(Get-ChildItem $packageRoot -Recurse -File -Force).Count
+          if($rootDirCount-lt5){throw "complete package has too few root directories: $rootDirCount"}
+          if($rootFileCount-lt5){throw "complete package has too few root files: $rootFileCount"}
+          if($allFileCount-lt100){throw "complete package unexpectedly sparse: $allFileCount files"}
+          Write-Host "FULL_PACKAGE_OK rootDirs=$rootDirCount rootFiles=$rootFileCount allFiles=$allFileCount"
 
           $zip=(Resolve-Path out).Path+'\MabiAuto_V0.1.35_Windows_Lite.zip'
-          Compress-Archive -Path 'package/*' -DestinationPath $zip -CompressionLevel Optimal
+          Compress-Archive -Path $packageRoot -DestinationPath $zip -CompressionLevel Optimal
 
           Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $zip -DestinationPath verify
           $children=@(Get-ChildItem verify -Force)
           $dirs=@($children|Where-Object{$_.PSIsContainer})
           if($children.Count-eq1 -and $dirs.Count-eq1){$sourceRoot=$dirs[0].FullName}else{$sourceRoot=(Resolve-Path verify).Path}
+
+          foreach($rel in $requiredPackagePaths){
+            if(-not(Test-Path (Join-Path $sourceRoot $rel))){throw "archive verification missing: $rel"}
+          }
           if(-not(Test-Path (Join-Path $sourceRoot 'release/FishingAutomation.exe'))){
             throw 'updater simulation failed: release/FishingAutomation.exe missing'
           }
           if(-not(Test-Path (Join-Path $sourceRoot 'tools/ApplyUpdate.ps1'))){
             throw 'updater simulation failed: tools/ApplyUpdate.ps1 missing'
           }
-          Write-Host "UPDATER_LAYOUT_OK children=$($children.Count) applyScript=OK"
+          if(-not((Test-Path (Join-Path $sourceRoot 'START.cmd')) -and (Test-Path (Join-Path $sourceRoot 'FishingAutomation')))){
+            throw 'FindPackageRoot contract failed: START.cmd/FishingAutomation missing'
+          }
+          Write-Host "UPDATER_LAYOUT_OK children=$($children.Count) wrapper=$((Split-Path $sourceRoot -Leaf)) applyScript=OK fullRoot=OK"
 
           $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  MabiAuto_V0.1.35_Windows_Lite.zip"|Set-Content "$zip.sha256" -Encoding ASCII
