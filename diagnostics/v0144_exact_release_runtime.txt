@@ -1,0 +1,66 @@
+=== EXACT PUBLISHED V0.1.44 ZIP ===
+ExeFileVersion=0.1.44.0
+ExeProductVersion=0.1.44+96aa024d95d74489ec95e3c639989fee19417cdf
+enter_bottom={"Id":"enter_bottom","Kind":"ocr","Roi":{"X":360,"Y":900,"Width":440,"Height":100},"Text":"입장하기","MaxEditDistance":0,"OcrRetryAt2x":true}
+enter_confirm={"Id":"enter_confirm","Kind":"ocr","Roi":{"X":360,"Y":900,"Width":440,"Height":100},"Text":"입장하기","MaxEditDistance":0,"OcrRetryAt2x":true}
+UpdaterExists=True
+
+=== GENERATED SOURCE ROOT ===
+BaseRootName=CombinedFishingDungeon_V0.1.10
+BaseRootFullPath=D:\a\Mbi_auto_update\Mbi_auto_update\sourcecheck\base\CombinedFishingDungeon_V0.1.10
+
+=== GENERATED SCENARIO ENGINE ENTRY LINES ===
+209:        _input.ClickClientPoint(_hwnd, ullaBreadcrumbPoint);
+233:        _input.ClickClientPoint(_hwnd, iconCenter);
+241:        _input.TapScanCode(0x39);
+258:            _input.ClickClientPoint(_hwnd, deepTab.Center);
+282:        _input.ClickClientPoint(_hwnd, slot.Center);
+290:        _input.TapScanCode(0x39);
+292:        var handoff = await WaitForTargetAsync("enter_bottom", 20, ct);
+592:            var enter = await _detector.DetectAsync("enter_bottom", frame, ct);
+690:                    _input.ClickClientPoint(_hwnd, popupClose.Center);
+710:                    _input.ClickClientPoint(_hwnd, touch.Center);
+762:                    _input.ClickClientPoint(_hwnd, exit.Center);
+913:                    _input.ClickClientPoint(_hwnd, retryConfirm.Center);
+958:                    Log?.Invoke($"[도전 안전확인] 선택됨 확정 -> 카드 안 선택됨 버튼만 1회 클릭 @ {state.ClickPoint} S={state.SelectedScore:0.000} C={state.ChallengeScore:0.000}");
+961:                    _input.ClickClientPoint(_hwnd, state.ClickPoint);
+1005:            var enter = await _detector.DetectAsync("enter_bottom", finalFrame, ct);
+1077:        if (step.Target.Equals("enter_bottom", StringComparison.OrdinalIgnoreCase))
+1145:                        _input.ClickClientPoint(_hwnd, found.Center);
+1175:                        if (step.Target.Equals("enter_bottom", StringComparison.OrdinalIgnoreCase))
+1194:                            Log?.Invoke($"[던전 입장] 도전 상태 + 오른쪽 입장하기 확인 -> Space 입력 @ {found.Bounds}");
+1195:                            _input.TapScanCode(0x39);
+1200:                            _input.ClickClientPoint(_hwnd, found.Center);
+1223:                    _input.ClickClientPoint(_hwnd, alt.Center);
+1386:                        _input.ClickClientPoint(_hwnd, touch.Center);
+1412:        _input.ClickClientPoint(_hwnd, touch.Center);
+1515:                _input.ClickClientPoint(_hwnd, found.Center);
+1568:                    _input.ClickClientPoint(_hwnd, r.Center);
+
+=== UPDATE SOURCE FILES ===
+MainForm.Update.cs
+  20:            var info = await UpdateManager.CheckLatestAsync();
+  26:                    _updateStatusValue.Text = $"최신 {UpdateManager.CurrentVersion}";
+  31:                    MessageBox.Show($"현재 {UpdateManager.CurrentVersion}이 최신 버전입니다.", "MABI AUTO 업데이트", MessageBoxButtons.OK, MessageBoxIcon.Information);
+  83:                $"{UpdateManager.CurrentVersion} → {info.Tag} 업데이트가 있습니다.\r\n\r\n{notes}\r\n\r\n설정, 텔레그램 정보, 이미지 템플릿은 유지합니다. SHA256 검증 후 설치하며, 새 버전 실행 실패 시 이전 버전으로 자동 복구합니다. 지금 업데이트할까요?",
+  91:            _log.Write($"[업데이트] 자동 업데이트 시작: {UpdateManager.CurrentVersion} -> {info.Tag}");
+UpdateManager.cs
+  15:    string Sha256Url);
+  19:    public const string CurrentVersion = "V0.1.44";
+  44:    public static async Task<ReleaseUpdateInfo?> CheckLatestAsync(CancellationToken ct = default)
+  62:            string candidateTag = candidate.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
+  65:            if (string.IsNullOrWhiteSpace(tag) || CompareVersions(candidateTag, tag) > 0)
+  72:        if (string.IsNullOrWhiteSpace(tag) || CompareVersions(tag, CurrentVersion) <= 0) return null;
+  83:                string download = a.TryGetProperty("browser_download_url", out var dl) ? dl.GetString() ?? "" : "";
+  105:        string shaName = asset.Name + ".sha256";
+  108:            throw new InvalidOperationException($"GitHub {tag} 릴리스에 SHA256 파일({shaName})이 없습니다.");
+  127:        // Once the installed build is on the public semantic-version line, legacy
+  129:        bool currentUsesSemanticVersion = CurrentVersion.Contains('.', StringComparison.Ordinal);
+  130:        if (currentUsesSemanticVersion && !hasDot) return false;
+  158:            if (!string.IsNullOrWhiteSpace(info.Sha256Url))
+  160:                string shaText = await Http.GetStringAsync(info.Sha256Url, ct);
+  163:                    throw new InvalidOperationException("업데이트 SHA256 파일 형식이 올바르지 않습니다.");
+  166:                string actual = Convert.ToHexString(await SHA256.HashDataAsync(fs, ct)).ToLowerInvariant();
+  168:                    throw new InvalidOperationException("업데이트 파일 SHA256 검증에 실패했습니다. 파일이 손상되었거나 변경되었습니다.");
+  184:        string script = Path.Combine(root, "tools", "ApplyUpdate.ps1");
+  237:    private static int CompareVersions(string left, string right)
