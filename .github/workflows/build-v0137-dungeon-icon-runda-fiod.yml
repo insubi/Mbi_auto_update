@@ -184,6 +184,30 @@ jobs:
           Write-Host "LITE_SIZE=$size"
           if($size -gt 180000000){throw "updater ZIP unexpectedly large: $size"}
 
+          # One-time repair for V0.1.36 installs whose previous runtime-only update removed tools/ApplyUpdate.ps1.
+          New-Item -ItemType Directory -Path repair,repair/tools -Force | Out-Null
+          Copy-Item (Join-Path $root.FullName 'tools/ApplyUpdate.ps1') 'repair/tools/ApplyUpdate.ps1' -Force
+          @(
+            'MABI AUTO V0.1.36 updater repair',
+            '',
+            '1) MABI AUTO를 완전히 종료합니다.',
+            '2) 이 ZIP의 내용(tools 폴더 포함)을 현재 MABI AUTO 설치 폴더(START.cmd가 있는 폴더)에 그대로 풉니다.',
+            '3) MABI AUTO를 다시 실행한 뒤 업데이트 버튼을 눌러 V0.1.37로 업데이트합니다.',
+            '',
+            '이 복구는 V0.1.36 패키징 오류로 삭제된 tools/ApplyUpdate.ps1만 복원합니다.'
+          ) | Set-Content 'repair/README_UPDATER_REPAIR.txt' -Encoding UTF8
+          @(
+            '@echo off',
+            'cd /d "%~dp0"',
+            'if not exist START.cmd (echo [ERROR] START.cmd가 있는 기존 MABI AUTO 폴더에 ZIP 내용을 풀어주세요.& pause & exit /b 1)',
+            'if not exist tools\ApplyUpdate.ps1 (echo [ERROR] tools\ApplyUpdate.ps1 복구에 실패했습니다.& pause & exit /b 1)',
+            'echo updater 복구 확인 완료.',
+            'start "" START.cmd'
+          ) | Set-Content 'repair/REPAIR_CHECK_AND_START.cmd' -Encoding ASCII
+          $repairZip=(Resolve-Path out).Path+'\MabiAuto_V0.1.36_UpdaterRepair.zip'
+          Compress-Archive -Path 'repair/*' -DestinationPath $repairZip -CompressionLevel Optimal
+          Write-Host "REPAIR_ZIP_SIZE=$((Get-Item $repairZip).Length)"
+
       - name: Preserve V0.1.37 artifact
         uses: actions/upload-artifact@v4
         with:
@@ -218,7 +242,7 @@ jobs:
             '업데이트 패키지에 tools/ApplyUpdate.ps1을 포함하고 다음 업데이트에서도 updater가 삭제되지 않도록 보강했습니다.'
           ) | Set-Content notes.txt -Encoding UTF8
 
-          gh release create $tag --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.37' --notes-file notes.txt out/MabiAuto_V0.1.37_Windows_Lite.zip out/MabiAuto_V0.1.37_Windows_Lite.zip.sha256
+          gh release create $tag --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.37' --notes-file notes.txt out/MabiAuto_V0.1.37_Windows_Lite.zip out/MabiAuto_V0.1.37_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.36_UpdaterRepair.zip
           if($LASTEXITCODE-ne0){throw 'release publish failed'}
 
           $release=gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
