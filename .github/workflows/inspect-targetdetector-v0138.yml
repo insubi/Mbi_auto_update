@@ -32,8 +32,9 @@ jobs:
           python release-source/v0137_updater_survival.py $root.FullName
           New-Item -ItemType Directory -Path diagnostics -Force | Out-Null
           Copy-Item (Join-Path $root.FullName 'FishingAutomation/dungeon/TargetDetector.cs') diagnostics/TargetDetector_v0137.cs -Force
+          Copy-Item (Join-Path $root.FullName 'FishingAutomation/dungeon/OcrRecognizer.cs') diagnostics/OcrRecognizer_v0137.cs -Force
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add diagnostics/TargetDetector_v0137.cs
+          git add diagnostics/TargetDetector_v0137.cs diagnostics/OcrRecognizer_v0137.cs
           git commit -m 'Inspect V0.1.37 TargetDetector [skip ci]'
           git push origin HEAD:v0138-arrival-timeout-5min
