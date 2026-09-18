@@ -10,6 +10,10 @@ on:
       - 'release-source/v0137_dungeon_icon_runda_fiod.py'
       - 'release-source/v0137_updater_survival.py'
 
+concurrency:
+  group: v0137-release
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
