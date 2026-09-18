@@ -1,0 +1,56 @@
+=== BASEDIR REFERENCES ===
+FishingBot.cs:31:        string baseDir = AppContext.BaseDirectory;
+FishingBot.cs:32:        _templates = new TemplateMatcher(Path.Combine(baseDir, "templates"), log);
+FishingBot.cs:35:        Directory.CreateDirectory(Path.Combine(baseDir, cfg.DebugFolder));
+FishingBot.cs:679:            string dir = Path.Combine(AppContext.BaseDirectory, _cfg.DebugFolder);
+InputSender.cs:104:            string localDll = Path.Combine(AppContext.BaseDirectory, "interception.dll");
+MainForm.cs:66:        string baseDir = AppContext.BaseDirectory;
+MainForm.cs:67:        AutomationConfig cfg = AutomationConfig.Load(Path.Combine(baseDir, "config.json"));
+MainForm.cs:68:        string runtimeLogPath = Path.Combine(baseDir, cfg.LogFile);
+MainForm.cs:70:        _notifier = new TelegramNotifier(Path.Combine(baseDir, "notification.json"), _log);
+MainForm.cs:72:        _watchdog = new WatchdogClient(baseDir);
+MainForm.cs:311:        string baseDir = Path.Combine(AppContext.BaseDirectory, folderName);
+MainForm.cs:322:            var settings = LoadJson<AppSettings>(Path.Combine(baseDir, "config", "appsettings.json"));
+MainForm.cs:323:            var targets = LoadJson<List<TargetDefinition>>(Path.Combine(baseDir, "config", "targets.json"));
+MainForm.cs:324:            var scenario = LoadJson<ScenarioDefinition>(Path.Combine(baseDir, "config", "scenario.json"));
+MainForm.cs:360:            var engine = new ScenarioEngine(window.Handle, settings, scenario, targets, baseDir, preRoute);
+MainForm.cs:738:                string path = Path.Combine(AppContext.BaseDirectory, "ui-crash.log");
+MainForm.ReferenceUI.cs:474:                string path = Path.Combine(AppContext.BaseDirectory, "abyss", "previews", fileName);
+MainForm.VisualTest.cs:90:                var tester = new VisualRecognitionTester(AppContext.BaseDirectory);
+Program.cs:28:            string path = Path.Combine(AppContext.BaseDirectory, "ui-crash.log");
+TelegramSettingsDialog.cs:95:        string runtimePath = Path.Combine(AppContext.BaseDirectory, "notification.json");
+UpdateManager.cs:226:        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+UpdateManager.cs:232:        var baseDir = new DirectoryInfo(AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
+UpdateManager.cs:233:        if (baseDir.Name.Equals("release", StringComparison.OrdinalIgnoreCase) && baseDir.Parent is not null) return baseDir.Parent.FullName;
+UpdateManager.cs:234:        return AppContext.BaseDirectory;
+VisualRecognitionTester.cs:35:    private readonly string _baseDir;
+VisualRecognitionTester.cs:41:    public VisualRecognitionTester(string baseDir)
+VisualRecognitionTester.cs:43:        _baseDir = baseDir;
+VisualRecognitionTester.cs:44:        _dungeonDir = Path.Combine(baseDir, "dungeon");
+VisualRecognitionTester.cs:45:        _assetDir = Path.Combine(baseDir, "visual-tests", "assets");
+WatchdogClient.cs:7:    private readonly string _baseDir;
+WatchdogClient.cs:12:    public WatchdogClient(string baseDir)
+WatchdogClient.cs:14:        _baseDir = baseDir;
+WatchdogClient.cs:16:        _heartbeat = Path.Combine(baseDir, $"watchdog_heartbeat_{pid}.txt");
+WatchdogClient.cs:17:        _graceful = Path.Combine(baseDir, $"watchdog_graceful_{pid}.flag");
+WatchdogClient.cs:21:        string exe = Path.Combine(baseDir, "MacroWatchdog.exe");
+WatchdogClient.cs:29:                    Arguments = $"--pid {pid} --base \"{baseDir}\"",
+WatchdogClient.cs:32:                    WorkingDirectory = baseDir
+dungeon\ScenarioEngine.cs:15:    private readonly string _baseDir;
+dungeon\ScenarioEngine.cs:27:    public ScenarioEngine(nint hwnd, AppSettings settings, ScenarioDefinition scenario, List<TargetDefinition> targets, string baseDir, string? preRoute = null)
+dungeon\ScenarioEngine.cs:32:        _baseDir = baseDir;
+dungeon\ScenarioEngine.cs:34:        _detector = new TargetDetector(targets, baseDir);
+dungeon\ScenarioEngine.cs:127:                        bool abyss = string.Equals(new DirectoryInfo(_baseDir).Name, "abyss", StringComparison.OrdinalIgnoreCase);
+dungeon\ScenarioEngine.cs:611:        bool abyss = string.Equals(new DirectoryInfo(_baseDir).Name, "abyss", StringComparison.OrdinalIgnoreCase);
+dungeon\ScenarioEngine.cs:784:            string dir = Path.Combine(_baseDir, "debug");
+dungeon\ScenarioEngine.cs:807:            Directory.CreateDirectory(Path.Combine(_baseDir, "debug"));
+dungeon\ScenarioEngine.cs:809:            string path = Path.Combine(_baseDir, "debug", $"{label}_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+dungeon\ScenarioEngine.cs:1205:            if (string.Equals(new DirectoryInfo(_baseDir).Name, "abyss", StringComparison.OrdinalIgnoreCase) &&
+dungeon\ScenarioEngine.cs:1226:                Directory.CreateDirectory(Path.Combine(_baseDir, "debug"));
+dungeon\ScenarioEngine.cs:1228:                var path = Path.Combine(_baseDir, "debug", $"timeout_{DateTime.Now:yyyyMMdd_HHmmss}_{Safe(step.Name)}.png");
+dungeon\TargetDetector.cs:9:    public TargetDetector(IEnumerable<TargetDefinition> targets, string baseDir)
+dungeon\TargetDetector.cs:13:        _template = new TemplateMatcher(baseDir);
+dungeon\TemplateMatcher.cs:8:    private readonly string _baseDir;
+dungeon\TemplateMatcher.cs:9:    public TemplateMatcher(string baseDir) => _baseDir = baseDir;
+dungeon\TemplateMatcher.cs:25:            : Path.Combine(_baseDir, templatePath.Replace('/', Path.DirectorySeparatorChar));
+dungeon\TemplateMatcher.cs:119:            : Path.Combine(_baseDir, templatePath.Replace('/', Path.DirectorySeparatorChar));
