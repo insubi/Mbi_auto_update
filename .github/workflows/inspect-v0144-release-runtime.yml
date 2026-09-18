@@ -30,8 +30,8 @@ jobs:
           New-Item -ItemType Directory -Path releasecheck,sourcecheck,diagnostics -Force | Out-Null
 
           # A) Download the exact public release asset users receive.
-          gh release download V0.1.44 --repo $env:REPO --pattern 'MabiAuto_V0.1.44_Windows_Lite.zip' --dir releasecheck
-          if($LASTEXITCODE-ne0){throw 'V0.1.44 release download failed'}
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.44/MabiAuto_V0.1.44_Windows_Lite.zip' -OutFile 'releasecheck/MabiAuto_V0.1.44_Windows_Lite.zip'
+          if(-not(Test-Path 'releasecheck/MabiAuto_V0.1.44_Windows_Lite.zip')){throw 'V0.1.44 release download failed'}
           Expand-Archive -LiteralPath 'releasecheck/MabiAuto_V0.1.44_Windows_Lite.zip' -DestinationPath releasecheck/x -Force
 
           $exe='releasecheck/x/release/FishingAutomation.exe'
