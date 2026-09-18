@@ -12,6 +12,7 @@ main_path = app / "MainForm.cs"
 refui_path = app / "MainForm.ReferenceUI.cs"
 engine_path = app / "dungeon" / "ScenarioEngine.cs"
 targets_path = app / "dungeon" / "config" / "targets.json"
+updater_path = root / "tools" / "ApplyUpdate.ps1"
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
@@ -369,6 +370,32 @@ ids = {x["Id"] for x in new_targets}
 targets = [x for x in targets if x.get("Id") not in ids] + new_targets
 write(targets_path, json.dumps(targets, ensure_ascii=False, indent=2) + "\n")
 
+# 4) Repair the updater contract. V0.1.36's release-only package exposed a flaw in the
+# old updater: it always deleted tools/ and FishingAutomation/ even when the incoming
+# package did not contain replacements. That makes the next update impossible.
+updater = read(updater_path)
+updater = replace_once(
+    updater,
+    '''    foreach ($name in @('release','FishingAutomation','tools')) {
+        Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    Get-ChildItem -LiteralPath $sourceRoot -Force | ForEach-Object {
+''',
+    '''    # V0.1.37: only delete install directories that the incoming package actually replaces.
+    # This keeps tools/ApplyUpdate.ps1 and source/config files alive for release-only packages.
+    foreach ($name in @('release','FishingAutomation','tools')) {
+        $incoming = Join-Path $sourceRoot $name
+        if (Test-Path -LiteralPath $incoming) {
+            Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Get-ChildItem -LiteralPath $sourceRoot -Force | ForEach-Object {
+''',
+    "safe updater replacement directories")
+write(updater_path, updater)
+
 # Version bump.
 for path in root.rglob("*"):
     if not path.is_file() or path.suffix.lower() not in {".cs", ".csproj", ".json", ".cmd", ".ps1", ".txt"}:
@@ -432,4 +459,10 @@ for tid in (
     if tid not in joined_targets:
         raise RuntimeError(f"target missing: {tid}")
 
-print("V0.1.37 patch applied: UI text + icon click + Runda/Fiod 1-1/2-1")
+updater_check = read(updater_path)
+if "only delete install directories that the incoming package actually replaces" not in updater_check:
+    raise RuntimeError("safe updater replacement guard missing")
+if "$incoming = Join-Path $sourceRoot $name" not in updater_check:
+    raise RuntimeError("incoming-package directory guard missing")
+
+print("V0.1.37 patch applied: UI text + icon click + Runda/Fiod 1-1/2-1 + updater self-repair")
