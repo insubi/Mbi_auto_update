@@ -1,0 +1,52 @@
+name: Inspect updater contract V0.1.36
+
+on:
+  push:
+    branches:
+      - v0137-dungeon-icon-runda-fiod
+    paths:
+      - '.github/workflows/inspect-updater-contract-v0137.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract updater sources and contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+
+          New-Item -ItemType Directory -Path diagnostics -Force | Out-Null
+          Copy-Item (Join-Path $fish 'UpdateManager.cs') diagnostics/UpdateManager_v0136.cs -Force
+          Copy-Item (Join-Path $root.FullName 'tools/ApplyUpdate.ps1') diagnostics/ApplyUpdate_v0136.ps1 -Force
+
+          $um=Get-Content -Raw diagnostics/UpdateManager_v0136.cs
+          $ap=Get-Content -Raw diagnostics/ApplyUpdate_v0136.ps1
+          @(
+            '=== UPDATE MANAGER KEY LINES ==='
+            ($um -split "`n" | Where-Object {$_ -match 'release|asset|zip|sha|ApplyUpdate|CurrentVersion|download|Windows_Lite|latest|Process|ArgumentList'} | Select-Object -First 220)
+            ''
+            '=== APPLY UPDATE KEY LINES ==='
+            ($ap -split "`n" | Where-Object {$_ -match 'sourceRoot|release|FishingAutomation|WINDOWS_LITE|START|Copy|Move|Remove|process|PID|exe|zip|Expand|backup|destination|target'} | Select-Object -First 260)
+          ) | Set-Content diagnostics/updater_contract.txt -Encoding UTF8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/UpdateManager_v0136.cs diagnostics/ApplyUpdate_v0136.ps1 diagnostics/updater_contract.txt
+          git commit -m 'Inspect V0.1.36 updater contract [skip ci]'
+          git push origin HEAD:v0137-dungeon-icon-runda-fiod
