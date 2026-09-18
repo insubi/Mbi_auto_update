@@ -1,0 +1,60 @@
+name: Inspect V0.1.40 Runtime Paths
+
+on:
+  push:
+    branches:
+      - v0140-slot-hybrid-fix
+    paths:
+      - '.github/workflows/inspect-runtime-paths-v0140.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract runtime path sources
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          python release-source/v0137_dungeon_icon_runda_fiod.py $root.FullName
+          python release-source/v0137_updater_survival.py $root.FullName
+          python release-source/v0138_arrival_timeout_5min.py $root.FullName
+          python release-source/v0139_slot_template_fix.py $root.FullName
+          python release-source/v0140_slot_hybrid_fix.py $root.FullName
+
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          New-Item -ItemType Directory -Path diagnostics -Force | Out-Null
+          Copy-Item (Join-Path $fish 'MainForm.cs') diagnostics/MainForm_v0140.cs -Force
+          Copy-Item (Join-Path $fish 'Program.cs') diagnostics/Program_v0140.cs -Force -ErrorAction SilentlyContinue
+          Copy-Item (Join-Path $fish 'AppSettings.cs') diagnostics/AppSettings_v0140.cs -Force -ErrorAction SilentlyContinue
+          Copy-Item (Join-Path $fish 'dungeon/ScenarioEngine.cs') diagnostics/ScenarioEngine_v0140.cs -Force
+          Copy-Item (Join-Path $fish 'dungeon/TemplateMatcher.cs') diagnostics/TemplateMatcher_v0140.cs -Force
+          @(
+            '=== BASEDIR REFERENCES ==='
+            (Get-ChildItem $fish -Recurse -Filter *.cs | ForEach-Object {
+              $p=$_.FullName
+              Get-Content $_.FullName | Select-String -Pattern 'baseDir|AppContext.BaseDirectory|Application.StartupPath|Environment.CurrentDirectory|ScenarioEngine\(' | ForEach-Object {
+                "$($p.Substring($fish.Length+1)):$($_.LineNumber):$($_.Line)"
+              }
+            })
+          ) | Set-Content diagnostics/runtime_paths_v0140.txt -Encoding UTF8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/MainForm_v0140.cs diagnostics/ScenarioEngine_v0140.cs diagnostics/TemplateMatcher_v0140.cs diagnostics/runtime_paths_v0140.txt
+          if(Test-Path diagnostics/Program_v0140.cs){git add diagnostics/Program_v0140.cs}
+          if(Test-Path diagnostics/AppSettings_v0140.cs){git add diagnostics/AppSettings_v0140.cs}
+          git commit -m 'Inspect V0.1.40 runtime paths [skip ci]'
+          git push origin HEAD:v0140-slot-hybrid-fix
