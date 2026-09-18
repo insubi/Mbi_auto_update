@@ -1,0 +1,106 @@
+name: Inspect exact V0.1.44 release runtime
+
+on:
+  push:
+    branches:
+      - inspect-v0144-release-runtime
+    paths:
+      - '.github/workflows/inspect-v0144-release-runtime.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Inspect published V0.1.44 and generated source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path releasecheck,sourcecheck,diagnostics -Force | Out-Null
+
+          # A) Download the exact public release asset users receive.
+          gh release download V0.1.44 --repo $env:REPO --pattern 'MabiAuto_V0.1.44_Windows_Lite.zip' --dir releasecheck
+          if($LASTEXITCODE-ne0){throw 'V0.1.44 release download failed'}
+          Expand-Archive -LiteralPath 'releasecheck/MabiAuto_V0.1.44_Windows_Lite.zip' -DestinationPath releasecheck/x -Force
+
+          $exe='releasecheck/x/release/FishingAutomation.exe'
+          $targets='releasecheck/x/release/dungeon/config/targets.json'
+          if(-not(Test-Path $exe)){throw 'published exe missing'}
+          if(-not(Test-Path $targets)){throw 'published targets.json missing'}
+
+          $v=(Get-Item $exe).VersionInfo
+          $tj=Get-Content -Raw $targets | ConvertFrom-Json
+          $enter=@($tj|Where-Object{$_.Id-eq'enter_bottom'})[0]
+          $enterConfirm=@($tj|Where-Object{$_.Id-eq'enter_confirm'})[0]
+
+          $report=New-Object System.Collections.Generic.List[string]
+          $report.Add('=== EXACT PUBLISHED V0.1.44 ZIP ===')
+          $report.Add("ExeFileVersion=$($v.FileVersion)")
+          $report.Add("ExeProductVersion=$($v.ProductVersion)")
+          $report.Add("enter_bottom=$($enter|ConvertTo-Json -Compress -Depth 8)")
+          $report.Add("enter_confirm=$($enterConfirm|ConvertTo-Json -Compress -Depth 8)")
+          $report.Add("UpdaterExists=$(Test-Path 'releasecheck/x/tools/ApplyUpdate.ps1')")
+          $report.Add('')
+
+          # B) Rebuild generated source exactly as the release workflow did.
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile sourcecheck/base.zip
+          Expand-Archive sourcecheck/base.zip -DestinationPath sourcecheck/base -Force
+          $root=Get-ChildItem sourcecheck/base -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'base source root missing'}
+          $report.Add('=== GENERATED SOURCE ROOT ===')
+          $report.Add("BaseRootName=$($root.Name)")
+          $report.Add("BaseRootFullPath=$($root.FullName)")
+          $report.Add('')
+
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          python release-source/v0137_dungeon_icon_runda_fiod.py $root.FullName
+          python release-source/v0137_updater_survival.py $root.FullName
+          python release-source/v0138_arrival_timeout_5min.py $root.FullName
+          python release-source/v0139_slot_template_fix.py $root.FullName
+          python release-source/v0140_slot_hybrid_fix.py $root.FullName
+          python release-source/v0141_template_path_fix.py $root.FullName
+          python release-source/v0142_entry_exact_click_fix.py $root.FullName
+          python release-source/v0143_selected_entry_click_guards.py $root.FullName
+          python release-source/v0144_entry_space.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'patch chain failed'}
+
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          $engine=Join-Path $fish 'dungeon/ScenarioEngine.cs'
+          $updateCandidates=Get-ChildItem $fish -Recurse -Filter '*Update*.cs' -File
+
+          $report.Add('=== GENERATED SCENARIO ENGINE ENTRY LINES ===')
+          Get-Content $engine | Select-String -Pattern '선택됨 확정 -> 카드 안 선택됨 버튼만 1회 클릭|도전 상태 \+ 오른쪽 입장하기 확인 -> Space 입력|TapScanCode\(0x39\)|enter_bottom|ClickClientPoint' | ForEach-Object {
+            $report.Add("$($_.LineNumber):$($_.Line)")
+          }
+          $report.Add('')
+
+          $report.Add('=== UPDATE SOURCE FILES ===')
+          foreach($u in $updateCandidates){
+            $report.Add($u.FullName.Substring($fish.Length+1))
+            Get-Content $u.FullName | Select-String -Pattern 'releases/latest|releases/tags|Latest|tag_name|browser_download_url|sha256|ApplyUpdate|Version' | ForEach-Object {
+              $report.Add("  $($_.LineNumber):$($_.Line)")
+            }
+          }
+
+          $report | Set-Content diagnostics/v0144_exact_release_runtime.txt -Encoding UTF8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/v0144_exact_release_runtime.txt
+          git commit -m 'Inspect exact V0.1.44 published runtime [skip ci]'
+          git push origin HEAD:inspect-v0144-release-runtime
