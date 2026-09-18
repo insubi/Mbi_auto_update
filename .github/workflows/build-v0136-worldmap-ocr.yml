@@ -1,0 +1,260 @@
+name: Build V0.1.36 World Map OCR Fix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v0136-worldmap-ocr-fix
+    paths:
+      - '.github/workflows/build-v0136-worldmap-ocr-fix.yml'
+      - 'release-source/v0135_visual_test_environment.py'
+      - 'release-source/v0136_worldmap_ocr_fix.py'
+      - 'release-source/visual-test-assets/**'
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: V0.1.36
+
+jobs:
+  build:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Patch validate build and package V0.1.36
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.32 patch failed'}
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.33 patch failed'}
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.34 patch failed'}
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.35 patch failed'}
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.36 patch failed'}
+
+          $project=Get-Content -Raw (Join-Path $fish 'FishingAutomation.csproj')
+          $tester=Get-Content -Raw (Join-Path $fish 'VisualRecognitionTester.cs')
+          $ui=Get-Content -Raw (Join-Path $fish 'MainForm.VisualTest.cs')
+          $uploader=Get-Content -Raw (Join-Path $fish 'RuntimeErrorUploader.cs')
+          $refui=Get-Content -Raw (Join-Path $fish 'MainForm.ReferenceUI.cs')
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+
+          foreach($required in @(
+            '<Version>0.1.35</Version>',
+            'VISUAL_TEST_ENV_V10',
+            'VisualRecognitionTester',
+            'AddButton("인식 테스트"',
+            'UploadVisualTestRunAsync',
+            'test-runs/',
+            'source = "visual-test"',
+            'gameInputSent = false',
+            'peaca_map_actual_v0136.jpg',
+            'runda_map_actual_v0136.jpg',
+            'RUNTIME_ERROR_GITHUB_UPLOAD_V9',
+            'DUNGEON_RESULT_RETRY_FASTPATH_V8',
+            'var ullaBreadcrumbPoint = new Point(82, 66);',
+            '페카 심층 1-1',
+            '페카 심층 2-1'
+          )){
+            if(-not (($project+$tester+$ui+$uploader+$refui+$engine).Contains($required))){
+              throw "required marker missing: $required"
+            }
+          }
+
+          foreach($forbidden in @(
+            'ClickClientPoint',
+            'TapScanCode',
+            'DragClientPoint',
+            'FindRequiredGameWindow',
+            'SetForegroundWindow'
+          )){
+            if($tester.Contains($forbidden)){throw "visual tester live-input/window regression: $forbidden"}
+          }
+
+          $assetDir=Join-Path $fish 'visual-tests/assets'
+          foreach($name in @('peaca_label.jpg','fiod_label.jpg','peaca_popup_title.jpg','go_here.jpg','d1_slots.jpg','d2_slots.jpg','d2_enter.jpg','retry_candidate.jpg','peaca_map_actual_v0136.jpg','runda_map_actual_v0136.jpg')){
+            if(-not(Test-Path (Join-Path $assetDir $name))){throw "visual test asset missing: $name"}
+          }
+
+          dotnet restore (Join-Path $fish 'FishingAutomation.csproj')
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation restore failed'}
+          dotnet build (Join-Path $fish 'FishingAutomation.csproj') -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+
+          $watchProj=Join-Path $root.FullName 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watchProj){
+            dotnet restore $watchProj
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog restore failed'}
+            dotnet build $watchProj -c Release --no-restore
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          }
+
+          New-Item -ItemType Directory -Path stage,stage/release,package,out | Out-Null
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $fish 'FishingAutomation.csproj') @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          if(Test-Path $watchProj){
+            dotnet publish $watchProj @pubArgs -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
+          }
+
+          foreach($name in @('peaca_label.jpg','fiod_label.jpg','peaca_popup_title.jpg','go_here.jpg','d1_slots.jpg','d2_slots.jpg','d2_enter.jpg','retry_candidate.jpg','peaca_map_actual_v0136.jpg','runda_map_actual_v0136.jpg')){
+            if(-not(Test-Path (Join-Path 'stage/release/visual-tests/assets' $name))){
+              throw "published visual test asset missing: $name"
+            }
+          }
+
+          $exe=(Resolve-Path 'stage/release/FishingAutomation.exe').Path
+          $p=Start-Process $exe -WorkingDirectory (Resolve-Path 'stage/release').Path -PassThru
+          Start-Sleep 5
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'SMOKE_TEST_OK'
+
+          # Restore the complete Windows package layout used by the last known-good V0.1.31.
+          # The updater expects more than the published EXE: START.cmd, source/config folders,
+          # watchdog project, tools/ApplyUpdate.ps1, dungeon resources, and the release runtime.
+          $packageRoot=Join-Path (Resolve-Path package).Path 'MabiAuto_V0.1.36'
+          New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
+          Copy-Item -Path (Join-Path $root.FullName '*') -Destination $packageRoot -Recurse -Force
+
+          # Replace only the runtime release folder with the freshly published V0.1.36 output.
+          $packageRelease=Join-Path $packageRoot 'release'
+          Remove-Item $packageRelease -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $packageRelease -Force | Out-Null
+          Copy-Item 'stage/release/*' $packageRelease -Recurse -Force
+
+          $applyScript=Join-Path $packageRoot 'tools/ApplyUpdate.ps1'
+          if(-not(Test-Path $applyScript)){throw 'full package tools/ApplyUpdate.ps1 missing'}
+
+          @(
+            'MABI AUTO V0.1.36 Windows Lite',
+            'Complete package layout restored from the known-good Windows distribution.',
+            'Keep START.cmd, FishingAutomation, MacroWatchdog, tools, dungeon, and release folders together.'
+          ) | Set-Content (Join-Path $packageRoot 'WINDOWS_LITE.txt') -Encoding UTF8
+
+          $requiredPackagePaths=@(
+            'START.cmd',
+            '1_INSTALL_INTERCEPTION.cmd',
+            'AUTO_UPDATE_README.txt',
+            'START_HERE.txt',
+            'FishingAutomation/FishingAutomation.csproj',
+            'MacroWatchdog/MacroWatchdog.csproj',
+            'tools/ApplyUpdate.ps1',
+            'dungeon/config/targets.json',
+            'release/FishingAutomation.exe',
+            'release/dungeon/config/targets.json',
+            'release/dungeon/templates/retry_visual_v0129.jpg',
+            'release/templates/hook.png',
+            'release/templates/gauge.png',
+            'release/templates/healthbar.png',
+            'release/templates/compass.png',
+            'release/visual-tests/assets/peaca_label.jpg',
+            'release/visual-tests/assets/fiod_label.jpg',
+            'release/visual-tests/assets/retry_candidate.jpg',
+            'release/visual-tests/assets/peaca_map_actual_v0136.jpg',
+            'release/visual-tests/assets/runda_map_actual_v0136.jpg'
+          )
+          foreach($rel in $requiredPackagePaths){
+            if(-not(Test-Path (Join-Path $packageRoot $rel))){throw "complete package missing: $rel"}
+          }
+
+          $rootDirCount=@(Get-ChildItem $packageRoot -Directory -Force).Count
+          $rootFileCount=@(Get-ChildItem $packageRoot -File -Force).Count
+          $allFileCount=@(Get-ChildItem $packageRoot -Recurse -File -Force).Count
+          if($rootDirCount-lt5){throw "complete package has too few root directories: $rootDirCount"}
+          if($rootFileCount-lt5){throw "complete package has too few root files: $rootFileCount"}
+          if($allFileCount-lt100){throw "complete package unexpectedly sparse: $allFileCount files"}
+          Write-Host "FULL_PACKAGE_OK rootDirs=$rootDirCount rootFiles=$rootFileCount allFiles=$allFileCount"
+
+          $zip=(Resolve-Path out).Path+'\MabiAuto_V0.1.36_Windows_Lite.zip'
+          Compress-Archive -Path $packageRoot -DestinationPath $zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip -DestinationPath verify
+          $children=@(Get-ChildItem verify -Force)
+          $dirs=@($children|Where-Object{$_.PSIsContainer})
+          if($children.Count-eq1 -and $dirs.Count-eq1){$sourceRoot=$dirs[0].FullName}else{$sourceRoot=(Resolve-Path verify).Path}
+
+          foreach($rel in $requiredPackagePaths){
+            if(-not(Test-Path (Join-Path $sourceRoot $rel))){throw "archive verification missing: $rel"}
+          }
+          if(-not(Test-Path (Join-Path $sourceRoot 'release/FishingAutomation.exe'))){
+            throw 'updater simulation failed: release/FishingAutomation.exe missing'
+          }
+          if(-not(Test-Path (Join-Path $sourceRoot 'tools/ApplyUpdate.ps1'))){
+            throw 'updater simulation failed: tools/ApplyUpdate.ps1 missing'
+          }
+          if(-not((Test-Path (Join-Path $sourceRoot 'START.cmd')) -and (Test-Path (Join-Path $sourceRoot 'FishingAutomation')))){
+            throw 'FindPackageRoot contract failed: START.cmd/FishingAutomation missing'
+          }
+          Write-Host "UPDATER_LAYOUT_OK children=$($children.Count) wrapper=$((Split-Path $sourceRoot -Leaf)) applyScript=OK fullRoot=OK"
+
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.36_Windows_Lite.zip"|Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "LITE_SHA256=$hash"
+          Write-Host "LITE_SIZE=$((Get-Item $zip).Length)"
+
+      - name: Preserve package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MabiAuto_V0.1.36_Windows_Lite
+          path: |
+            out/MabiAuto_V0.1.36_Windows_Lite.zip
+            out/MabiAuto_V0.1.36_Windows_Lite.zip.sha256
+          retention-days: 7
+          compression-level: 0
+
+      - name: Publish V0.1.36
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag=$env:RELEASE_TAG
+
+          gh release view $tag --repo $env:REPO *> $null
+          if($LASTEXITCODE-eq0){gh release delete $tag --repo $env:REPO --yes --cleanup-tag}
+          $null=$LASTEXITCODE
+
+          @(
+            'MABI AUTO V0.1.36 - 페카/룬다 실제 월드맵 OCR 보정',
+            '',
+            '사용자가 제공한 실제 월드맵 화면에서 페카 고분과 룬다 던전 영역을 테스트 픽스처로 추가했습니다.',
+            '페카 월드맵 테스트는 실제 크기/실제 위치의 이미지로 route_peaca_map 검출기를 검사합니다.',
+            '룬다 던전도 실제 화면 OCR 테스트에 추가되어 더 이상 SKIP되지 않습니다.',
+            '실전 페카 월드맵 OCR은 기존 넓은 탐색 ROI를 유지하면서 edit distance 2 + 2배 OCR 재시도를 사용합니다.',
+            '기존 피오드/페카 팝업/여기로 가기/D1-1/D2-1/2층1구역/다시 하기 테스트와 실전 던전/어비스/낚시/F10 동작은 유지합니다.',
+            '인식 테스트 결과는 기존 설정된 비공개 GitHub 로그 저장소의 test-runs/ 아래로 자동 업로드됩니다.'
+          )|Set-Content notes.txt -Encoding UTF8
+
+          gh release create $tag --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.36' --notes-file notes.txt out/MabiAuto_V0.1.36_Windows_Lite.zip out/MabiAuto_V0.1.36_Windows_Lite.zip.sha256
+          if($LASTEXITCODE-ne0){throw 'release publish failed'}
+
+          $release=gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
+          $zip=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.36_Windows_Lite.zip'})[0]
+          if($null-eq$zip -or [int64]$zip.size-lt 1000000){throw 'published ZIP missing/small'}
+          Write-Host "RELEASE_URL=$($release.html_url)"
+          Write-Host "RELEASE_DIGEST=$($zip.digest)"
+          Write-Host "RELEASE_ZIP_SIZE=$($zip.size)"
