@@ -1,0 +1,136 @@
+name: Release V0.1.37 From Main
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release-v0137-from-main.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v0137-dungeon-icon-runda-fiod
+
+      - name: Download validated V0.1.37 artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path assets -Force | Out-Null
+          gh run download 35294858780 --repo $env:REPO --name MabiAuto_V0.1.37_Windows_Lite --dir assets
+          if($LASTEXITCODE-ne0){throw 'artifact download failed'}
+
+          $zip='assets/MabiAuto_V0.1.37_Windows_Lite.zip'
+          $shaFile='assets/MabiAuto_V0.1.37_Windows_Lite.zip.sha256'
+          if(-not(Test-Path $zip)){throw 'V0.1.37 ZIP missing from artifact'}
+          if(-not(Test-Path $shaFile)){throw 'V0.1.37 SHA file missing from artifact'}
+
+          $expected=((Get-Content $shaFile -Raw).Trim() -split '\\s+')[0].ToLowerInvariant()
+          $actual=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($expected-ne$actual){throw "artifact hash mismatch expected=$expected actual=$actual"}
+          if($actual-ne'bf61c4c4b815d84639b2c904f75cddf790850916964bae994fb7945fe78fd50d'){throw "unexpected validated build hash: $actual"}
+          Write-Host "VALIDATED_V0137_SHA256=$actual"
+          Write-Host "VALIDATED_V0137_SIZE=$((Get-Item $zip).Length)"
+
+      - name: Build V0.1.36 updater repair
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path repair,repair/tools -Force | Out-Null
+          Copy-Item diagnostics/ApplyUpdate_v0136.ps1 repair/tools/ApplyUpdate.ps1 -Force
+
+          $p='repair/tools/ApplyUpdate.ps1'
+          $text=Get-Content -Raw $p
+          $old=@"
+    foreach ($name in @('release','FishingAutomation','tools')) {
+        Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+"@
+          $new=@"
+    # V0.1.37 updater survival: only remove trees that the incoming package actually contains.
+    foreach ($name in @('release','FishingAutomation','tools')) {
+        $incomingTree = Join-Path $sourceRoot $name
+        if (Test-Path -LiteralPath $incomingTree) {
+            Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+"@
+          if(-not $text.Contains($old)){throw 'repair updater patch anchor missing'}
+          $text=$text.Replace($old,$new)
+          Set-Content -LiteralPath $p -Value $text -Encoding UTF8
+
+          @(
+            'MABI AUTO V0.1.36 업데이트 복구',
+            '',
+            'V0.1.36 패키징 오류로 tools/ApplyUpdate.ps1이 삭제된 설치를 복구합니다.',
+            '1. MABI AUTO를 완전히 종료합니다.',
+            '2. ZIP 안의 tools 폴더를 START.cmd가 있는 기존 MABI AUTO 설치 폴더에 그대로 풉니다.',
+            '3. 덮어쓰기를 허용합니다.',
+            '4. MABI AUTO를 다시 실행하고 업데이트 버튼을 눌러 V0.1.37로 업데이트합니다.'
+          ) | Set-Content repair/README_UPDATER_REPAIR.txt -Encoding UTF8
+
+          @(
+            '@echo off',
+            'cd /d "%~dp0"',
+            'if not exist START.cmd (echo [ERROR] START.cmd가 있는 기존 MABI AUTO 설치 폴더에서 실행하세요.& pause & exit /b 1)',
+            'if not exist tools\\ApplyUpdate.ps1 (echo [ERROR] tools\\ApplyUpdate.ps1이 없습니다.& pause & exit /b 1)',
+            'echo [OK] 업데이트 도구 복구 확인 완료.',
+            'start "" START.cmd'
+          ) | Set-Content repair/REPAIR_CHECK_AND_START.cmd -Encoding ASCII
+
+          $repairZip='assets/MabiAuto_V0.1.36_UpdaterRepair.zip'
+          Compress-Archive -Path 'repair/*' -DestinationPath $repairZip -CompressionLevel Optimal
+          if((Get-Item $repairZip).Length -gt 2000000){throw 'repair ZIP unexpectedly large'}
+          Write-Host "REPAIR_ZIP_SIZE=$((Get-Item $repairZip).Length)"
+
+      - name: Publish V0.1.37 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.37'
+
+          @(
+            'MABI AUTO V0.1.37 - 던전 아이콘 클릭 + 룬다/피오드 1-1·2-1',
+            '',
+            '인식 테스트 메뉴 글자 잘림 수정.',
+            '월드맵 던전 이름은 OCR 위치 확인용으로만 사용하고 실제 클릭은 글씨 위 던전 아이콘에만 수행.',
+            '룬다 1-1, 룬다 2-1, 피오드 1-1, 피오드 2-1 추가.',
+            '정확한 1층/2층 1구역 진입 문구 확인 후에만 Space 입력.',
+            '업데이트 패키지에 tools/ApplyUpdate.ps1 포함 및 updater 생존 로직 보강.',
+            '',
+            'V0.1.36에서 업데이트 버튼이 실패하는 설치는 MabiAuto_V0.1.36_UpdaterRepair.zip으로 tools 폴더를 먼저 복구해야 합니다.'
+          ) | Set-Content notes.txt -Encoding UTF8
+
+          gh release view $tag --repo $env:REPO *> $null
+          if($LASTEXITCODE-eq0){
+            gh release delete $tag --repo $env:REPO --yes --cleanup-tag
+            if($LASTEXITCODE-ne0){throw 'old V0.1.37 release cleanup failed'}
+          }
+          $null=$LASTEXITCODE
+
+          gh release create $tag --repo $env:REPO --target fa2ad33046a58a21a147ad604a415ebc86f71646 --title 'Mabi Auto V0.1.37' --notes-file notes.txt assets/MabiAuto_V0.1.37_Windows_Lite.zip assets/MabiAuto_V0.1.37_Windows_Lite.zip.sha256 assets/MabiAuto_V0.1.36_UpdaterRepair.zip
+          if($LASTEXITCODE-ne0){throw 'V0.1.37 release publish failed'}
+
+          $release=gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
+          $zip=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.37_Windows_Lite.zip'})[0]
+          $repair=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.36_UpdaterRepair.zip'})[0]
+          if($null-eq$zip -or $null-eq$repair){throw 'release assets incomplete'}
+          if($zip.digest-ne'sha256:bf61c4c4b815d84639b2c904f75cddf790850916964bae994fb7945fe78fd50d'){throw "published digest mismatch: $($zip.digest)"}
+          Write-Host "RELEASE_URL=$($release.html_url)"
+          Write-Host "RELEASE_ZIP_SIZE=$($zip.size)"
+          Write-Host "REPAIR_ASSET_SIZE=$($repair.size)"
+          Write-Host 'V0137_RELEASE_FROM_MAIN_OK'
