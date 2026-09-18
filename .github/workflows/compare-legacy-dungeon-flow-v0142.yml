@@ -1,0 +1,90 @@
+name: Compare legacy dungeon entry flow
+
+on:
+  push:
+    branches:
+      - v0142-challenge-click-guard
+    paths:
+      - '.github/workflows/compare-legacy-dungeon-flow-v0142.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  compare:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare V0.1.21 V0.1.22 V0.1.24 and V0.1.41
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path legacy,diagnostics -Force | Out-Null
+
+          $releases=@(
+            @{Tag='V0.1.21'; Asset='CombinedFishingDungeon_V0.1.21_DungeonEntryReadyGuard.zip'},
+            @{Tag='V0.1.22'; Asset='CombinedFishingDungeon_V0.1.22_DungeonChallengeSemantics.zip'},
+            @{Tag='V0.1.24'; Asset='CombinedFishingDungeon_V0.1.24_SelectedChallengeDisambiguation.zip'},
+            @{Tag='V0.1.41'; Asset='MabiAuto_V0.1.41_Windows_Lite.zip'}
+          )
+
+          foreach($r in $releases){
+            $dir=Join-Path legacy $r.Tag
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            gh release download $r.Tag --repo $env:REPO --pattern $r.Asset --dir $dir
+            if($LASTEXITCODE-ne0){throw "download failed: $($r.Tag)"}
+            $zip=Join-Path $dir $r.Asset
+            Expand-Archive -LiteralPath $zip -DestinationPath (Join-Path $dir 'x') -Force
+          }
+
+          function FindFile([string]$base,[string]$name){
+            $f=Get-ChildItem $base -Recurse -File -Filter $name | Select-Object -First 1
+            if($null-eq$f){throw "$name missing under $base"}
+            return $f.FullName
+          }
+
+          $out=New-Object System.Collections.Generic.List[string]
+          foreach($tag in @('V0.1.21','V0.1.22','V0.1.24','V0.1.41')){
+            $base=Join-Path (Join-Path legacy $tag) 'x'
+            $targets=FindFile $base 'targets.json'
+            $scenario=FindFile $base 'scenario.json'
+            $engine=FindFile $base 'ScenarioEngine.cs'
+
+            $out.Add("===== $tag =====")
+            $out.Add('--- TARGETS selected/challenge/entry ---')
+            $tj=Get-Content -Raw $targets | ConvertFrom-Json
+            @($tj | Where-Object {
+              $_.Id -match 'selected|challenge|entry|enter|party|입장|파티'
+            }) | ForEach-Object {
+              $out.Add(($_ | ConvertTo-Json -Compress -Depth 10))
+            }
+
+            $out.Add('--- SCENARIO relevant steps ---')
+            $sj=Get-Content -Raw $scenario | ConvertFrom-Json
+            @($sj.Steps | Where-Object {
+              $_.Name -match '선택|도전|입장|파티' -or
+              $_.Target -match 'selected|challenge|entry|enter|party'
+            }) | ForEach-Object {
+              $out.Add(($_ | ConvertTo-Json -Compress -Depth 10))
+            }
+
+            $out.Add('--- ENGINE relevant lines ---')
+            Get-Content $engine | Select-String -Pattern 'selected|challenge|entry|enter|선택함|도전|입장하기|파티찾기|Click|Bounds|Center' -Context 3,5 | ForEach-Object {
+              $out.Add("$($_.LineNumber):$($_.Line)")
+              $_.Context.PreContext | ForEach-Object {$out.Add("  PRE: $_")}
+              $_.Context.PostContext | ForEach-Object {$out.Add("  POST: $_")}
+            }
+            $out.Add('')
+          }
+
+          $out | Set-Content diagnostics/legacy_selected_challenge_compare.txt -Encoding UTF8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/legacy_selected_challenge_compare.txt
+          git commit -m 'Compare legacy dungeon selected challenge flow [skip ci]'
+          git push origin HEAD:v0142-challenge-click-guard
