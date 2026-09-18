@@ -258,3 +258,28 @@ jobs:
           Write-Host "RELEASE_URL=$($release.html_url)"
           Write-Host "RELEASE_DIGEST=$($zip.digest)"
           Write-Host "RELEASE_ZIP_SIZE=$($zip.size)"
+
+      - name: Record V0.1.36 workflow status
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path workflow-status -Force | Out-Null
+          @(
+            "status=$env:JOB_STATUS",
+            "run_id=${{ github.run_id }}",
+            "run_attempt=${{ github.run_attempt }}",
+            "sha=${{ github.sha }}",
+            "ref=${{ github.ref }}",
+            "time=$([DateTime]::UtcNow.ToString('O'))"
+          ) | Set-Content workflow-status/v0136.txt -Encoding UTF8
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add workflow-status/v0136.txt
+          if(-not (git diff --cached --quiet)){
+            git commit -m 'Record V0.1.36 workflow status [skip ci]'
+            git push origin HEAD:v0136-worldmap-ocr-fix
+          }
