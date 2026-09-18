@@ -71,8 +71,9 @@ jobs:
           if($start-lt0 -or $end-lt0){throw 'entry verifier block missing'}
           $block=$engine.Substring($start,$end-$start)
 
+          if(-not $engine.Contains('DUNGEON_CURRENT_CHALLENGE_DIRECT_ENTRY_V9')){throw 'V0.1.48 method marker missing'}
+
           foreach($marker in @(
-            'DUNGEON_CURRENT_CHALLENGE_DIRECT_ENTRY_V9',
             '현재 화면이 이미 도전 상태 -> 선택됨 이력 없이 바로 입장 허용',
             'DetectAsync("challenge_confirm_strict", frame, ct)',
             'DetectAsync("enter_bottom", frame, ct)',
@@ -199,8 +200,8 @@ jobs:
       - name: Publish V0.1.48
         shell: pwsh
         env:
-          GH_TOKEN: \${{ github.token }}
-          REPO: \${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           $ErrorActionPreference='Stop'
           $tag='V0.1.48'
