@@ -6,7 +6,7 @@ on:
     branches:
       - v0136-worldmap-ocr-fix
     paths:
-      - '.github/workflows/build-v0136-worldmap-ocr-fix.yml'
+      - '.github/workflows/build-v0136-worldmap-ocr.yml'
       - 'release-source/v0135_visual_test_environment.py'
       - 'release-source/v0136_worldmap_ocr_fix.py'
       - 'release-source/visual-test-assets/**'
@@ -56,7 +56,7 @@ jobs:
           $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
 
           foreach($required in @(
-            '<Version>0.1.35</Version>',
+            '<Version>0.1.36</Version>',
             'VISUAL_TEST_ENV_V10',
             'VisualRecognitionTester',
             'AddButton("인식 테스트"',
