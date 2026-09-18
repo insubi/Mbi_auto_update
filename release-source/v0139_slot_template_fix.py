@@ -12,6 +12,8 @@ repo_dir = Path(__file__).resolve().parent
 app = root / "FishingAutomation"
 targets_path = app / "dungeon" / "config" / "targets.json"
 template_dir = app / "dungeon" / "templates"
+visual_assets_dir = app / "visual-tests" / "assets"
+tester_path = app / "VisualRecognitionTester.cs"
 source_templates = repo_dir / "slot-templates"
 
 def read(path: Path) -> str:
@@ -21,6 +23,7 @@ def write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")
 
 template_dir.mkdir(parents=True, exist_ok=True)
+visual_assets_dir.mkdir(parents=True, exist_ok=True)
 template_map = {
     "route_d1_1": "slot_peaca_d1_1_v0139.jpg",
     "route_d2_1": "slot_peaca_d2_1_v0139.jpg",
@@ -34,6 +37,7 @@ for filename in template_map.values():
     if not src.exists():
         raise RuntimeError(f"slot template source missing: {src}")
     shutil.copy2(src, dst)
+    shutil.copy2(src, visual_assets_dir / filename)
     if dst.stat().st_size < 500:
         raise RuntimeError(f"slot template unexpectedly small: {dst}")
 
@@ -63,6 +67,42 @@ for target_id, filename in template_map.items():
     t["OcrRetryAt2x"] = False
 
 write(targets_path, json.dumps(targets, ensure_ascii=False, indent=2) + "\n")
+
+# Keep the offline recognition-test UI aligned with the runtime detector.
+# The previous D1-1/D2-1 test fixtures were OCR-only synthetic screenshots.
+tester = read(tester_path)
+old_d11 = '''        await AddTarget(report, progress, "d1-1", "심층 던전 · D1-1",
+            "d1_slots.jpg", new Rectangle(160, 400, 470, 250),
+            "route_d1_1", ct);
+'''
+new_d11 = '''        await AddTarget(report, progress, "d1-1", "심층 던전 · D1-1 실제 템플릿",
+            "slot_peaca_d1_1_v0139.jpg", new Rectangle(295, 490, 45, 55),
+            "route_d1_1", ct);
+'''
+if old_d11 not in tester:
+    raise RuntimeError("visual test D1-1 anchor missing")
+tester = tester.replace(old_d11, new_d11, 1)
+
+old_d21 = '''        await AddTarget(report, progress, "d2-1", "심층 던전 · D2-1",
+            "d2_slots.jpg", new Rectangle(180, 680, 420, 255),
+            "route_d2_1", ct);
+'''
+new_d21 = '''        await AddTarget(report, progress, "d2-1", "심층 던전 · D2-1 실제 템플릿",
+            "slot_peaca_d2_1_v0139.jpg", new Rectangle(295, 800, 45, 50),
+            "route_d2_1", ct);
+
+        await AddTarget(report, progress, "regular-1-1", "룬다/피오드 · 1-1 실제 템플릿",
+            "slot_regular_1_1_v0139.jpg", new Rectangle(298, 570, 45, 50),
+            "route_regular_1_1", ct);
+
+        await AddTarget(report, progress, "regular-2-1", "룬다/피오드 · 2-1 실제 템플릿",
+            "slot_regular_2_1_v0139.jpg", new Rectangle(338, 790, 45, 55),
+            "route_regular_2_1", ct);
+'''
+if old_d21 not in tester:
+    raise RuntimeError("visual test D2-1 anchor missing")
+tester = tester.replace(old_d21, new_d21, 1)
+write(tester_path, tester)
 
 # V0.1.38 already expanded arrival wait to five minutes and the slot wait to 30 seconds.
 # Keep those safeguards and only change slot detection from OCR to actual visual templates.
@@ -109,4 +149,19 @@ if 'WaitForTargetPairAsync(arrivalTarget, "route_deep_tab", 300, ct)' not in eng
 if 'WaitForTargetAsync(arrivalTarget, 300, ct)' not in engine:
     raise RuntimeError("V0.1.38 Runda/Fiod 5-minute arrival wait was lost")
 
-print("V0.1.39 patch applied: Peaca/Runda/Fiod 1-1/2-1 template matching")
+tester_check = read(tester_path)
+for marker in (
+    "slot_peaca_d1_1_v0139.jpg",
+    "slot_peaca_d2_1_v0139.jpg",
+    "slot_regular_1_1_v0139.jpg",
+    "slot_regular_2_1_v0139.jpg",
+    "route_regular_1_1",
+    "route_regular_2_1",
+):
+    if marker not in tester_check:
+        raise RuntimeError("visual recognition test marker missing: " + marker)
+for filename in template_map.values():
+    if not (visual_assets_dir / filename).exists():
+        raise RuntimeError("visual-test template asset missing: " + filename)
+
+print("V0.1.39 patch applied: runtime + recognition-test visual templates for all 1-1/2-1 slots")
