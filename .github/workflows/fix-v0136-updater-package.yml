@@ -117,3 +117,26 @@ jobs:
           if($null-eq$zip){throw 'fixed release ZIP missing after upload'}
           Write-Host "RELEASE_SIZE=$($zip.size)"
           Write-Host 'V0136_UPDATER_PACKAGE_FIX_OK'
+
+      - name: Record updater package fix status
+        if: always()
+        shell: pwsh
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path workflow-status -Force | Out-Null
+          @(
+            "status=$env:JOB_STATUS",
+            "run_id=${{ github.run_id }}",
+            "run_attempt=${{ github.run_attempt }}",
+            "sha=${{ github.sha }}",
+            "time=$([DateTime]::UtcNow.ToString('O'))"
+          ) | Set-Content workflow-status/v0136-updater-fix.txt -Encoding UTF8
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add workflow-status/v0136-updater-fix.txt
+          if(-not (git diff --cached --quiet)){
+            git commit -m 'Record V0.1.36 updater package fix status [skip ci]'
+            git push origin HEAD:main
+          }
