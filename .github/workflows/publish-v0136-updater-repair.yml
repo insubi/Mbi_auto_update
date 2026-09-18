@@ -1,0 +1,81 @@
+name: Publish V0.1.36 Updater Repair
+
+on:
+  push:
+    branches:
+      - v0137-dungeon-icon-runda-fiod
+    paths:
+      - '.github/workflows/publish-v0136-updater-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build tiny updater repair ZIP
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path repair,repair/tools,out | Out-Null
+
+          # Use the inspected V0.1.36 updater and make it safe for future release-only packages.
+          Copy-Item diagnostics/ApplyUpdate_v0136.ps1 repair/tools/ApplyUpdate.ps1 -Force
+          $p='repair/tools/ApplyUpdate.ps1'
+          $text=Get-Content -Raw $p
+          $old=@"
+    foreach ($name in @('release','FishingAutomation','tools')) {
+        Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+    }
+"@
+          $new=@"
+    # V0.1.37 updater survival: only remove trees that the incoming package actually contains.
+    foreach ($name in @('release','FishingAutomation','tools')) {
+        $incomingTree = Join-Path $sourceRoot $name
+        if (Test-Path -LiteralPath $incomingTree) {
+            Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+"@
+          if(-not $text.Contains($old)){throw 'repair updater patch anchor missing'}
+          $text=$text.Replace($old,$new)
+          Set-Content -LiteralPath $p -Value $text -Encoding UTF8
+
+          @(
+            'MABI AUTO V0.1.36 업데이트 복구',
+            '',
+            'V0.1.36 패키징 오류로 tools/ApplyUpdate.ps1이 삭제된 설치를 복구합니다.',
+            '1. MABI AUTO를 완전히 종료합니다.',
+            '2. 이 ZIP 안의 tools 폴더를 START.cmd가 있는 기존 MABI AUTO 설치 폴더에 그대로 풉니다.',
+            '3. 기존 파일 덮어쓰기를 허용합니다.',
+            '4. MABI AUTO를 다시 실행하고 업데이트 버튼을 눌러 V0.1.37로 업데이트합니다.'
+          ) | Set-Content repair/README_UPDATER_REPAIR.txt -Encoding UTF8
+
+          @(
+            '@echo off',
+            'cd /d "%~dp0"',
+            'if not exist START.cmd (echo [ERROR] START.cmd가 있는 기존 MABI AUTO 설치 폴더에서 실행하세요.& pause & exit /b 1)',
+            'if not exist tools\ApplyUpdate.ps1 (echo [ERROR] tools\ApplyUpdate.ps1이 없습니다.& pause & exit /b 1)',
+            'echo [OK] 업데이트 도구 복구 확인 완료.',
+            'start "" START.cmd'
+          ) | Set-Content repair/REPAIR_CHECK_AND_START.cmd -Encoding ASCII
+
+          $zip=(Resolve-Path out).Path+'\MabiAuto_V0.1.36_UpdaterRepair.zip'
+          Compress-Archive -Path 'repair/*' -DestinationPath $zip -CompressionLevel Optimal
+          if((Get-Item $zip).Length -gt 2000000){throw 'repair ZIP unexpectedly large'}
+
+          gh release upload V0.1.37 $zip --repo $env:REPO --clobber
+          if($LASTEXITCODE-ne0){throw 'repair asset upload failed'}
+
+          $release=gh api "repos/$env:REPO/releases/tags/V0.1.37" | ConvertFrom-Json
+          $asset=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.36_UpdaterRepair.zip'})[0]
+          if($null-eq$asset){throw 'repair asset missing after upload'}
+          Write-Host "REPAIR_ASSET_SIZE=$($asset.size)"
+          Write-Host "REPAIR_ASSET_URL=$($asset.browser_download_url)"
+          Write-Host 'UPDATER_REPAIR_PUBLISHED_OK'
