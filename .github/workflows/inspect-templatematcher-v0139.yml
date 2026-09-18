@@ -1,0 +1,25 @@
+name: Inspect TemplateMatcher V0.1.39
+on:
+  push:
+    branches: [v0139-slot-template-fix]
+    paths: ['.github/workflows/inspect-templatematcher-v0139.yml']
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract matcher
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          Copy-Item (Join-Path $root.FullName 'FishingAutomation/dungeon/TemplateMatcher.cs') diagnostics/TemplateMatcher_v0139.cs -Force
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/TemplateMatcher_v0139.cs
+          git commit -m 'Inspect TemplateMatcher V0.1.39 [skip ci]'
+          git push origin HEAD:v0139-slot-template-fix
