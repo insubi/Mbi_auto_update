@@ -82,10 +82,11 @@ jobs:
             }
           }
 
-          # Preserve the already-fixed UI. V0.1.42 must not regress or redesign it.
-          if(-not $refui.Contains('AddButton("인식 테스트", new(18, 511, 178, 59), owner.ShowVisualRecognitionTest, "", "nav");')){
-            throw 'recognition-test UI fix regressed'
+          # Recognition nav: short label + same left image icon style as the other nav buttons.
+          if(-not $refui.Contains('AddButton("인식", new(18, 511, 170, 59), owner.ShowVisualRecognitionTest, "image", "nav");')){
+            throw 'recognition nav label/icon fix missing'
           }
+          if($refui.Contains('AddButton("인식 테스트"')){throw 'old clipped recognition-test label remains'}
 
           # All 10 dungeon template paths from V0.1.41 must still resolve.
           $templated=@($targets|Where-Object{ -not [string]::IsNullOrWhiteSpace($_.TemplatePath) })
@@ -135,7 +136,7 @@ jobs:
           @(
             'MABI AUTO V0.1.42 Windows Lite',
             'Exact dungeon entry-word click fix.',
-            'UI unchanged from V0.1.41.'
+            'Recognition nav label shortened to 인식 with left image icon.'
           ) | Set-Content 'package/WINDOWS_LITE.txt' -Encoding UTF8
 
           foreach($required in @(
@@ -165,7 +166,7 @@ jobs:
           "$hash  MabiAuto_V0.1.42_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
           $size=(Get-Item $zip).Length
           Write-Host 'EXACT_ENTRY_CLICK_OK'
-          Write-Host 'UI_UNCHANGED_OK'
+          Write-Host 'RECOGNITION_NAV_UI_OK'
           Write-Host 'UPDATER_LAYOUT_OK'
           Write-Host "V0142_SHA256=$hash"
           Write-Host "V0142_SIZE=$size"
@@ -191,7 +192,7 @@ jobs:
             'Windows OCR이 파티찾기와 입장하기를 같은 줄로 읽어도 입장하기 단어 중앙만 클릭합니다.',
             '클릭 직전 OCR 결과가 정확히 입장하기가 아니면 클릭하지 않는 추가 안전검사를 넣었습니다.',
             '실제 클릭에 사용한 입장하기 단어 bounds/center를 로그에 남깁니다.',
-            'UI는 변경하지 않았으며 기존 인식 테스트 버튼 수정 상태를 유지합니다.'
+            '왼쪽 메뉴의 인식 테스트 표기는 인식으로 줄였고, 다른 메뉴처럼 왼쪽에 이미지 아이콘을 추가했습니다.'
           ) | Set-Content notes.txt -Encoding UTF8
 
           gh release view $tag --repo $env:REPO *> $null
