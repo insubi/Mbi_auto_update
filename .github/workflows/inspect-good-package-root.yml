@@ -1,0 +1,74 @@
+name: Inspect Known Good Package Root
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0135-visual-test-env]
+    paths:
+      - '.github/workflows/inspect-good-package-root.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect V0.1.31 package root and updater
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path good,goodx | Out-Null
+          gh release download V0.1.31 --repo $env:REPO --pattern 'MabiAuto_V0.1.31_Windows_Lite.zip' --dir good --clobber
+          Expand-Archive good/MabiAuto_V0.1.31_Windows_Lite.zip -DestinationPath goodx
+          $root=Get-ChildItem goodx -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'good package root missing'}
+
+          Write-Host "ROOT=$($root.Name)"
+          Write-Host '=== GOOD INNER TOP LEVEL ==='
+          Get-ChildItem $root.FullName -Force | Sort-Object Name | ForEach-Object {
+            Write-Host ("{0}	{1}" -f ($(if($_.PSIsContainer){'DIR'}else{'FILE'}),$_.Name))
+          }
+
+          Write-Host '=== GOOD DIR FILE COUNTS ==='
+          Get-ChildItem $root.FullName -Directory | Sort-Object Name | ForEach-Object {
+            $count=@(Get-ChildItem $_.FullName -Recurse -File).Count
+            Write-Host "$($_.Name)=$count"
+          }
+
+          Write-Host '=== GOOD TOOLS ==='
+          if(Test-Path (Join-Path $root.FullName 'tools')){
+            Get-ChildItem (Join-Path $root.FullName 'tools') -Recurse -File |
+              ForEach-Object { Write-Host $_.FullName.Substring($root.FullName.Length+1).Replace('\','/') }
+          }
+
+          Write-Host '=== REQUIRED ROOT FILE CHECK ==='
+          foreach($p in @(
+            'START.cmd',
+            '1_INSTALL_INTERCEPTION.cmd',
+            'AUTO_UPDATE_README.txt',
+            'START_HERE.txt',
+            'FishingAutomation/FishingAutomation.csproj',
+            'MacroWatchdog/MacroWatchdog.csproj',
+            'tools/ApplyUpdate.ps1',
+            'release/FishingAutomation.exe',
+            'release/dungeon/config/targets.json',
+            'release/dungeon/templates/retry_visual_v0129.jpg',
+            'release/templates/hook.png',
+            'release/templates/gauge.png',
+            'release/templates/healthbar.png',
+            'release/templates/compass.png'
+          )){
+            Write-Host "$p = $(Test-Path (Join-Path $root.FullName $p))"
+          }
+
+          $apply=Join-Path $root.FullName 'tools/ApplyUpdate.ps1'
+          if(Test-Path $apply){
+            Write-Host '=== APPLY UPDATE COPY LOGIC ==='
+            Select-String -Path $apply -Pattern 'sourceRoot|Copy-Item|Get-ChildItem|Preserve|release\\FishingAutomation.exe|FishingAutomation.exe' -Context 2,3 |
+              ForEach-Object { $_.Context.PreContext; $_.Line; $_.Context.PostContext; Write-Host '---' }
+          }
