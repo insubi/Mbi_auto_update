@@ -1,4 +1,4 @@
-name: Release V0.1.37 From Main
+name: Enhance V0.1.36 Updater Repair
 
 on:
   push:
@@ -10,127 +10,93 @@ on:
 
 permissions:
   contents: write
-  actions: read
 
 jobs:
-  release:
+  repair:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: v0137-dungeon-icon-runda-fiod
 
-      - name: Download validated V0.1.37 artifact
+      - name: Enhance repair ZIP with direct V0.1.37 updater
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
           $ErrorActionPreference='Stop'
-          New-Item -ItemType Directory -Path assets -Force | Out-Null
-          gh run download 35294858780 --repo $env:REPO --name MabiAuto_V0.1.37_Windows_Lite --dir assets
-          if($LASTEXITCODE-ne0){throw 'artifact download failed'}
+          New-Item -ItemType Directory -Path current,repair,out -Force | Out-Null
 
-          $zip='assets/MabiAuto_V0.1.37_Windows_Lite.zip'
-          $shaFile='assets/MabiAuto_V0.1.37_Windows_Lite.zip.sha256'
-          if(-not(Test-Path $zip)){throw 'V0.1.37 ZIP missing from artifact'}
-          if(-not(Test-Path $shaFile)){throw 'V0.1.37 SHA file missing from artifact'}
+          gh release download V0.1.37 --repo $env:REPO --pattern 'MabiAuto_V0.1.36_UpdaterRepair.zip' --dir current --clobber
+          if($LASTEXITCODE-ne0){throw 'download current repair asset failed'}
 
-          $expected=((Get-Content $shaFile -Raw).Trim() -split '\\s+')[0].ToLowerInvariant()
-          $actual=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if($expected-ne$actual){throw "artifact hash mismatch expected=$expected actual=$actual"}
-          if($actual-ne'bf61c4c4b815d84639b2c904f75cddf790850916964bae994fb7945fe78fd50d'){throw "unexpected validated build hash: $actual"}
-          Write-Host "VALIDATED_V0137_SHA256=$actual"
-          Write-Host "VALIDATED_V0137_SIZE=$((Get-Item $zip).Length)"
+          Expand-Archive -LiteralPath 'current/MabiAuto_V0.1.36_UpdaterRepair.zip' -DestinationPath repair -Force
+          if(-not(Test-Path 'repair/tools/ApplyUpdate.ps1')){throw 'repair ZIP missing tools/ApplyUpdate.ps1'}
 
-      - name: Build V0.1.36 updater repair
-        shell: pwsh
-        run: |
-          $ErrorActionPreference='Stop'
-          New-Item -ItemType Directory -Path repair,repair/tools -Force | Out-Null
-          Copy-Item diagnostics/ApplyUpdate_v0136.ps1 repair/tools/ApplyUpdate.ps1 -Force
+          @'
+$ErrorActionPreference='Stop'
+$root=Split-Path -Parent $MyInvocation.MyCommand.Path
+$apply=Join-Path $root 'tools\ApplyUpdate.ps1'
+$start=Join-Path $root 'START.cmd'
+if(-not(Test-Path -LiteralPath $start)){throw 'START.cmd가 있는 기존 MABI AUTO 설치 폴더에 복구 ZIP 내용을 먼저 풀어주세요.'}
+if(-not(Test-Path -LiteralPath $apply)){throw 'tools\ApplyUpdate.ps1 복구 파일이 없습니다.'}
 
-          $p='repair/tools/ApplyUpdate.ps1'
-          $text=Get-Content -Raw $p
-          $old=@"
-    foreach ($name in @('release','FishingAutomation','tools')) {
-        Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
-    }
-"@
-          $new=@"
-    # V0.1.37 updater survival: only remove trees that the incoming package actually contains.
-    foreach ($name in @('release','FishingAutomation','tools')) {
-        $incomingTree = Join-Path $sourceRoot $name
-        if (Test-Path -LiteralPath $incomingTree) {
-            Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+Get-Process FishingAutomation,MacroWatchdog -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+        if($_.Path -and $_.Path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)){
+            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
         }
-    }
-"@
-          if(-not $text.Contains($old)){throw 'repair updater patch anchor missing'}
-          $text=$text.Replace($old,$new)
-          Set-Content -LiteralPath $p -Value $text -Encoding UTF8
+    } catch {}
+}
+Start-Sleep -Milliseconds 700
 
-          @(
-            'MABI AUTO V0.1.36 업데이트 복구',
-            '',
-            'V0.1.36 패키징 오류로 tools/ApplyUpdate.ps1이 삭제된 설치를 복구합니다.',
-            '1. MABI AUTO를 완전히 종료합니다.',
-            '2. ZIP 안의 tools 폴더를 START.cmd가 있는 기존 MABI AUTO 설치 폴더에 그대로 풉니다.',
-            '3. 덮어쓰기를 허용합니다.',
-            '4. MABI AUTO를 다시 실행하고 업데이트 버튼을 눌러 V0.1.37로 업데이트합니다.'
-          ) | Set-Content repair/README_UPDATER_REPAIR.txt -Encoding UTF8
+$zipUrl='https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.37/MabiAuto_V0.1.37_Windows_Lite.zip'
+$shaUrl='https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.37/MabiAuto_V0.1.37_Windows_Lite.zip.sha256'
+$zip=Join-Path $env:TEMP ('MabiAuto_V0.1.37_Repair_'+[Guid]::NewGuid().ToString('N')+'.zip')
+
+Write-Host '[1/3] V0.1.37 다운로드 중...'
+Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing -TimeoutSec 600
+Write-Host '[2/3] SHA256 검증 중...'
+$shaText=(Invoke-WebRequest -Uri $shaUrl -UseBasicParsing -TimeoutSec 60).Content
+$expected=($shaText -split '\s+')[0].Trim().ToLowerInvariant()
+$actual=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+if($expected-ne$actual){Remove-Item $zip -Force -ErrorAction SilentlyContinue; throw "SHA256 불일치 expected=$expected actual=$actual"}
+if($actual-ne'bf61c4c4b815d84639b2c904f75cddf790850916964bae994fb7945fe78fd50d'){Remove-Item $zip -Force -ErrorAction SilentlyContinue; throw "검증된 V0.1.37 파일 해시와 다릅니다: $actual"}
+
+Write-Host '[3/3] V0.1.37 적용 시작...'
+$arg="-NoProfile -ExecutionPolicy Bypass -File `"$apply`" -ZipPath `"$zip`" -InstallRoot `"$root`" -ProcessId $PID"
+Start-Process powershell.exe -ArgumentList $arg -WorkingDirectory $root
+Write-Host '적용 도우미를 시작했습니다. 이 창은 닫힙니다.'
+Start-Sleep -Seconds 2
+'@ | Set-Content 'repair/UPDATE_TO_V0137.ps1' -Encoding UTF8
 
           @(
             '@echo off',
             'cd /d "%~dp0"',
-            'if not exist START.cmd (echo [ERROR] START.cmd가 있는 기존 MABI AUTO 설치 폴더에서 실행하세요.& pause & exit /b 1)',
-            'if not exist tools\\ApplyUpdate.ps1 (echo [ERROR] tools\\ApplyUpdate.ps1이 없습니다.& pause & exit /b 1)',
-            'echo [OK] 업데이트 도구 복구 확인 완료.',
-            'start "" START.cmd'
-          ) | Set-Content repair/REPAIR_CHECK_AND_START.cmd -Encoding ASCII
-
-          $repairZip='assets/MabiAuto_V0.1.36_UpdaterRepair.zip'
-          Compress-Archive -Path 'repair/*' -DestinationPath $repairZip -CompressionLevel Optimal
-          if((Get-Item $repairZip).Length -gt 2000000){throw 'repair ZIP unexpectedly large'}
-          Write-Host "REPAIR_ZIP_SIZE=$((Get-Item $repairZip).Length)"
-
-      - name: Publish V0.1.37 release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          $ErrorActionPreference='Stop'
-          $tag='V0.1.37'
+            'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0UPDATE_TO_V0137.ps1"',
+            'if errorlevel 1 pause'
+          ) | Set-Content 'repair/REPAIR_AND_UPDATE_TO_V0137.cmd' -Encoding ASCII
 
           @(
-            'MABI AUTO V0.1.37 - 던전 아이콘 클릭 + 룬다/피오드 1-1·2-1',
+            'MABI AUTO V0.1.36 -> V0.1.37 복구 업데이트',
             '',
-            '인식 테스트 메뉴 글자 잘림 수정.',
-            '월드맵 던전 이름은 OCR 위치 확인용으로만 사용하고 실제 클릭은 글씨 위 던전 아이콘에만 수행.',
-            '룬다 1-1, 룬다 2-1, 피오드 1-1, 피오드 2-1 추가.',
-            '정확한 1층/2층 1구역 진입 문구 확인 후에만 Space 입력.',
-            '업데이트 패키지에 tools/ApplyUpdate.ps1 포함 및 updater 생존 로직 보강.',
+            '1. MABI AUTO를 완전히 종료합니다.',
+            '2. 이 ZIP의 모든 내용을 START.cmd가 있는 기존 MABI AUTO 설치 폴더에 그대로 풉니다.',
+            '3. REPAIR_AND_UPDATE_TO_V0137.cmd를 실행합니다.',
+            '4. V0.1.37 ZIP 다운로드와 SHA256 검증 후 자동으로 적용됩니다.',
             '',
-            'V0.1.36에서 업데이트 버튼이 실패하는 설치는 MabiAuto_V0.1.36_UpdaterRepair.zip으로 tools 폴더를 먼저 복구해야 합니다.'
-          ) | Set-Content notes.txt -Encoding UTF8
+            '프로그램 안의 업데이트 버튼을 사용할 필요가 없습니다.'
+          ) | Set-Content 'repair/README_UPDATER_REPAIR.txt' -Encoding UTF8
 
-          gh release view $tag --repo $env:REPO *> $null
-          if($LASTEXITCODE-eq0){
-            gh release delete $tag --repo $env:REPO --yes --cleanup-tag
-            if($LASTEXITCODE-ne0){throw 'old V0.1.37 release cleanup failed'}
-          }
-          $null=$LASTEXITCODE
+          $zip='out/MabiAuto_V0.1.36_UpdaterRepair.zip'
+          Compress-Archive -Path 'repair/*' -DestinationPath $zip -CompressionLevel Optimal
+          if((Get-Item $zip).Length-lt3000){throw 'enhanced repair ZIP unexpectedly small'}
 
-          gh release create $tag --repo $env:REPO --target fa2ad33046a58a21a147ad604a415ebc86f71646 --title 'Mabi Auto V0.1.37' --notes-file notes.txt assets/MabiAuto_V0.1.37_Windows_Lite.zip assets/MabiAuto_V0.1.37_Windows_Lite.zip.sha256 assets/MabiAuto_V0.1.36_UpdaterRepair.zip
-          if($LASTEXITCODE-ne0){throw 'V0.1.37 release publish failed'}
+          gh release upload V0.1.37 $zip --repo $env:REPO --clobber
+          if($LASTEXITCODE-ne0){throw 'enhanced repair upload failed'}
 
-          $release=gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
-          $zip=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.37_Windows_Lite.zip'})[0]
-          $repair=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.36_UpdaterRepair.zip'})[0]
-          if($null-eq$zip -or $null-eq$repair){throw 'release assets incomplete'}
-          if($zip.digest-ne'sha256:bf61c4c4b815d84639b2c904f75cddf790850916964bae994fb7945fe78fd50d'){throw "published digest mismatch: $($zip.digest)"}
-          Write-Host "RELEASE_URL=$($release.html_url)"
-          Write-Host "RELEASE_ZIP_SIZE=$($zip.size)"
-          Write-Host "REPAIR_ASSET_SIZE=$($repair.size)"
-          Write-Host 'V0137_RELEASE_FROM_MAIN_OK'
+          $release=gh api "repos/$env:REPO/releases/tags/V0.1.37" | ConvertFrom-Json
+          $asset=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.36_UpdaterRepair.zip'})[0]
+          if($null-eq$asset){throw 'enhanced repair asset missing'}
+          Write-Host "REPAIR_SIZE=$($asset.size)"
+          Write-Host "REPAIR_URL=$($asset.browser_download_url)"
+          Write-Host 'V0136_DIRECT_REPAIR_READY'
