@@ -1,0 +1,170 @@
+=== selected/challenge targets ===
+[
+  {
+    "Id": "challenge",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "Text": "도전",
+    "MaxEditDistance": 2,
+    "OcrRetryAt2x": true,
+    "TemplatePath": "templates/challenge_visual.png",
+    "Threshold": 0.68,
+    "TemplateScaleMin": 0.75,
+    "TemplateScaleMax": 1.25,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "challenge_visual",
+    "Kind": "template",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "TemplatePath": "templates/challenge_visual.png",
+    "Threshold": 0.68,
+    "TemplateScaleMin": 0.75,
+    "TemplateScaleMax": 1.25,
+    "TemplateScaleStep": 0.05
+  },
+  {
+    "Id": "selected",
+    "Kind": "hybrid",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "Text": "선택됨",
+    "MaxEditDistance": 2,
+    "OcrRetryAt2x": true,
+    "TemplatePath": "templates/selected_red_visual.png",
+    "Threshold": 0.6,
+    "TemplateScaleMin": 0.72,
+    "TemplateScaleMax": 1.28,
+    "TemplateScaleStep": 0.04
+  },
+  {
+    "Id": "selected_red_visual",
+    "Kind": "template",
+    "Roi": {
+      "X": 390,
+      "Y": 635,
+      "Width": 370,
+      "Height": 215
+    },
+    "TemplatePath": "templates/selected_red_visual.png",
+    "Threshold": 0.7,
+    "TemplateScaleMin": 0.82,
+    "TemplateScaleMax": 1.18,
+    "TemplateScaleStep": 0.03
+  }
+]
+
+=== scenario selected/challenge steps ===
+[
+  {
+    "Name": "1. 입장 화면 확인",
+    "Type": "wait",
+    "Target": "enter_bottom",
+    "TimeoutSeconds": 45
+  },
+  {
+    "Name": "2. 입장하기",
+    "Type": "wait_click",
+    "Target": "enter_bottom",
+    "TimeoutSeconds": 60
+  }
+]
+
+=== engine selected/challenge lines ===
+209:        _input.ClickClientPoint(_hwnd, ullaBreadcrumbPoint);
+229:        var iconCenter = new Point(iconBounds.Left + iconBounds.Width / 2, iconBounds.Top + iconBounds.Height / 2);
+233:        _input.ClickClientPoint(_hwnd, iconCenter);
+258:            _input.ClickClientPoint(_hwnd, deepTab.Center);
+282:        _input.ClickClientPoint(_hwnd, slot.Center);
+287:            throw new TimeoutException($"{destination} 선택 후 정확한 진입 문구를 확인하지 못했습니다. Space를 누르지 않습니다.");
+296:        Log?.Invoke("[던전 자동이동] 기존 던전 매크로 초입 확인 완료 -> 기존 선택됨/도전/입장 로직으로 인계");
+459:    // Purple is the normal state; the selected/highlight state can render blue, so both are accepted.
+465:        int centerX = labelBounds.Left + labelBounds.Width / 2;
+468:            new Rectangle(centerX - searchWidth / 2, labelBounds.Top - 105, searchWidth, 105),
+574:            // selected/challenge are the same logical entry-state stage.
+575:            var selected = await _detector.DetectAsync("selected", frame, ct);
+576:            if (selected.Found)
+578:                int step = FindDungeonStepIndex("challenge");
+579:                Log?.Invoke($"[던전 자동복구] 선택됨 확인 -> 도전 상태 확인 {step + 1}단계 재개");
+583:            var challenge = await _detector.DetectAsync("challenge", frame, ct);
+584:            if (challenge.Found)
+586:                int step = FindDungeonStepIndex("challenge");
+587:                Log?.Invoke($"[던전 자동복구] 도전 확인 -> {step + 1}단계 재개");
+591:            // Entry text alone never authorizes entry; return through challenge verification.
+595:                int step = FindDungeonStepIndex("challenge");
+596:                Log?.Invoke($"[던전 자동복구] 입장하기 확인 -> 안전하게 도전 상태 확인 {step + 1}단계 재개");
+690:                    _input.ClickClientPoint(_hwnd, popupClose.Center);
+710:                    _input.ClickClientPoint(_hwnd, touch.Center);
+762:                    _input.ClickClientPoint(_hwnd, exit.Center);
+817:    // DUNGEON_CHALLENGE_DISAMBIGUATION_V5
+818:    // Entry rule: selected -> click once -> challenge confirmed -> enter.
+819:    // Never click when selected/challenge visual evidence is ambiguous.
+820:    private async Task VerifyChallengeBeforeEntryAsync(CancellationToken ct)
+828:        int challengeConsecutive = 0;
+829:        long lastSelectedClick = 0;
+834:        Log?.Invoke("[도전 안전확인] 선택됨/도전 분리 판정 시작");
+836:        async Task<(int State, Point ClickPoint, double SelectedScore, double ChallengeScore)> ClassifyAsync(Bitmap frame)
+839:            var challengeText = await _detector.DetectAsync("challenge_confirm_strict", frame, ct);
+840:            if (challengeText.Found)
+843:            var selectedText = await _detector.DetectAsync("selected_ocr_strict", frame, ct);
+844:            if (selectedText.Found)
+845:                return (1, selectedText.Center, 1.0, 0.0);
+849:            var selectedVisual = await _detector.DetectAsync("selected_red_visual", frame, ct);
+850:            var challengeVisual = await _detector.DetectAsync("challenge_visual", frame, ct);
+852:            double s = selectedVisual.Score;
+853:            double c = challengeVisual.Score;
+855:            if (selectedVisual.Found && challengeVisual.Found)
+858:                    return (1, selectedVisual.Center, s, c);
+864:            if (selectedVisual.Found && !challengeVisual.Found)
+865:                return (1, selectedVisual.Center, s, c);
+866:            if (challengeVisual.Found && !selectedVisual.Found)
+879:            // verifier is waiting for selected -> challenge -> enter. Handle the existing
+885:                challengeConsecutive = 0;
+905:                    Log?.Invoke($"[던전 결과] 정상 다시 하기 클릭 {normalResultRetryClicks}/2 @ {retryConfirm.Center}");
+906:                    _input.ClickClientPoint(_hwnd, retryConfirm.Center);
+914:                        lastSelectedClick = 0;
+931:                challengeConsecutive = 0;
+938:            if (state.State == 1) // selected
+940:                challengeConsecutive = 0;
+942:                if (now - lastSelectedClick >= 1200)
+944:                    Log?.Invoke($"[도전 안전확인] 선택됨 확정 S={state.SelectedScore:0.000} C={state.ChallengeScore:0.000} -> 1회 클릭");
+947:                    _input.ClickClientPoint(_hwnd, state.ClickPoint);
+948:                    lastSelectedClick = now;
+960:                challengeConsecutive = 0;
+964:                    Log?.Invoke($"[도전 안전확인] 판정 보류 S={state.SelectedScore:0.000} C={state.ChallengeScore:0.000} -> 클릭 안 함");
+971:            // challenge: do NOT click the challenge/selected toggle anymore.
+972:            challengeConsecutive++;
+973:            Log?.Invoke($"[도전 안전확인] 도전 확정 {challengeConsecutive}/{RequiredConsecutive} S={state.SelectedScore:0.000} C={state.ChallengeScore:0.000}");
+975:            if (challengeConsecutive < RequiredConsecutive)
+986:                challengeConsecutive = 0;
+995:                Log?.Invoke($"[도전 안전확인] 최종 도전 확인 성공 + 입장하기 확인 -> 입장 허용 (S={finalState.SelectedScore:0.000} C={finalState.ChallengeScore:0.000})");
+999:            Log?.Invoke($"[도전 안전확인] 최종 확인 보류 state={finalState.State} enter={(enter.Found ? 1 : 0)} S={finalState.SelectedScore:0.000} C={finalState.ChallengeScore:0.000}");
+1000:            challengeConsecutive = 0;
+1005:            "45초 동안 선택됨 -> 도전 -> 입장하기 상태를 안정적으로 확인하지 못했습니다.");
+1037:                Log?.Invoke($"[어비스] 어비스 던전 선택 화면 확인 {consecutive}/2 ({foundId})");
+1054:        // STABLE_CHALLENGE_GUARD_V2_CALL
+1057:            await VerifyChallengeBeforeEntryAsync(ct);
+1123:                        _input.ClickClientPoint(_hwnd, found.Center);
+1143:                                throw new TimeoutException("어비스 아이콘 후보 4개를 클릭 검증했지만 어비스 던전 선택 화면이 확인되지 않았습니다.");
+1153:                        _input.ClickClientPoint(_hwnd, found.Center);
+1175:                    _input.ClickClientPoint(_hwnd, alt.Center);
+1236:        if (step.Target.Equals("challenge_confirm_strict", StringComparison.OrdinalIgnoreCase) ||
+1237:            step.Name.Contains("도전 최종확인", StringComparison.OrdinalIgnoreCase))
+1338:                        _input.ClickClientPoint(_hwnd, touch.Center);
+1364:        _input.ClickClientPoint(_hwnd, touch.Center);
+1467:                _input.ClickClientPoint(_hwnd, found.Center);
+1520:                    _input.ClickClientPoint(_hwnd, r.Center);
