@@ -33,41 +33,41 @@ jobs:
           if(-not(Test-Path 'repair/tools/ApplyUpdate.ps1')){throw 'repair ZIP missing tools/ApplyUpdate.ps1'}
 
           @'
-$ErrorActionPreference='Stop'
-$root=Split-Path -Parent $MyInvocation.MyCommand.Path
-$apply=Join-Path $root 'tools\ApplyUpdate.ps1'
-$start=Join-Path $root 'START.cmd'
-if(-not(Test-Path -LiteralPath $start)){throw 'START.cmd가 있는 기존 MABI AUTO 설치 폴더에 복구 ZIP 내용을 먼저 풀어주세요.'}
-if(-not(Test-Path -LiteralPath $apply)){throw 'tools\ApplyUpdate.ps1 복구 파일이 없습니다.'}
-
-Get-Process FishingAutomation,MacroWatchdog -ErrorAction SilentlyContinue | ForEach-Object {
-    try {
-        if($_.Path -and $_.Path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)){
-            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-        }
-    } catch {}
-}
-Start-Sleep -Milliseconds 700
-
-$zipUrl='https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.37/MabiAuto_V0.1.37_Windows_Lite.zip'
-$shaUrl='https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.37/MabiAuto_V0.1.37_Windows_Lite.zip.sha256'
-$zip=Join-Path $env:TEMP ('MabiAuto_V0.1.37_Repair_'+[Guid]::NewGuid().ToString('N')+'.zip')
-
-Write-Host '[1/3] V0.1.37 다운로드 중...'
-Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing -TimeoutSec 600
-Write-Host '[2/3] SHA256 검증 중...'
-$shaText=(Invoke-WebRequest -Uri $shaUrl -UseBasicParsing -TimeoutSec 60).Content
-$expected=($shaText -split '\s+')[0].Trim().ToLowerInvariant()
-$actual=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-if($expected-ne$actual){Remove-Item $zip -Force -ErrorAction SilentlyContinue; throw "SHA256 불일치 expected=$expected actual=$actual"}
-if($actual-ne'bf61c4c4b815d84639b2c904f75cddf790850916964bae994fb7945fe78fd50d'){Remove-Item $zip -Force -ErrorAction SilentlyContinue; throw "검증된 V0.1.37 파일 해시와 다릅니다: $actual"}
-
-Write-Host '[3/3] V0.1.37 적용 시작...'
-$arg="-NoProfile -ExecutionPolicy Bypass -File `"$apply`" -ZipPath `"$zip`" -InstallRoot `"$root`" -ProcessId $PID"
-Start-Process powershell.exe -ArgumentList $arg -WorkingDirectory $root
-Write-Host '적용 도우미를 시작했습니다. 이 창은 닫힙니다.'
-Start-Sleep -Seconds 2
-'@ | Set-Content 'repair/UPDATE_TO_V0137.ps1' -Encoding UTF8
+          $ErrorActionPreference='Stop'
+          $root=Split-Path -Parent $MyInvocation.MyCommand.Path
+          $apply=Join-Path $root 'tools\ApplyUpdate.ps1'
+          $start=Join-Path $root 'START.cmd'
+          if(-not(Test-Path -LiteralPath $start)){throw 'START.cmd가 있는 기존 MABI AUTO 설치 폴더에 복구 ZIP 내용을 먼저 풀어주세요.'}
+          if(-not(Test-Path -LiteralPath $apply)){throw 'tools\ApplyUpdate.ps1 복구 파일이 없습니다.'}
+          
+          Get-Process FishingAutomation,MacroWatchdog -ErrorAction SilentlyContinue | ForEach-Object {
+              try {
+                  if($_.Path -and $_.Path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)){
+                      Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+                  }
+              } catch {}
+          }
+          Start-Sleep -Milliseconds 700
+          
+          $zipUrl='https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.37/MabiAuto_V0.1.37_Windows_Lite.zip'
+          $shaUrl='https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.37/MabiAuto_V0.1.37_Windows_Lite.zip.sha256'
+          $zip=Join-Path $env:TEMP ('MabiAuto_V0.1.37_Repair_'+[Guid]::NewGuid().ToString('N')+'.zip')
+          
+          Write-Host '[1/3] V0.1.37 다운로드 중...'
+          Invoke-WebRequest -Uri $zipUrl -OutFile $zip -UseBasicParsing -TimeoutSec 600
+          Write-Host '[2/3] SHA256 검증 중...'
+          $shaText=(Invoke-WebRequest -Uri $shaUrl -UseBasicParsing -TimeoutSec 60).Content
+          $expected=($shaText -split '\s+')[0].Trim().ToLowerInvariant()
+          $actual=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($expected-ne$actual){Remove-Item $zip -Force -ErrorAction SilentlyContinue; throw "SHA256 불일치 expected=$expected actual=$actual"}
+          if($actual-ne'bf61c4c4b815d84639b2c904f75cddf790850916964bae994fb7945fe78fd50d'){Remove-Item $zip -Force -ErrorAction SilentlyContinue; throw "검증된 V0.1.37 파일 해시와 다릅니다: $actual"}
+          
+          Write-Host '[3/3] V0.1.37 적용 시작...'
+          $arg="-NoProfile -ExecutionPolicy Bypass -File `"$apply`" -ZipPath `"$zip`" -InstallRoot `"$root`" -ProcessId $PID"
+          Start-Process powershell.exe -ArgumentList $arg -WorkingDirectory $root
+          Write-Host '적용 도우미를 시작했습니다. 이 창은 닫힙니다.'
+          Start-Sleep -Seconds 2
+          '@ | Set-Content 'repair/UPDATE_TO_V0137.ps1' -Encoding UTF8
 
           @(
             '@echo off',
