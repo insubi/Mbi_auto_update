@@ -1,0 +1,6 @@
+status=failure
+run_id=35293434341
+run_attempt=1
+sha=d0742941b973a13c2c44ae8306e5bb05507d22d4
+ref=refs/heads/v0137-dungeon-icon-runda-fiod
+time=2026-09-18T01:01:06.2698943Z
