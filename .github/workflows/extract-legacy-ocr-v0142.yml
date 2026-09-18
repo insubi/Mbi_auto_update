@@ -1,0 +1,36 @@
+name: Extract legacy OCR entry detector
+
+on:
+  push:
+    branches:
+      - v0142-challenge-click-guard
+    paths:
+      - '.github/workflows/extract-legacy-ocr-v0142.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract V0.1.24 OCR recognizer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path legacy,diagnostics -Force | Out-Null
+          gh release download V0.1.24 --repo $env:REPO --pattern 'CombinedFishingDungeon_V0.1.24_SelectedChallengeDisambiguation.zip' --dir legacy
+          if($LASTEXITCODE-ne0){throw 'download failed'}
+          Expand-Archive -LiteralPath 'legacy/CombinedFishingDungeon_V0.1.24_SelectedChallengeDisambiguation.zip' -DestinationPath legacy/x -Force
+          $ocr=Get-ChildItem legacy/x -Recurse -File -Filter OcrRecognizer.cs | Select-Object -First 1
+          if($null-eq$ocr){throw 'OcrRecognizer.cs missing'}
+          Copy-Item $ocr.FullName diagnostics/OcrRecognizer_V0_1_24.cs -Force
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/OcrRecognizer_V0_1_24.cs
+          git commit -m 'Extract V0.1.24 OCR recognizer [skip ci]'
+          git push origin HEAD:v0142-challenge-click-guard
