@@ -1,0 +1,215 @@
+name: Release V0.1.40 Slot Hybrid Fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/release-v0140-slot-hybrid.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v0140-slot-hybrid-fix
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build validate and package V0.1.40
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.32 patch failed'}
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.33 patch failed'}
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.34 patch failed'}
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.35 patch failed'}
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.36 patch failed'}
+          python release-source/v0137_dungeon_icon_runda_fiod.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.37 patch failed'}
+          python release-source/v0137_updater_survival.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.37 updater survival patch failed'}
+          python release-source/v0138_arrival_timeout_5min.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.38 patch failed'}
+          python release-source/v0139_slot_template_fix.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.39 patch failed'}
+          python release-source/v0140_slot_hybrid_fix.py $root.FullName
+          if($LASTEXITCODE-ne0){throw 'V0.1.40 patch failed'}
+
+          $project=Get-Content -Raw (Join-Path $fish 'FishingAutomation.csproj')
+          $refui=Get-Content -Raw (Join-Path $fish 'MainForm.ReferenceUI.cs')
+          $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          $matcher=Get-Content -Raw (Join-Path $fish 'dungeon/TemplateMatcher.cs')
+          $detector=Get-Content -Raw (Join-Path $fish 'dungeon/TargetDetector.cs')
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json') | ConvertFrom-Json
+
+          if(-not $project.Contains('<Version>0.1.40</Version>')){throw 'project version is not 0.1.40'}
+          if(-not $refui.Contains('AddButton("인식 테스트", new(18, 511, 178, 59), owner.ShowVisualRecognitionTest, "", "nav");')){throw 'recognition-test UI fix missing'}
+          if(-not $engine.Contains('WaitForTargetPairAsync(arrivalTarget, "route_deep_tab", 300, ct)')){throw 'Peaca five-minute arrival wait missing'}
+          if(-not $engine.Contains('WaitForTargetAsync(arrivalTarget, 300, ct)')){throw 'Runda/Fiod five-minute arrival wait missing'}
+          if(-not $engine.Contains('WaitForDungeonSlotAsync(slotTarget, 30, ct)')){throw 'hybrid slot wait missing'}
+          if(-not $engine.Contains('best={slot.Score:0.000}')){throw 'slot error score diagnostics missing'}
+          if(-not $matcher.Contains('FindBrightGlyphMultiScale')){throw 'binary glyph matcher missing'}
+          if(-not $matcher.Contains('new[] { 130.0, 150.0, 170.0 }')){throw 'binary threshold sweep missing'}
+          if(-not $detector.Contains('slot-hybrid')){throw 'slot-hybrid detector missing'}
+          if(-not $detector.Contains('FindCompactLabelAsync')){throw 'slot OCR backup missing'}
+
+          $expected=@{
+            'route_d1_1'=@('D1-1',200,440,300,180)
+            'route_d2_1'=@('D2-1',200,700,320,190)
+            'route_regular_1_1'=@('1-1',180,500,360,180)
+            'route_regular_2_1'=@('2-1',200,700,360,220)
+          }
+          foreach($id in $expected.Keys){
+            $t=@($targets|Where-Object{$_.Id-eq$id})[0]
+            if($null-eq$t){throw "target missing: $id"}
+            $e=$expected[$id]
+            if($t.Kind-ne'slot-hybrid'){throw "$id kind mismatch: $($t.Kind)"}
+            if($t.Text-ne$e[0]){throw "$id text mismatch: $($t.Text)"}
+            if([double]$t.Threshold-ne0.86){throw "$id threshold mismatch"}
+            if([double]$t.TemplateScaleMin-ne0.75 -or [double]$t.TemplateScaleMax-ne1.30){throw "$id scale range mismatch"}
+            if([int]$t.Roi.X-ne[int]$e[1] -or [int]$t.Roi.Y-ne[int]$e[2] -or [int]$t.Roi.Width-ne[int]$e[3] -or [int]$t.Roi.Height-ne[int]$e[4]){throw "$id ROI mismatch"}
+            if([string]::IsNullOrWhiteSpace($t.TemplatePath)){throw "$id template path missing"}
+            if(-not(Test-Path (Join-Path $fish $t.TemplatePath))){throw "$id template file missing"}
+          }
+
+          dotnet restore (Join-Path $fish 'FishingAutomation.csproj')
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation restore failed'}
+          dotnet build (Join-Path $fish 'FishingAutomation.csproj') -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+
+          $watchProj=Join-Path $root.FullName 'MacroWatchdog/MacroWatchdog.csproj'
+          if(Test-Path $watchProj){
+            dotnet restore $watchProj
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog restore failed'}
+            dotnet build $watchProj -c Release --no-restore
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          }
+
+          New-Item -ItemType Directory -Path stage,stage/release,package,package/release,package/tools,out -Force | Out-Null
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish (Join-Path $fish 'FishingAutomation.csproj') @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
+
+          if(Test-Path $watchProj){
+            dotnet publish $watchProj @pubArgs -o stage/watchdog
+            if($LASTEXITCODE-ne0){throw 'MacroWatchdog publish failed'}
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){
+              Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force
+            }
+          }
+
+          $exe=(Resolve-Path 'stage/release/FishingAutomation.exe').Path
+          $p=Start-Process $exe -WorkingDirectory (Resolve-Path 'stage/release').Path -PassThru
+          Start-Sleep 5
+          $p.Refresh()
+          if($p.HasExited){throw "smoke test exit $($p.ExitCode)"}
+          Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'SMOKE_TEST_OK'
+
+          Copy-Item 'stage/release/*' 'package/release' -Recurse -Force
+          Copy-Item (Join-Path $root.FullName 'tools/ApplyUpdate.ps1') 'package/tools/ApplyUpdate.ps1' -Force
+          @(
+            'MABI AUTO V0.1.40 Windows Lite',
+            'Updater-compatible package.',
+            'Dungeon slots use binary glyph multi-scale matching with exact OCR backup.'
+          ) | Set-Content 'package/WINDOWS_LITE.txt' -Encoding UTF8
+
+          foreach($required in @(
+            'package/release/FishingAutomation.exe',
+            'package/release/dungeon/config/targets.json',
+            'package/release/dungeon/templates/slot_peaca_d1_1_v0139.jpg',
+            'package/release/dungeon/templates/slot_peaca_d2_1_v0139.jpg',
+            'package/release/dungeon/templates/slot_regular_1_1_v0139.jpg',
+            'package/release/dungeon/templates/slot_regular_2_1_v0139.jpg',
+            'package/tools/ApplyUpdate.ps1',
+            'package/WINDOWS_LITE.txt'
+          )){
+            if(-not(Test-Path $required)){throw "package missing: $required"}
+          }
+
+          $zip=(Resolve-Path out).Path+'\MabiAuto_V0.1.40_Windows_Lite.zip'
+          Compress-Archive -Path 'package/*' -DestinationPath $zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $zip -DestinationPath verify -Force
+          if(-not(Test-Path 'verify/release/FishingAutomation.exe')){throw 'archive missing release/FishingAutomation.exe'}
+          if(-not(Test-Path 'verify/tools/ApplyUpdate.ps1')){throw 'archive missing updater'}
+          foreach($name in @(
+            'slot_peaca_d1_1_v0139.jpg',
+            'slot_peaca_d2_1_v0139.jpg',
+            'slot_regular_1_1_v0139.jpg',
+            'slot_regular_2_1_v0139.jpg'
+          )){
+            if(-not(Test-Path "verify/release/dungeon/templates/$name")){throw "archive missing slot template: $name"}
+          }
+
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.40_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+          $size=(Get-Item $zip).Length
+          Write-Host 'UPDATER_LAYOUT_OK'
+          Write-Host "V0140_SHA256=$hash"
+          Write-Host "V0140_SIZE=$size"
+          if($size-gt180000000){throw "V0.1.40 ZIP unexpectedly large: $size"}
+
+      - name: Publish V0.1.40
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag='V0.1.40'
+          $target=(git rev-parse HEAD).Trim()
+
+          @(
+            'MABI AUTO V0.1.40 - 던전 1-1/2-1 하이브리드 인식 수정',
+            '',
+            'V0.1.39 실전 로그에서 페카 D2-1 템플릿 미검출을 확인했습니다.',
+            '페카 D1-1/D2-1, 룬다 1-1/2-1, 피오드 1-1/2-1 모두 밝은 글자만 이진화한 OpenCV 다중 배율 매칭으로 변경했습니다.',
+            '검색 배율은 0.75~1.30이며 타일 배경색/선택 상태 변화 영향을 줄였습니다.',
+            '정확한 소형 OCR을 보조 확인/백업으로 사용합니다.',
+            '실패 시 최고 매칭 점수와 위치를 런타임 로그 및 오류 상세에 남깁니다.',
+            '1-2/1-3/2-2/2-3을 대체 클릭하지 않는 안전 규칙은 유지합니다.',
+            '던전 도착 대기 5분, 구역 대기 30초, 보라색 던전 아이콘 클릭, 인식 테스트 UI 수정은 유지합니다.',
+            '자동복구 기능 추가는 이번 버전에 포함하지 않습니다.'
+          ) | Set-Content notes.txt -Encoding UTF8
+
+          gh release view $tag --repo $env:REPO *> $null
+          if($LASTEXITCODE-eq0){
+            gh release delete $tag --repo $env:REPO --yes --cleanup-tag
+            if($LASTEXITCODE-ne0){throw 'old V0.1.40 cleanup failed'}
+          }
+          $null=$LASTEXITCODE
+
+          gh release create $tag --repo $env:REPO --target $target --title 'Mabi Auto V0.1.40' --notes-file notes.txt out/MabiAuto_V0.1.40_Windows_Lite.zip out/MabiAuto_V0.1.40_Windows_Lite.zip.sha256
+          if($LASTEXITCODE-ne0){throw 'V0.1.40 release publish failed'}
+
+          $release=gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
+          $zip=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.40_Windows_Lite.zip'})[0]
+          $sha=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.40_Windows_Lite.zip.sha256'})[0]
+          if($null-eq$zip -or $null-eq$sha){throw 'V0.1.40 release assets incomplete'}
+          Write-Host "RELEASE_URL=$($release.html_url)"
+          Write-Host "RELEASE_DIGEST=$($zip.digest)"
+          Write-Host "RELEASE_SIZE=$($zip.size)"
+          Write-Host 'V0140_RELEASE_OK'
