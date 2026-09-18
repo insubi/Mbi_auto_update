@@ -1,0 +1,148 @@
+=== UPDATE MANAGER KEY LINES ===
+internal sealed record ReleaseUpdateInfo(
+    string AssetName,
+    string DownloadUrl,
+    long AssetSize,
+    string Sha256Url);
+    public const string CurrentVersion = "V0.1.36";
+            string url = $"https://api.github.com/repos/{RepositoryOwner}/{RepositoryName}/releases?per_page=1";
+    public static async Task<ReleaseUpdateInfo?> CheckLatestAsync(CancellationToken ct = default)
+        string url = $"https://api.github.com/repos/{RepositoryOwner}/{RepositoryName}/releases?per_page=30";
+        JsonElement release = default;
+            bool prerelease = candidate.TryGetProperty("prerelease", out var p) && p.ValueKind == JsonValueKind.True;
+            if (draft || prerelease) continue;
+            if (!IsMainReleaseTag(candidateTag)) continue;
+                release = candidate;
+        if (string.IsNullOrWhiteSpace(tag) || CompareVersions(tag, CurrentVersion) <= 0) return null;
+        string name = release.TryGetProperty("name", out var nameNode) ? nameNode.GetString() ?? tag : tag;
+        string notes = release.TryGetProperty("body", out var bodyNode) ? bodyNode.GetString() ?? "" : "";
+        var assets = new List<(string Name, string Url, long Size)>();
+        if (release.TryGetProperty("assets", out var assetNodes) && assetNodes.ValueKind == JsonValueKind.Array)
+            foreach (var a in assetNodes.EnumerateArray())
+                string assetName = a.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "";
+                string download = a.TryGetProperty("browser_download_url", out var dl) ? dl.GetString() ?? "" : "";
+                if (!string.IsNullOrWhiteSpace(assetName) && !string.IsNullOrWhiteSpace(download))
+                    assets.Add((assetName, download, size));
+        var asset = assets.FirstOrDefault(a =>
+            a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+            a.Name.Contains("Windows_Lite", StringComparison.OrdinalIgnoreCase) &&
+        if (string.IsNullOrWhiteSpace(asset.Url))
+            asset = assets.FirstOrDefault(a =>
+                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+                a.Name.Contains("Windows_Lite", StringComparison.OrdinalIgnoreCase));
+        if (string.IsNullOrWhiteSpace(asset.Url))
+            asset = assets.FirstOrDefault(a =>
+                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
+        if (string.IsNullOrWhiteSpace(asset.Url))
+            throw new InvalidOperationException($"GitHub {tag} 릴리스에 Windows 업데이트 ZIP 파일이 없습니다.");
+        string shaName = asset.Name + ".sha256";
+        string shaUrl = assets.FirstOrDefault(a => a.Name.Equals(shaName, StringComparison.OrdinalIgnoreCase)).Url ?? "";
+        if (string.IsNullOrWhiteSpace(shaUrl))
+            throw new InvalidOperationException($"GitHub {tag} 릴리스에 SHA256 파일({shaName})이 없습니다.");
+        return new ReleaseUpdateInfo(tag, name, notes, asset.Name, asset.Url, asset.Size, shaUrl);
+    private static bool IsMainReleaseTag(string tag)
+        bool currentUsesSemanticVersion = CurrentVersion.Contains('.', StringComparison.Ordinal);
+    public static async Task<string> DownloadAsync(ReleaseUpdateInfo info, IProgress<int>? progress = null, CancellationToken ct = default)
+        string temp = Path.Combine(Path.GetTempPath(), $"MabiAuto_{info.Tag}_{Guid.NewGuid():N}.zip");
+            using (var response = await Http.GetAsync(info.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct))
+                long total = response.Content.Headers.ContentLength ?? info.AssetSize;
+                await using var output = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true);
+                await output.FlushAsync(ct);
+            if (!string.IsNullOrWhiteSpace(info.Sha256Url))
+                string shaText = await Http.GetStringAsync(info.Sha256Url, ct);
+                string expected = shaText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                    throw new InvalidOperationException("업데이트 SHA256 파일 형식이 올바르지 않습니다.");
+                string actual = Convert.ToHexString(await SHA256.HashDataAsync(fs, ct)).ToLowerInvariant();
+                    throw new InvalidOperationException("업데이트 파일 SHA256 검증에 실패했습니다. 파일이 손상되었거나 변경되었습니다.");
+    public static void LaunchUpdater(string zipPath)
+        string script = Path.Combine(root, "tools", "ApplyUpdate.ps1");
+        var psi = new ProcessStartInfo
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(script);
+        psi.ArgumentList.Add("-ZipPath");
+        psi.ArgumentList.Add(zipPath);
+        psi.ArgumentList.Add("-InstallRoot");
+        psi.ArgumentList.Add(root);
+        psi.ArgumentList.Add("-ProcessId");
+        psi.ArgumentList.Add(Environment.ProcessId.ToString());
+        var updaterProcess = Process.Start(psi);
+        if (updaterProcess is null)
+        if (baseDir.Name.Equals("release", StringComparison.OrdinalIgnoreCase) && baseDir.Parent is not null) return baseDir.Parent.FullName;
+
+=== APPLY UPDATE KEY LINES ===
+    [Parameter(Mandatory=$true)][string]$ZipPath,
+    [Parameter(Mandatory=$true)][int]$ProcessId
+    Log 'Stopping MacroWatchdog processes before file replacement.'
+    Get-Process -Name 'MacroWatchdog' -ErrorAction SilentlyContinue | ForEach-Object {
+            if ($path -and $path.StartsWith($InstallRoot, [StringComparison]::OrdinalIgnoreCase)) {
+                Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        $left = @(Get-Process -Name 'MacroWatchdog' -ErrorAction SilentlyContinue | Where-Object {
+            try { $_.Path -and $_.Path.StartsWith($InstallRoot, [StringComparison]::OrdinalIgnoreCase) } catch { $false }
+        Start-Sleep -Milliseconds 250
+    Start-Sleep -Milliseconds 400
+function Copy-TreeItem([string]$src, [string]$dst) {
+        Copy-Item -Path (Join-Path $src '*') -Destination $dst -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item -LiteralPath $src -Destination $dst -Force
+    'release','FishingAutomation','tools','START.cmd','1_INSTALL_INTERCEPTION.cmd',
+    'PHONE_ALERT_README.txt','AUTO_UPDATE_README.txt','WINDOWS_LITE.txt'
+    'FishingAutomation\notification.json',
+    'FishingAutomation\config.json',
+    'FishingAutomation\interception.dll',
+    'FishingAutomation\templates',
+    'FishingAutomation\abyss\templates',
+    'FishingAutomation\dungeon\templates',
+    'release\notification.json',
+    'release\config.json',
+    'release\interception.dll',
+    'release\templates',
+    'release\abyss\templates',
+    'release\dungeon\templates'
+    Log "Updater start. zip=$ZipPath"
+        if (-not (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep -Milliseconds 500
+    Expand-Archive -LiteralPath $ZipPath -DestinationPath $extract -Force
+    if ($children.Count -eq 1 -and $dirs.Count -eq 1) { $sourceRoot = $dirs[0].FullName } else { $sourceRoot = $extract }
+    $incomingExe = Join-Path $sourceRoot 'release\FishingAutomation.exe'
+    if (-not (Test-Path -LiteralPath $incomingExe)) {
+        throw '업데이트 패키지에 release\FishingAutomation.exe가 없습니다. Windows_Lite 패키지를 사용하세요.'
+    Remove-Item -LiteralPath $rollback -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-TreeItem (Join-Path $InstallRoot $name) (Join-Path $rollback $name)
+    Log 'Rollback backup created.'
+        Copy-TreeItem (Join-Path $InstallRoot $rel) (Join-Path $preserveRoot $rel)
+    foreach ($name in @('release','FishingAutomation','tools')) {
+        Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -LiteralPath $sourceRoot -Force | ForEach-Object {
+        $target = Join-Path $InstallRoot $_.Name
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            Copy-Item -Path (Join-Path $_.FullName '*') -Destination $target -Recurse -Force -ErrorAction SilentlyContinue
+            Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+        if (Test-Path -LiteralPath $src) { Copy-TreeItem $src $dst }
+    $runtimeNotification = Join-Path $InstallRoot 'release\notification.json'
+    $sourceNotification = Join-Path $InstallRoot 'FishingAutomation\notification.json'
+    if (Test-Path $runtimeNotification) { Copy-Item $runtimeNotification $sourceNotification -Force -ErrorAction SilentlyContinue }
+    Remove-Item -LiteralPath $healthy -Force -ErrorAction SilentlyContinue
+    Log 'Files replaced. Starting new prebuilt package for health check.'
+    Start-Process -FilePath (Join-Path $InstallRoot 'START.cmd') -WorkingDirectory $InstallRoot
+        Start-Sleep -Milliseconds 500
+        Log 'New version startup health check OK. Update committed.'
+        Remove-Item -LiteralPath $pending,$healthy -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $rollback -Recurse -Force -ErrorAction SilentlyContinue
+        Log 'New version startup health check FAILED. Rolling back.'
+        foreach ($p in @('FishingAutomation','MacroWatchdog')) {
+            Get-Process -Name $p -ErrorAction SilentlyContinue | ForEach-Object {
+                    if ($_.Path -and $_.Path.StartsWith($InstallRoot, [StringComparison]::OrdinalIgnoreCase)) { Stop-Process -Id $_.Id -Force }
+        foreach ($name in @('release','FishingAutomation','tools')) {
+            Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $src) { Copy-TreeItem $src (Join-Path $InstallRoot $name) }
+        Remove-Item -LiteralPath $pending,$healthy -Force -ErrorAction SilentlyContinue
+        Start-Process -FilePath (Join-Path $InstallRoot 'START.cmd') -WorkingDirectory $InstallRoot
+            foreach ($name in @('release','FishingAutomation','tools')) {
+                Remove-Item -LiteralPath (Join-Path $InstallRoot $name) -Recurse -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath $src) { Copy-TreeItem $src (Join-Path $InstallRoot $name) }
+            Start-Process -FilePath (Join-Path $InstallRoot 'START.cmd') -WorkingDirectory $InstallRoot
+    Start-Sleep -Seconds 2
+    try { Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue } catch { }
+    try { Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue } catch { }
