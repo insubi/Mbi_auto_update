@@ -1,4 +1,4 @@
-name: Build V0.1.37 World Map OCR Fix
+name: Build V0.1.37 Dungeon Icon Runda Fiod
 
 on:
   workflow_dispatch:
@@ -7,10 +7,7 @@ on:
       - v0137-dungeon-icon-runda-fiod
     paths:
       - '.github/workflows/build-v0137-dungeon-icon-runda-fiod.yml'
-      - 'release-source/v0135_visual_test_environment.py'
-      - 'release-source/v0136_worldmap_ocr_fix.py'
       - 'release-source/v0137_dungeon_icon_runda_fiod.py'
-      - 'release-source/visual-test-assets/**'
 
 permissions:
   contents: write
@@ -27,7 +24,7 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Patch validate build and package V0.1.37
+      - name: Patch build and validate V0.1.37
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
@@ -52,56 +49,51 @@ jobs:
           if($LASTEXITCODE-ne0){throw 'V0.1.37 patch failed'}
 
           $project=Get-Content -Raw (Join-Path $fish 'FishingAutomation.csproj')
-          $tester=Get-Content -Raw (Join-Path $fish 'VisualRecognitionTester.cs')
-          $ui=Get-Content -Raw (Join-Path $fish 'MainForm.VisualTest.cs')
-          $uploader=Get-Content -Raw (Join-Path $fish 'RuntimeErrorUploader.cs')
           $refui=Get-Content -Raw (Join-Path $fish 'MainForm.ReferenceUI.cs')
+          $main=Get-Content -Raw (Join-Path $fish 'MainForm.cs')
           $engine=Get-Content -Raw (Join-Path $fish 'dungeon/ScenarioEngine.cs')
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json')
+          $tester=Get-Content -Raw (Join-Path $fish 'VisualRecognitionTester.cs')
+          $uploader=Get-Content -Raw (Join-Path $fish 'RuntimeErrorUploader.cs')
 
           foreach($required in @(
             '<Version>0.1.37</Version>',
-            'VISUAL_TEST_ENV_V10',
-            'VisualRecognitionTester',
-            'AddButton("인식 테스트"',
-            'UploadVisualTestRunAsync',
-            'test-runs/',
-            'source = "visual-test"',
-            'gameInputSent = false',
-            'peaca_map_actual_v0136.jpg',
-            'runda_map_actual_v0136.jpg',
-            'RUNTIME_ERROR_GITHUB_UPLOAD_V9',
-            'DUNGEON_RESULT_RETRY_FASTPATH_V8',
-            'var ullaBreadcrumbPoint = new Point(82, 66);',
-            '페카 심층 1-1',
-            '페카 심층 2-1',
             'DUNGEON_WORLD_ROUTE_V11',
             'TryFindDungeonIconAboveLabel',
             '위 던전 아이콘 클릭',
+            'runda_d1_1',
+            'runda_d2_1',
+            'fiod_d1_1',
+            'fiod_d2_1',
             '룬다 1-1',
             '룬다 2-1',
             '피오드 1-1',
             '피오드 2-1',
+            'route_runda_map',
+            'route_fiod_map',
             'route_regular_1_1',
-            'route_regular_2_1'
+            'route_regular_2_1',
+            'route_enter_regular_1_1',
+            'route_enter_regular_2_1',
+            'VISUAL_TEST_ENV_V10',
+            'RUNTIME_ERROR_GITHUB_UPLOAD_V9',
+            'DUNGEON_RESULT_RETRY_FASTPATH_V8'
           )){
-            if(-not (($project+$tester+$ui+$uploader+$refui+$engine).Contains($required))){
+            if(-not (($project+$refui+$main+$engine+$targets+$tester+$uploader).Contains($required))){
               throw "required marker missing: $required"
             }
           }
 
           foreach($forbidden in @(
-            'ClickClientPoint',
-            'TapScanCode',
-            'DragClientPoint',
-            'FindRequiredGameWindow',
-            'SetForegroundWindow'
+            'RunPeacaPreRouteAsync',
+            'FindPeacaOnWorldMapAsync',
+            '글자 위치 클릭'
           )){
-            if($tester.Contains($forbidden)){throw "visual tester live-input/window regression: $forbidden"}
+            if($engine.Contains($forbidden)){throw "old direct-text route residue: $forbidden"}
           }
 
-          $assetDir=Join-Path $fish 'visual-tests/assets'
-          foreach($name in @('peaca_label.jpg','fiod_label.jpg','peaca_popup_title.jpg','go_here.jpg','d1_slots.jpg','d2_slots.jpg','d2_enter.jpg','retry_candidate.jpg','peaca_map_actual_v0136.jpg','runda_map_actual_v0136.jpg')){
-            if(-not(Test-Path (Join-Path $assetDir $name))){throw "visual test asset missing: $name"}
+          if(-not $refui.Contains('AddButton("인식 테스트", new(18, 511, 178, 59), owner.ShowVisualRecognitionTest, "", "nav");')){
+            throw 'recognition-test UI truncation fix missing'
           }
 
           dotnet restore (Join-Path $fish 'FishingAutomation.csproj')
@@ -117,7 +109,7 @@ jobs:
             if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
           }
 
-          New-Item -ItemType Directory -Path stage,stage/release,package,out | Out-Null
+          New-Item -ItemType Directory -Path stage,stage/release,package,package/release,out | Out-Null
           $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
           dotnet publish (Join-Path $fish 'FishingAutomation.csproj') @pubArgs -o stage/release
           if($LASTEXITCODE-ne0){throw 'FishingAutomation publish failed'}
@@ -125,12 +117,8 @@ jobs:
           if(Test-Path $watchProj){
             dotnet publish $watchProj @pubArgs -o stage/watchdog
             if($LASTEXITCODE-ne0){throw 'MacroWatchdog publish failed'}
-            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force}
-          }
-
-          foreach($name in @('peaca_label.jpg','fiod_label.jpg','peaca_popup_title.jpg','go_here.jpg','d1_slots.jpg','d2_slots.jpg','d2_enter.jpg','retry_candidate.jpg','peaca_map_actual_v0136.jpg','runda_map_actual_v0136.jpg')){
-            if(-not(Test-Path (Join-Path 'stage/release/visual-tests/assets' $name))){
-              throw "published visual test asset missing: $name"
+            if(Test-Path 'stage/watchdog/MacroWatchdog.exe'){
+              Copy-Item 'stage/watchdog/MacroWatchdog.exe' 'stage/release/MacroWatchdog.exe' -Force
             }
           }
 
@@ -143,20 +131,84 @@ jobs:
           Get-Process MacroWatchdog -ErrorAction SilentlyContinue|Stop-Process -Force -ErrorAction SilentlyContinue
           Write-Host 'SMOKE_TEST_OK'
 
-          # Updater-compatible package: root must contain release/ + WINDOWS_LITE.txt only.
-          # Do not ship the full source tree; ApplyUpdate.ps1 expects release/FishingAutomation.exe here.
-          New-Item -ItemType Directory -Path package/release -Force | Out-Null
           Copy-Item 'stage/release/*' 'package/release' -Recurse -Force
+          @(
+            'MABI AUTO V0.1.37 Windows Lite',
+            'Updater-compatible package root.',
+            'The archive root intentionally contains release/ and WINDOWS_LITE.txt.'
+          ) | Set-Content 'package/WINDOWS_LITE.txt' -Encoding UTF8
+
+          foreach($required in @(
+            'package/release/FishingAutomation.exe',
+            'package/release/dungeon/config/targets.json',
+            'package/release/dungeon/templates/retry_visual_v0129.jpg',
+            'package/release/templates/hook.png',
+            'package/release/templates/gauge.png',
+            'package/release/templates/healthbar.png',
+            'package/release/templates/compass.png',
+            'package/release/visual-tests/assets/peaca_map_actual_v0136.jpg',
+            'package/release/visual-tests/assets/runda_map_actual_v0136.jpg',
+            'package/WINDOWS_LITE.txt'
+          )){
+            if(-not(Test-Path $required)){throw "updater package missing: $required"}
+          }
+
+          if(Test-Path 'package/START.cmd'){throw 'unexpected START.cmd in updater package'}
+          if(Test-Path 'package/FishingAutomation'){throw 'unexpected source tree in updater package'}
+
+          $zip=(Resolve-Path out).Path+'\MabiAuto_V0.1.37_Windows_Lite.zip'
+          Compress-Archive -Path 'package/*' -DestinationPath $zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -LiteralPath $zip -DestinationPath verify -Force
+          $children=@(Get-ChildItem verify -Force)
+          $dirs=@($children|Where-Object{$_.PSIsContainer})
+          if($children.Count-eq1 -and $dirs.Count-eq1){$sourceRoot=$dirs[0].FullName}else{$sourceRoot=(Resolve-Path verify).Path}
+          if(-not(Test-Path (Join-Path $sourceRoot 'release/FishingAutomation.exe'))){throw 'updater simulation missing release/FishingAutomation.exe'}
+          if(-not(Test-Path (Join-Path $sourceRoot 'WINDOWS_LITE.txt'))){throw 'updater simulation missing root marker'}
+          if(Test-Path (Join-Path $sourceRoot 'START.cmd')){throw 'updater ZIP unexpectedly contains START.cmd'}
+          if(Test-Path (Join-Path $sourceRoot 'FishingAutomation')){throw 'updater ZIP unexpectedly contains source tree'}
+          Write-Host "UPDATER_LAYOUT_OK children=$($children.Count) dirs=$($dirs.Count) sourceRoot=$sourceRoot"
+
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.37_Windows_Lite.zip"|Set-Content "$zip.sha256" -Encoding ASCII
+          $size=(Get-Item $zip).Length
+          Write-Host "LITE_SHA256=$hash"
+          Write-Host "LITE_SIZE=$size"
+          if($size -gt 180000000){throw "updater ZIP unexpectedly large: $size"}
+
+      - name: Preserve V0.1.37 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MabiAuto_V0.1.37_Windows_Lite
+          path: |
+            out/MabiAuto_V0.1.37_Windows_Lite.zip
+            out/MabiAuto_V0.1.37_Windows_Lite.zip.sha256
+          retention-days: 7
+          compression-level: 0
+
+      - name: Publish V0.1.37
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $tag=$env:RELEASE_TAG
+
+          gh release view $tag --repo $env:REPO *> $null
+          if($LASTEXITCODE-eq0){gh release delete $tag --repo $env:REPO --yes --cleanup-tag}
+          $null=$LASTEXITCODE
+
           @(
             'MABI AUTO V0.1.37 - 던전 아이콘 클릭 + 룬다/피오드 1-1·2-1',
             '',
-            '왼쪽 메뉴의 인식 테스트 글자 잘림을 수정했습니다.',
-            '월드맵에서는 던전 이름 글씨를 위치 확인용 OCR 기준점으로만 사용하고, 글씨 위의 던전 아이콘을 확인한 뒤 아이콘 중심을 클릭합니다.',
-            '아이콘을 확인하지 못하면 글씨나 대체 좌표를 누르지 않고 정지합니다.',
-            '룬다 1-1, 룬다 2-1, 피오드 1-1, 피오드 2-1 목적지를 추가했습니다.',
-            '룬다/피오드는 1-1과 2-1만 사용하며 1층 1구역 진입 또는 2층 1구역 진입 문구 확인 후에만 Space를 누릅니다.',
-            '기존 페카 심층 1-1/2-1, 인식 테스트, 에러 전송, 다시 하기, 어비스, 낚시, F10 안전 동작은 유지합니다.'
-          )|Set-Content notes.txt -Encoding UTF8
+            '인식 테스트 메뉴 글자 잘림을 수정했습니다.',
+            '월드맵 던전 이름은 OCR 위치 확인용으로만 사용하고 실제 클릭은 글씨 위의 던전 아이콘에만 합니다.',
+            '아이콘 확인에 실패하면 글씨나 임의 좌표를 누르지 않고 정지합니다.',
+            '룬다 1-1, 룬다 2-1, 피오드 1-1, 피오드 2-1을 추가했습니다.',
+            '룬다/피오드는 1-1과 2-1만 사용하고 정확한 1층/2층 1구역 진입 문구 확인 후 Space를 누릅니다.'
+          ) | Set-Content notes.txt -Encoding UTF8
 
           gh release create $tag --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.37' --notes-file notes.txt out/MabiAuto_V0.1.37_Windows_Lite.zip out/MabiAuto_V0.1.37_Windows_Lite.zip.sha256
           if($LASTEXITCODE-ne0){throw 'release publish failed'}
@@ -164,6 +216,7 @@ jobs:
           $release=gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
           $zip=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.37_Windows_Lite.zip'})[0]
           if($null-eq$zip -or [int64]$zip.size-lt 1000000){throw 'published ZIP missing/small'}
+          if([int64]$zip.size-gt 180000000){throw "published ZIP unexpectedly large: $($zip.size)"}
           Write-Host "RELEASE_URL=$($release.html_url)"
           Write-Host "RELEASE_DIGEST=$($zip.digest)"
           Write-Host "RELEASE_ZIP_SIZE=$($zip.size)"
@@ -172,7 +225,6 @@ jobs:
         if: always()
         shell: pwsh
         env:
-          GH_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
         run: |
           $ErrorActionPreference='Stop'
