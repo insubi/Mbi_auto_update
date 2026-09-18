@@ -89,7 +89,7 @@ new_click = '''                    else
                             string exactEntry = FuzzyText.Normalize(found.ReadText ?? "");
                             if (!exactEntry.Equals(FuzzyText.Normalize("입장하기"), StringComparison.OrdinalIgnoreCase))
                             {
-                                Log?.Invoke($"[던전 입장] 입장하기 정확 단어 확인 실패 -> 클릭 안 함 · OCR=\"{found.ReadText}\" @ {found.Bounds}");
+                                Log?.Invoke($"[던전 입장] 입장하기 정확 단어 확인 실패 -> 클릭 안 함 · OCR={found.ReadText} @ {found.Bounds}");
                                 await Task.Delay(Math.Max(250, _settings.PollIntervalMs), ct);
                                 continue;
                             }
