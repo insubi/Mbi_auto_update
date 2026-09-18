@@ -1,0 +1,47 @@
+name: Inspect V0.1.39 Template Matcher
+
+on:
+  push:
+    branches:
+      - v0140-slot-hybrid-fix
+    paths:
+      - '.github/workflows/inspect-template-v0140.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract matcher sources
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          python release-source/v0137_dungeon_icon_runda_fiod.py $root.FullName
+          python release-source/v0137_updater_survival.py $root.FullName
+          python release-source/v0138_arrival_timeout_5min.py $root.FullName
+          python release-source/v0139_slot_template_fix.py $root.FullName
+
+          New-Item -ItemType Directory -Path diagnostics -Force | Out-Null
+          Copy-Item (Join-Path $root.FullName 'FishingAutomation/dungeon/TemplateMatcher.cs') diagnostics/TemplateMatcher_v0139.cs -Force
+          Copy-Item (Join-Path $root.FullName 'FishingAutomation/dungeon/DetectionResult.cs') diagnostics/DetectionResult_v0139.cs -Force -ErrorAction SilentlyContinue
+          Copy-Item (Join-Path $root.FullName 'FishingAutomation/dungeon/TargetDetector.cs') diagnostics/TargetDetector_v0139.cs -Force
+          Copy-Item (Join-Path $root.FullName 'FishingAutomation/dungeon/OcrRecognizer.cs') diagnostics/OcrRecognizer_v0139.cs -Force
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/TemplateMatcher_v0139.cs diagnostics/TargetDetector_v0139.cs diagnostics/OcrRecognizer_v0139.cs
+          if(Test-Path diagnostics/DetectionResult_v0139.cs){git add diagnostics/DetectionResult_v0139.cs}
+          git commit -m 'Inspect V0.1.39 slot detector [skip ci]'
+          git push origin HEAD:v0140-slot-hybrid-fix
