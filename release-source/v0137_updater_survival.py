@@ -24,9 +24,16 @@ new="""    # V0.1.37 updater survival: only remove trees that the incoming packa
         }
     }
 """
-if old not in text:
+if old in text:
+    text=text.replace(old,new,1)
+elif "only delete install directories that the incoming package actually replaces" in text:
+    # The main V0.1.37 patch already applied the same safety rule.
+    pass
+elif "V0.1.37 updater survival" in text and "$incomingTree = Join-Path $sourceRoot $name" in text:
+    # Idempotent re-run of this patch.
+    pass
+else:
     raise RuntimeError("normal replacement removal block not found")
-text=text.replace(old,new,1)
 
 # Require the incoming package to carry the updater forward.
 anchor="""    $incomingExe = Join-Path $sourceRoot 'release\\FishingAutomation.exe'
@@ -40,9 +47,10 @@ replacement=anchor+"""
         throw '업데이트 패키지에 tools\\ApplyUpdate.ps1가 없습니다. 다음 업데이트가 끊기지 않도록 updater 포함 패키지가 필요합니다.'
     }
 """
-if anchor not in text:
-    raise RuntimeError("incoming exe validation block not found")
-text=text.replace(anchor,replacement,1)
+if "$incomingUpdater = Join-Path $sourceRoot 'tools\\ApplyUpdate.ps1'" not in text:
+    if anchor not in text:
+        raise RuntimeError("incoming exe validation block not found")
+    text=text.replace(anchor,replacement,1)
 
 apply.write_text(text,encoding="utf-8",newline="\n")
 
