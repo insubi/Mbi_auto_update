@@ -1,0 +1,48 @@
+name: Inspect V0.1.37 slot OCR
+
+on:
+  push:
+    branches:
+      - v0138-arrival-timeout-5min
+    paths:
+      - '.github/workflows/inspect-v0137-slot-ocr.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract OCR detector and targets
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          python release-source/v0137_dungeon_icon_runda_fiod.py $root.FullName
+          python release-source/v0137_updater_survival.py $root.FullName
+
+          $fish=Join-Path $root.FullName 'FishingAutomation'
+          New-Item -ItemType Directory -Path diagnostics -Force | Out-Null
+          Copy-Item (Join-Path $fish 'dungeon/TargetDetector.cs') diagnostics/TargetDetector_v0137.cs -Force
+
+          $targets=Get-Content -Raw (Join-Path $fish 'dungeon/config/targets.json') | ConvertFrom-Json
+          $wanted=@('route_d1_1','route_d2_1','route_regular_1_1','route_regular_2_1','route_enter_d1_1','route_enter_d2_1','route_enter_regular_1_1','route_enter_regular_2_1')
+          $targets | Where-Object { $_.Id -in $wanted } | ConvertTo-Json -Depth 8 | Set-Content diagnostics/slot_targets_v0137.json -Encoding UTF8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/TargetDetector_v0137.cs diagnostics/slot_targets_v0137.json
+          git commit -m 'Inspect V0.1.37 slot OCR [skip ci]'
+          git push origin HEAD:v0138-arrival-timeout-5min
