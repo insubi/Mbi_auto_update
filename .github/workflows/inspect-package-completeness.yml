@@ -1,0 +1,58 @@
+name: Inspect Package Completeness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [v0135-visual-test-env]
+    paths:
+      - '.github/workflows/inspect-package-completeness.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare known good V0.1.31 and current V0.1.35
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path good,current,goodx,currentx | Out-Null
+          gh release download V0.1.31 --repo $env:REPO --pattern 'MabiAuto_V0.1.31_Windows_Lite.zip' --dir good --clobber
+          gh release download V0.1.35 --repo $env:REPO --pattern 'MabiAuto_V0.1.35_Windows_Lite.zip' --dir current --clobber
+          Expand-Archive good/MabiAuto_V0.1.31_Windows_Lite.zip -DestinationPath goodx
+          Expand-Archive current/MabiAuto_V0.1.35_Windows_Lite.zip -DestinationPath currentx
+
+          Write-Host '=== GOOD TOP LEVEL ==='
+          Get-ChildItem goodx -Force | ForEach-Object { Write-Host ("{0}	{1}" -f ($(if($_.PSIsContainer){'DIR'}else{'FILE'}),$_.Name)) }
+
+          Write-Host '=== CURRENT TOP LEVEL ==='
+          Get-ChildItem currentx -Force | ForEach-Object { Write-Host ("{0}	{1}" -f ($(if($_.PSIsContainer){'DIR'}else{'FILE'}),$_.Name)) }
+
+          $goodFiles=@(Get-ChildItem goodx -Recurse -File | ForEach-Object { $_.FullName.Substring((Resolve-Path goodx).Path.Length+1).Replace('\','/') })
+          $curFiles=@(Get-ChildItem currentx -Recurse -File | ForEach-Object { $_.FullName.Substring((Resolve-Path currentx).Path.Length+1).Replace('\','/') })
+
+          Write-Host '=== FILES PRESENT IN GOOD BUT MISSING CURRENT ==='
+          Compare-Object $goodFiles $curFiles | Where-Object {$_.SideIndicator -eq '<='} | ForEach-Object { Write-Host $_.InputObject }
+
+          Write-Host '=== FILES PRESENT CURRENT BUT NOT GOOD ==='
+          Compare-Object $goodFiles $curFiles | Where-Object {$_.SideIndicator -eq '=>'} | ForEach-Object { Write-Host $_.InputObject }
+
+          Write-Host "GOOD_COUNT=$($goodFiles.Count)"
+          Write-Host "CURRENT_COUNT=$($curFiles.Count)"
+
+          Write-Host '=== GOOD IMPORTANT FILES ==='
+          $important=@('START.cmd','tools/ApplyUpdate.ps1','FishingAutomation/FishingAutomation.csproj','release/FishingAutomation.exe','README.txt','WINDOWS_LITE.txt')
+          foreach($p in $important){
+            Write-Host "$p = $(Test-Path (Join-Path goodx $p))"
+          }
+
+          Write-Host '=== CURRENT IMPORTANT FILES ==='
+          foreach($p in $important){
+            Write-Host "$p = $(Test-Path (Join-Path currentx $p))"
+          }
