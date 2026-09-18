@@ -16,10 +16,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
       - name: Inspect published V0.1.44 and generated source
         shell: pwsh
         env:
