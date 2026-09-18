@@ -1,0 +1,59 @@
+name: Inspect selected to challenge flow
+
+on:
+  push:
+    branches:
+      - v0142-challenge-click-guard
+    paths:
+      - '.github/workflows/inspect-selected-flow-v0142.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract scenario flow
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          python release-source/v0137_dungeon_icon_runda_fiod.py $root.FullName
+          python release-source/v0137_updater_survival.py $root.FullName
+          python release-source/v0138_arrival_timeout_5min.py $root.FullName
+          python release-source/v0139_slot_template_fix.py $root.FullName
+          python release-source/v0140_slot_hybrid_fix.py $root.FullName
+          python release-source/v0141_template_path_fix.py $root.FullName
+
+          $dungeon=Join-Path $root.FullName 'FishingAutomation/dungeon'
+          New-Item -ItemType Directory -Path diagnostics -Force | Out-Null
+          Copy-Item (Join-Path $dungeon 'config/targets.json') diagnostics/targets_v0141.json -Force
+          Copy-Item (Join-Path $dungeon 'config/scenario.json') diagnostics/scenario_v0141.json -Force
+          Copy-Item (Join-Path $dungeon 'ScenarioEngine.cs') diagnostics/ScenarioEngine_v0141.cs -Force
+
+          @(
+            '=== selected/challenge targets ==='
+            ((Get-Content -Raw diagnostics/targets_v0141.json | ConvertFrom-Json) | Where-Object {$_.Id -in @('selected','selected_red_visual','challenge','challenge_visual')} | ConvertTo-Json -Depth 10)
+            ''
+            '=== scenario selected/challenge steps ==='
+            ((Get-Content -Raw diagnostics/scenario_v0141.json | ConvertFrom-Json).Steps | Where-Object {$_.Target -in @('selected','selected_red_visual','challenge','challenge_visual') -or $_.Name -match '선택|도전|입장'} | ConvertTo-Json -Depth 10)
+            ''
+            '=== engine selected/challenge lines ==='
+            (Get-Content diagnostics/ScenarioEngine_v0141.cs | Select-String -Pattern 'selected|challenge|선택|도전|ClickClientPoint|Center' | ForEach-Object {"$($_.LineNumber):$($_.Line)"})
+          ) | Set-Content diagnostics/selected_flow_v0141.txt -Encoding UTF8
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/targets_v0141.json diagnostics/scenario_v0141.json diagnostics/ScenarioEngine_v0141.cs diagnostics/selected_flow_v0141.txt
+          git commit -m 'Inspect V0.1.41 selected challenge flow [skip ci]'
+          git push origin HEAD:v0142-challenge-click-guard
