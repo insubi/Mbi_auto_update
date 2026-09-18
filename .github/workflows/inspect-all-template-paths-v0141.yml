@@ -1,0 +1,44 @@
+name: Inspect V0.1.40 All Dungeon Template Paths
+
+on:
+  push:
+    branches:
+      - v0141-template-path-fix
+    paths:
+      - '.github/workflows/inspect-all-template-paths-v0141.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve all dungeon template paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          Expand-Archive current.zip -DestinationPath current -Force
+          $root=Get-ChildItem current -Directory | Select-Object -First 1
+          if($null-eq$root){throw 'source root missing'}
+          python release-source/v0132_ulla_fixed_click_final.py $root.FullName
+          python release-source/v0133_result_retry_fastpath.py $root.FullName
+          python release-source/v0134_runtime_error_upload.py $root.FullName
+          python release-source/v0135_visual_test_environment.py $root.FullName
+          python release-source/v0136_worldmap_ocr_fix.py $root.FullName
+          python release-source/v0137_dungeon_icon_runda_fiod.py $root.FullName
+          python release-source/v0137_updater_survival.py $root.FullName
+          python release-source/v0138_arrival_timeout_5min.py $root.FullName
+          python release-source/v0139_slot_template_fix.py $root.FullName
+          python release-source/v0140_slot_hybrid_fix.py $root.FullName
+
+          $dungeon=Join-Path $root.FullName 'FishingAutomation/dungeon'
+          $targets=Get-Content -Raw (Join-Path $dungeon 'config/targets.json') | ConvertFrom-Json
+          $templated=@($targets|Where-Object{ -not [string]::IsNullOrWhiteSpace($_.TemplatePath) })
+          Write-Host "TEMPLATE_TARGET_COUNT=$($templated.Count)"
+          foreach($t in $templated){
+            $candidate=Join-Path $dungeon ($t.TemplatePath -replace '/', [IO.Path]::DirectorySeparatorChar)
+            Write-Host ("TARGET={0} KIND={1} PATH={2} EXISTS={3} RESOLVED={4}" -f $t.Id,$t.Kind,$t.TemplatePath,(Test-Path $candidate),$candidate)
+          }
