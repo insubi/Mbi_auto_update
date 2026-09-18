@@ -48,10 +48,9 @@ engine = replace_once(
     "Runda/Fiod timeout message")
 write(engine_path, engine)
 
-# All dungeon 1-1 / 2-1 markers are tiny white labels. V0.1.37 only retried OCR at 2x,
-# which missed a real Peaca D2-1 screen even though the ROI contained the label.
-# Add a compact-label OCR path that retries 1x -> 2x -> 3x -> 4x, and use it only
-# for the six requested slot choices (Peaca/Runda/Fiod 1-1 and 2-1).
+# All requested dungeon slots use a dedicated exact compact-label OCR path.
+# Important: do NOT use fuzzy matching here, because D1-2/D1-3/D2-2/D2-3 must never
+# be accepted in place of the requested 1-1/2-1 slot.
 ocr = read(ocr_path)
 ocr_anchor = '''    public async Task<DetectionResult> FindTextAsync(Bitmap frame, Rectangle roi, string wanted, int maxEditDistance, bool retry2x, CancellationToken ct)
     {
@@ -61,17 +60,55 @@ ocr_anchor = '''    public async Task<DetectionResult> FindTextAsync(Bitmap fram
     }
 '''
 ocr_insert = ocr_anchor + '''
-    public async Task<DetectionResult> FindCompactLabelAsync(Bitmap frame, Rectangle roi, string wanted, int maxEditDistance, CancellationToken ct)
+    public async Task<DetectionResult> FindCompactLabelAsync(Bitmap frame, Rectangle roi, string wanted, CancellationToken ct)
     {
         foreach (int scale in new[] { 1, 2, 3, 4 })
         {
-            var result = await FindAtScaleAsync(frame, roi, wanted, maxEditDistance, scale, ct);
+            var result = await FindExactCompactAtScaleAsync(frame, roi, wanted, scale, ct);
             if (result.Found) return result;
         }
         return DetectionResult.NotFound;
     }
+
+    private async Task<DetectionResult> FindExactCompactAtScaleAsync(Bitmap frame, Rectangle roi, string wanted, int scale, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        using var crop = frame.Clone(roi, PixelFormat.Format24bppRgb);
+        using var prepared = scale == 1 ? (Bitmap)crop.Clone() : ResizeNearest(crop, crop.Width * scale, crop.Height * scale);
+        using var software = await ToSoftwareBitmapAsync(prepared);
+        var ocr = await _engine.RecognizeAsync(software);
+        ct.ThrowIfCancellationRequested();
+
+        string wantedNorm = FuzzyText.Normalize(wanted);
+        foreach (var line in ocr.Lines)
+        {
+            var words = line.Words;
+            for (int start = 0; start < words.Count; start++)
+            {
+                for (int count = 1; count <= 3 && start + count <= words.Count; count++)
+                {
+                    var selected = words.Skip(start).Take(count).ToArray();
+                    string candidate = string.Concat(selected.Select(w => w.Text));
+                    if (!FuzzyText.Normalize(candidate).Equals(wantedNorm, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    double left = selected.Min(w => w.BoundingRect.X);
+                    double top = selected.Min(w => w.BoundingRect.Y);
+                    double right = selected.Max(w => w.BoundingRect.X + w.BoundingRect.Width);
+                    double bottom = selected.Max(w => w.BoundingRect.Y + w.BoundingRect.Height);
+                    var bounds = Rectangle.FromLTRB(
+                        roi.X + (int)Math.Round(left / scale),
+                        roi.Y + (int)Math.Round(top / scale),
+                        roi.X + (int)Math.Round(right / scale),
+                        roi.Y + (int)Math.Round(bottom / scale));
+                    return new DetectionResult(true, bounds, 1.0, candidate);
+                }
+            }
+        }
+        return DetectionResult.NotFound;
+    }
 '''
-ocr = replace_once(ocr, ocr_anchor, ocr_insert, "compact label OCR scales")
+ocr = replace_once(ocr, ocr_anchor, ocr_insert, "exact compact label OCR")
 write(ocr_path, ocr)
 
 detector = read(detector_path)
@@ -85,49 +122,48 @@ detector_new = '''        if (t.Kind.Equals("ocr", StringComparison.OrdinalIgnor
         {
             if (string.IsNullOrWhiteSpace(t.Text)) return DetectionResult.NotFound;
 
-            bool compactDungeonSlot =
+            bool exactDungeonSlot =
                 id.Equals("route_d1_1", StringComparison.OrdinalIgnoreCase) ||
                 id.Equals("route_d2_1", StringComparison.OrdinalIgnoreCase) ||
                 id.Equals("route_regular_1_1", StringComparison.OrdinalIgnoreCase) ||
                 id.Equals("route_regular_2_1", StringComparison.OrdinalIgnoreCase);
 
-            if (compactDungeonSlot)
-                return await _ocr.FindCompactLabelAsync(frame, roi, t.Text, t.MaxEditDistance, ct);
+            if (exactDungeonSlot)
+                return await _ocr.FindCompactLabelAsync(frame, roi, t.Text, ct);
 
             return await _ocr.FindTextAsync(frame, roi, t.Text, t.MaxEditDistance, t.OcrRetryAt2x, ct);
         }
 '''
-detector = replace_once(detector, detector_anchor, detector_new, "compact dungeon slot detector")
+detector = replace_once(detector, detector_anchor, detector_new, "exact dungeon slot detector")
 write(detector_path, detector)
 
-# Unify Peaca/Runda/Fiod slot targets. We deliberately search for "1-1"/"2-1"
-# rather than requiring the optional D prefix; FuzzyText normalization then matches
-# D1-1/D2-1 as well as plain 1-1/2-1.
+# Narrow ROIs to the actual 1-1/2-1 tile locations so adjacent slots are excluded.
+# Peaca uses D1-1/D2-1 labels. Runda/Fiod use plain 1-1/2-1 labels.
 import json
 targets = json.loads(read(targets_path))
 slot_updates = {
     "route_d1_1": {
-        "Roi": {"X": 160, "Y": 420, "Width": 380, "Height": 270},
-        "Text": "1-1",
-        "MaxEditDistance": 2,
+        "Roi": {"X": 255, "Y": 470, "Width": 125, "Height": 125},
+        "Text": "D1-1",
+        "MaxEditDistance": 0,
         "OcrRetryAt2x": True,
     },
     "route_d2_1": {
-        "Roi": {"X": 160, "Y": 680, "Width": 400, "Height": 280},
-        "Text": "2-1",
-        "MaxEditDistance": 2,
+        "Roi": {"X": 255, "Y": 760, "Width": 125, "Height": 135},
+        "Text": "D2-1",
+        "MaxEditDistance": 0,
         "OcrRetryAt2x": True,
     },
     "route_regular_1_1": {
-        "Roi": {"X": 160, "Y": 420, "Width": 380, "Height": 270},
+        "Roi": {"X": 255, "Y": 540, "Width": 125, "Height": 125},
         "Text": "1-1",
-        "MaxEditDistance": 2,
+        "MaxEditDistance": 0,
         "OcrRetryAt2x": True,
     },
     "route_regular_2_1": {
-        "Roi": {"X": 160, "Y": 680, "Width": 400, "Height": 280},
+        "Roi": {"X": 300, "Y": 760, "Width": 125, "Height": 135},
         "Text": "2-1",
-        "MaxEditDistance": 2,
+        "MaxEditDistance": 0,
         "OcrRetryAt2x": True,
     },
 }
@@ -144,7 +180,7 @@ if missing:
 
 write(targets_path, json.dumps(targets, ensure_ascii=False, indent=2) + "\n")
 
-# Give the selected 1-1/2-1 label up to 30 seconds to become readable after arrival.
+# Give all selected 1-1/2-1 labels up to 30 seconds to settle/become readable.
 engine = read(engine_path)
 engine = replace_once(
     engine,
@@ -176,8 +212,8 @@ for path in root.rglob("*"):
     "MABI AUTO V0.1.38 - DUNGEON ARRIVAL + 1-1/2-1 OCR FIX\n\n"
     "Changes dungeon travel arrival verification from 30 seconds to 5 minutes (300 seconds).\n"
     "Applies to Peaca Tomb, Runda Dungeon and Fiod Dungeon auto-route arrival waits.\n"
-    "Peaca/Runda/Fiod 1-1 and 2-1 markers now share wider ROIs and compact-label OCR retries at 1x/2x/3x/4x.\n"
-    "Slot matching searches 1-1/2-1 so it accepts Peaca D1-1/D2-1 as well as regular 1-1/2-1 labels.\n"
+    "Peaca/Runda/Fiod 1-1 and 2-1 markers use narrow per-layout ROIs plus exact compact-label OCR at 1x/2x/3x/4x.\n"
+    "Peaca requires exact D1-1/D2-1; Runda/Fiod require exact 1-1/2-1. Adjacent slots are excluded.\n"
     "Only 1-1 and 2-1 are used; 1-2/1-3/2-2/2-3 remain ignored.\n"
     "All V0.1.37 dungeon-icon clicking, recognition UI, updater-survival and safety behavior are preserved.\n",
     encoding="utf-8"
@@ -208,18 +244,23 @@ if 'WaitForTargetAsync(slotTarget, 30, ct)' not in check:
 ocr_check = read(ocr_path)
 detector_check = read(detector_path)
 targets_check = {x.get("Id"): x for x in json.loads(read(targets_path))}
-if "FindCompactLabelAsync" not in ocr_check or "new[] { 1, 2, 3, 4 }" not in ocr_check:
-    raise RuntimeError("compact label OCR retry scales missing")
+if "FindCompactLabelAsync" not in ocr_check or "FindExactCompactAtScaleAsync" not in ocr_check:
+    raise RuntimeError("exact compact label OCR missing")
+if "new[] { 1, 2, 3, 4 }" not in ocr_check:
+    raise RuntimeError("compact OCR scale retries missing")
 for tid in ("route_d1_1", "route_d2_1", "route_regular_1_1", "route_regular_2_1"):
     if tid not in detector_check:
-        raise RuntimeError("compact detector route missing: " + tid)
-if targets_check["route_d1_1"].get("Text") != "1-1":
-    raise RuntimeError("Peaca 1-1 tolerant text missing")
-if targets_check["route_d2_1"].get("Text") != "2-1":
-    raise RuntimeError("Peaca 2-1 tolerant text missing")
-if targets_check["route_regular_1_1"].get("Text") != "1-1":
-    raise RuntimeError("Runda/Fiod 1-1 tolerant text missing")
-if targets_check["route_regular_2_1"].get("Text") != "2-1":
-    raise RuntimeError("Runda/Fiod 2-1 tolerant text missing")
+        raise RuntimeError("exact detector route missing: " + tid)
+expected_slots = {
+    "route_d1_1": ("D1-1", 0),
+    "route_d2_1": ("D2-1", 0),
+    "route_regular_1_1": ("1-1", 0),
+    "route_regular_2_1": ("2-1", 0),
+}
+for tid, (wanted, distance) in expected_slots.items():
+    if targets_check[tid].get("Text") != wanted or targets_check[tid].get("MaxEditDistance") != distance:
+        raise RuntimeError("unsafe slot target config: " + tid)
+if 'AddButton("인식 테스트", new(18, 511, 178, 59), owner.ShowVisualRecognitionTest, "", "nav");' not in read(app / "MainForm.ReferenceUI.cs"):
+    raise RuntimeError("V0.1.37 recognition-test UI fix not preserved")
 
-print("V0.1.38 patch applied: 5min arrival + Peaca/Runda/Fiod 1-1/2-1 compact OCR")
+print("V0.1.38 patch applied: 5min arrival + exact Peaca/Runda/Fiod 1-1/2-1 OCR")
