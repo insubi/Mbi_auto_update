@@ -1,0 +1,52 @@
+name: Extract legacy dungeon entry sources
+
+on:
+  push:
+    branches:
+      - v0142-challenge-click-guard
+    paths:
+      - '.github/workflows/extract-legacy-entry-v0142.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  extract:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract V0.1.21 V0.1.22 V0.1.24 entry sources
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Path legacy,diagnostics -Force | Out-Null
+          $rels=@(
+            @{Tag='V0.1.21'; Asset='CombinedFishingDungeon_V0.1.21_DungeonEntryReadyGuard.zip'},
+            @{Tag='V0.1.22'; Asset='CombinedFishingDungeon_V0.1.22_DungeonChallengeSemantics.zip'},
+            @{Tag='V0.1.24'; Asset='CombinedFishingDungeon_V0.1.24_SelectedChallengeDisambiguation.zip'}
+          )
+          foreach($r in $rels){
+            $dir=Join-Path legacy $r.Tag
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            gh release download $r.Tag --repo $env:REPO --pattern $r.Asset --dir $dir
+            if($LASTEXITCODE-ne0){throw "download failed $($r.Tag)"}
+            Expand-Archive -LiteralPath (Join-Path $dir $r.Asset) -DestinationPath (Join-Path $dir 'x') -Force
+
+            $engine=Get-ChildItem (Join-Path $dir 'x') -Recurse -File -Filter ScenarioEngine.cs | Select-Object -First 1
+            $targets=Get-ChildItem (Join-Path $dir 'x') -Recurse -File -Filter targets.json | Select-Object -First 1
+            $scenario=Get-ChildItem (Join-Path $dir 'x') -Recurse -File -Filter scenario.json | Select-Object -First 1
+            if($null-eq$engine -or $null-eq$targets -or $null-eq$scenario){throw "source missing $($r.Tag)"}
+
+            Copy-Item $engine.FullName "diagnostics/ScenarioEngine_$($r.Tag.Replace('.','_')).cs" -Force
+            Copy-Item $targets.FullName "diagnostics/targets_$($r.Tag.Replace('.','_')).json" -Force
+            Copy-Item $scenario.FullName "diagnostics/scenario_$($r.Tag.Replace('.','_')).json" -Force
+          }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add diagnostics/ScenarioEngine_V0_1_21.cs diagnostics/ScenarioEngine_V0_1_22.cs diagnostics/ScenarioEngine_V0_1_24.cs diagnostics/targets_V0_1_21.json diagnostics/targets_V0_1_22.json diagnostics/targets_V0_1_24.json diagnostics/scenario_V0_1_21.json diagnostics/scenario_V0_1_22.json diagnostics/scenario_V0_1_24.json
+          git commit -m 'Extract legacy dungeon entry sources [skip ci]'
+          git push origin HEAD:v0142-challenge-click-guard
