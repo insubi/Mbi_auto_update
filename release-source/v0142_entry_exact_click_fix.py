@@ -11,6 +11,7 @@ app = root / "FishingAutomation"
 detector_path = app / "dungeon" / "TargetDetector.cs"
 engine_path = app / "dungeon" / "ScenarioEngine.cs"
 targets_path = app / "dungeon" / "config" / "targets.json"
+reference_ui_path = app / "MainForm.ReferenceUI.cs"
 
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8-sig")
@@ -103,7 +104,17 @@ new_click = '''                    else
 engine = replace_once(engine, old_click, new_click, "entry exact click guard")
 write(engine_path, engine)
 
-# 4) Version bump.
+# 4) Recognition navigation label: shorten to "인식" and restore the same
+# left-side image icon used by the other navigation buttons.
+reference_ui = read(reference_ui_path)
+reference_ui = replace_once(
+    reference_ui,
+    'AddButton("인식 테스트", new(18, 511, 178, 59), owner.ShowVisualRecognitionTest, "", "nav");',
+    'AddButton("인식", new(18, 511, 170, 59), owner.ShowVisualRecognitionTest, "image", "nav");',
+    "recognition nav label/icon")
+write(reference_ui_path, reference_ui)
+
+# 5) Version bump.
 for path in root.rglob("*"):
     if not path.is_file() or path.suffix.lower() not in {".cs", ".csproj", ".json", ".cmd", ".ps1", ".txt"}:
         continue
@@ -125,7 +136,7 @@ for path in root.rglob("*"):
     "If Windows OCR reads '파티찾기 입장하기' on one line, only the '입장하기' word bounds are eligible for clicking.\n"
     "A final click guard rejects any enter_bottom result whose normalized OCR text is not exactly '입장하기'.\n"
     "The log records the exact entry word bounds and center used for the click.\n"
-    "No UI changes are included in V0.1.42. Existing recognition-test UI fix is preserved.\n",
+    "The left navigation label is shortened from '인식 테스트' to '인식' and uses the standard image icon so it no longer clips.\n",
     encoding="utf-8"
 )
 
@@ -140,6 +151,12 @@ for tid in ("enter_bottom", "enter_confirm"):
 
 detector_check = read(detector_path)
 engine_check = read(engine_path)
+reference_ui_check = read(reference_ui_path)
+if 'AddButton("인식", new(18, 511, 170, 59), owner.ShowVisualRecognitionTest, "image", "nav");' not in reference_ui_check:
+    raise RuntimeError("recognition nav label/icon fix missing")
+if 'AddButton("인식 테스트"' in reference_ui_check:
+    raise RuntimeError("old clipped recognition-test label remains")
+
 for marker in (
     "bool exactClickableEntry",
     'id.Equals("enter_bottom"',
@@ -157,4 +174,4 @@ for marker in (
     if marker not in engine_check:
         raise RuntimeError("entry click guard marker missing: " + marker)
 
-print("V0.1.42 patch applied: exact entry-word bounds + bottom ROI + final click guard")
+print("V0.1.42 patch applied: exact entry-word click + recognition nav label/icon fix")
