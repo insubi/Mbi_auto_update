@@ -55,7 +55,12 @@ if "$incomingUpdater = Join-Path $sourceRoot 'tools\\ApplyUpdate.ps1'" not in te
 apply.write_text(text,encoding="utf-8",newline="\n")
 
 check=apply.read_text(encoding="utf-8-sig")
-for marker in ("V0.1.37 updater survival","$incomingUpdater","tools\\ApplyUpdate.ps1"):
+if not (
+    "V0.1.37 updater survival" in check
+    or "only delete install directories that the incoming package actually replaces" in check
+):
+    raise RuntimeError("updater replacement safety marker missing")
+for marker in ("$incomingUpdater","tools\\ApplyUpdate.ps1"):
     if marker not in check:
         raise RuntimeError("updater survival marker missing: "+marker)
 print("V0.1.37 updater survival patch applied")
