@@ -1,0 +1,6 @@
+status=success
+run_id=35291825239
+run_attempt=1
+sha=f0088dea6ee496b5fed0957c22d5616226b90efe
+ref=refs/heads/v0136-worldmap-ocr-fix
+time=2026-09-18T00:38:12.5060214Z
