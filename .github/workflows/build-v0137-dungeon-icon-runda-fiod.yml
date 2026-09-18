@@ -232,8 +232,7 @@ jobs:
           $tag=$env:RELEASE_TAG
 
           gh release view $tag --repo $env:REPO *> $null
-          if($LASTEXITCODE-eq0){gh release delete $tag --repo $env:REPO --yes --cleanup-tag}
-          $null=$LASTEXITCODE
+          $releaseExists=($LASTEXITCODE-eq0)
 
           @(
             'MABI AUTO V0.1.37 - 던전 아이콘 클릭 + 룬다/피오드 1-1·2-1',
@@ -246,8 +245,20 @@ jobs:
             '업데이트 패키지에 tools/ApplyUpdate.ps1을 포함하고 다음 업데이트에서도 updater가 삭제되지 않도록 보강했습니다.'
           ) | Set-Content notes.txt -Encoding UTF8
 
-          gh release create $tag --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.37' --notes-file notes.txt out/MabiAuto_V0.1.37_Windows_Lite.zip out/MabiAuto_V0.1.37_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.36_UpdaterRepair.zip
-          if($LASTEXITCODE-ne0){throw 'release publish failed'}
+          $assets=@(
+            'out/MabiAuto_V0.1.37_Windows_Lite.zip',
+            'out/MabiAuto_V0.1.37_Windows_Lite.zip.sha256',
+            'out/MabiAuto_V0.1.36_UpdaterRepair.zip'
+          )
+          if($releaseExists){
+            gh release upload $tag @assets --repo $env:REPO --clobber
+            if($LASTEXITCODE-ne0){throw 'release asset overwrite failed'}
+            gh release edit $tag --repo $env:REPO --title 'Mabi Auto V0.1.37' --notes-file notes.txt
+            if($LASTEXITCODE-ne0){throw 'release notes update failed'}
+          }else{
+            gh release create $tag @assets --repo $env:REPO --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.37' --notes-file notes.txt
+            if($LASTEXITCODE-ne0){throw 'release publish failed'}
+          }
 
           $release=gh api "repos/$env:REPO/releases/tags/$tag" | ConvertFrom-Json
           $zip=@($release.assets|Where-Object{$_.name-eq'MabiAuto_V0.1.37_Windows_Lite.zip'})[0]
@@ -257,26 +268,10 @@ jobs:
           Write-Host "RELEASE_DIGEST=$($zip.digest)"
           Write-Host "RELEASE_ZIP_SIZE=$($zip.size)"
 
-      - name: Record V0.1.37 workflow status
+      - name: Report V0.1.37 workflow status
         if: always()
         shell: pwsh
         env:
           JOB_STATUS: ${{ job.status }}
         run: |
-          $ErrorActionPreference='Stop'
-          New-Item -ItemType Directory -Path workflow-status -Force | Out-Null
-          @(
-            "status=$env:JOB_STATUS",
-            "run_id=${{ github.run_id }}",
-            "run_attempt=${{ github.run_attempt }}",
-            "sha=${{ github.sha }}",
-            "ref=${{ github.ref }}",
-            "time=$([DateTime]::UtcNow.ToString('O'))"
-          ) | Set-Content workflow-status/v0137.txt -Encoding UTF8
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add workflow-status/v0137.txt
-          if(-not (git diff --cached --quiet)){
-            git commit -m 'Record V0.1.37 workflow status [skip ci]'
-            git push origin HEAD:v0137-dungeon-icon-runda-fiod
-          }
+          Write-Host "V0137_WORKFLOW_STATUS=$env:JOB_STATUS"
