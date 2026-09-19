@@ -6,8 +6,8 @@ for p in root.rglob('*'):
         old=p.read_text(encoding='utf-8-sig')
         new=old.replace('V0.1.48','V0.1.49').replace('0.1.48.0','0.1.49.0').replace('<Version>0.1.48</Version>','<Version>0.1.49</Version>')
         if old!=new: p.write_text(new,encoding='utf-8',newline='\n')
-assert '<Version>0.1.49</Version>' in (root/'FishingAutomation/FishingAutomation.csproj').read_text()
-assert 'CurrentVersion = "V0.1.49"' in (root/'FishingAutomation/UpdateManager.cs').read_text()
+assert '<Version>0.1.49</Version>' in (root/'FishingAutomation/FishingAutomation.csproj').read_text(encoding='utf-8-sig')
+assert 'CurrentVersion = "V0.1.49"' in (root/'FishingAutomation/UpdateManager.cs').read_text(encoding='utf-8-sig')
 Path('out').mkdir(exist_ok=True)
 with zipfile.ZipFile('out/MabiAuto_V0.1.49_Source.zip','w',zipfile.ZIP_DEFLATED) as z:
     for folder in ['FishingAutomation','MacroWatchdog','tools']:
