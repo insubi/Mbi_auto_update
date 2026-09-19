@@ -86,3 +86,4 @@ jobs:
           $ErrorActionPreference='Stop'
           gh release create V0.1.49 --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.49' --notes-file release-source/v0149_release_notes.md out/MabiAuto_V0.1.49_Windows_Lite.zip out/MabiAuto_V0.1.49_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.49_Source.zip
           if($LASTEXITCODE-ne0){throw 'release creation failed'}
+# release trigger: 2026-09-19 V0.1.49
