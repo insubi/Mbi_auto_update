@@ -1,0 +1,186 @@
+name: Release V0.1.52 Abyss Result Retry Fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v0152-abyss-result-retry.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v0152-abyss-result-retry
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout V0.1.52 patch source
+        uses: actions/checkout@v4
+        with:
+          ref: v0152-abyss-result-retry-fix
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.51 source and apply retry fix
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.51 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.51_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.51 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.51_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          $guardFiles=@(
+            'FishingAutomation/MainForm.cs',
+            'FishingAutomation/MainForm.ReferenceUI.cs',
+            'FishingAutomation/dungeon/ScenarioEngine.cs',
+            'FishingAutomation/dungeon/PeacaRouteEngine.cs',
+            'FishingAutomation/abyss/config/scenario.json',
+            'FishingAutomation/abyss/previews/hallucination_anchorage.jpg',
+            'FishingAutomation/abyss/previews/madness_cave.jpg',
+            'FishingAutomation/abyss/previews/scattered_waterway.jpg'
+          )
+          $before=@{}
+          foreach($rel in $guardFiles){
+            $p=Join-Path $root $rel
+            if(-not(Test-Path $p)){throw "guard file missing before patch: $rel"}
+            $before[$rel]=(Get-FileHash $p -Algorithm SHA256).Hash
+          }
+
+          python release-source/v0152_abyss_result_retry_fix.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.52 Abyss retry patch failed'}
+
+          foreach($rel in $guardFiles){
+            $p=Join-Path $root $rel
+            $after=(Get-FileHash $p -Algorithm SHA256).Hash
+            if($after-ne$before[$rel]){throw "unrelated file changed: $rel"}
+          }
+
+          $retry=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          foreach($marker in @(
+            'private static readonly Rectangle AbyssRetrySafeRoi = new(280, 900, 240, 95);',
+            'frame.Width != 800 || frame.Height != 1000',
+            'FindCompactLabelAsync(frame, AbyssRetrySafeRoi, "다시 하기", ct)',
+            'retry.Found && previous.Found && retry.Bounds.IntersectsWith(previous.Bounds)',
+            '_input.ClickClientPoint(_hwnd, retry.Center);',
+            '다시 하기만 클릭'
+          )){
+            if(-not $retry.Contains($marker)){throw "retry invariant missing: $marker"}
+          }
+          foreach($old in @(
+            'FindCompactLabelAsync(frame, client, "나가기", ct)',
+            'FindCompactLabelAsync(frame, client, "다른 던전 가기", ct)',
+            'AbyssResultLayout.IsConfirmed(exit.Bounds, retry.Bounds, other.Bounds)'
+          )){
+            if($retry.Contains($old)){throw "old three-button gate remains: $old"}
+          }
+
+          $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
+          $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+          $main=Get-Content -Raw (Join-Path $root 'FishingAutomation/MainForm.cs')
+          if(-not $project.Contains('<Version>0.1.52</Version>')){throw 'project version mismatch'}
+          if(-not $update.Contains('CurrentVersion = "V0.1.52"')){throw 'updater version mismatch'}
+          if(-not $main.Contains('await CheckForUpdatesAsync(false);')){throw 'startup auto-update check missing'}
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Windows build and package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          $fish=Join-Path $root 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $root 'MacroWatchdog/MacroWatchdog.csproj'
+
+          dotnet build $fish -c Release
+          if($LASTEXITCODE-ne0){throw 'Windows app build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'watchdog build failed'}
+
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish $fish @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'app publish failed'}
+          dotnet publish $watch @pubArgs -o stage/watchdog
+          if($LASTEXITCODE-ne0){throw 'watchdog publish failed'}
+          Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe -Force
+
+          foreach($name in @('hallucination_anchorage.jpg','madness_cave.jpg','scattered_waterway.jpg')){
+            if(-not(Test-Path "stage/release/abyss/previews/$name")){throw "Abyss preview lost: $name"}
+          }
+
+          $exe=(Resolve-Path stage/release/FishingAutomation.exe).Path
+          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.52.0'){throw "EXE version mismatch: $((Get-Item $exe).VersionInfo.FileVersion)"}
+          $proc=Start-Process $exe -WorkingDirectory (Resolve-Path stage/release).Path -PassThru
+          Start-Sleep 5
+          $proc.Refresh()
+          if($proc.HasExited){throw "smoke test exit $($proc.ExitCode)"}
+          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          New-Item package/release,package/tools,out -ItemType Directory -Force | Out-Null
+          Copy-Item stage/release/* package/release -Recurse -Force
+          Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1 -Force
+          'MABI AUTO V0.1.52 Windows Lite - Abyss result retry recognition fix' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+
+          $zip='out/MabiAuto_V0.1.52_Windows_Lite.zip'
+          Compress-Archive package/* $zip -CompressionLevel Optimal
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip verify -Force
+
+          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.52.0'){throw 'ZIP EXE version mismatch'}
+          if(-not(Test-Path verify/tools/ApplyUpdate.ps1)){throw 'ZIP updater missing'}
+          foreach($name in @('hallucination_anchorage.jpg','madness_cave.jpg','scattered_waterway.jpg')){
+            if(-not(Test-Path "verify/release/abyss/previews/$name")){throw "ZIP Abyss preview lost: $name"}
+          }
+
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.52_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+
+          New-Item source-package -ItemType Directory -Force | Out-Null
+          Copy-Item (Join-Path $root 'FishingAutomation') source-package/FishingAutomation -Recurse
+          Copy-Item (Join-Path $root 'MacroWatchdog') source-package/MacroWatchdog -Recurse
+          Copy-Item (Join-Path $root 'tools') source-package/tools -Recurse
+          Get-ChildItem source-package -Recurse -Directory | Where-Object { $_.Name -in @('bin','obj','debug') } | Remove-Item -Recurse -Force
+          Copy-Item release-source/v0152_release_notes.md source-package/RELEASE_NOTES.md
+          Compress-Archive source-package/* out/MabiAuto_V0.1.52_Source.zip -CompressionLevel Optimal
+
+          Write-Host "V0152_PACKAGE_OK SHA256=$hash"
+
+      - name: Publish V0.1.52
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo=$env:GITHUB_REPOSITORY
+          $tag='V0.1.52'
+          $target=(git rev-parse HEAD).Trim()
+
+          gh release view $tag --repo $repo *> $null
+          if($LASTEXITCODE-eq0){
+            gh release delete $tag --repo $repo --yes --cleanup-tag
+            if($LASTEXITCODE-ne0){throw 'existing V0.1.52 release cleanup failed'}
+          } else {
+            $null=$LASTEXITCODE
+          }
+
+          gh release create $tag --repo $repo --target $target --title 'Mabi Auto V0.1.52' --notes-file release-source/v0152_release_notes.md out/MabiAuto_V0.1.52_Windows_Lite.zip out/MabiAuto_V0.1.52_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.52_Source.zip
+          if($LASTEXITCODE-ne0){throw 'V0.1.52 release creation failed'}
+
+          $release=gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          if($release.draft -or $release.prerelease){throw 'V0.1.52 must be stable/public'}
+          $names=@($release.assets | ForEach-Object {$_.name})
+          foreach($required in @('MabiAuto_V0.1.52_Windows_Lite.zip','MabiAuto_V0.1.52_Windows_Lite.zip.sha256','MabiAuto_V0.1.52_Source.zip')){
+            if($required -notin $names){throw "release asset missing: $required"}
+          }
+          Write-Host "V0152_RELEASE_OK $($release.html_url)"
