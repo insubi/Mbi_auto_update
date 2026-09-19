@@ -144,10 +144,9 @@ jobs:
           ) -join "`n"
           $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($status + "`n"))
           $api="repos/$repo/contents/workflow-status/v0149.txt"
-          $existingJson=gh api "$api?ref=main" 2>$null
-          if($LASTEXITCODE-eq0){
-            $existing=$existingJson | ConvertFrom-Json
-            gh api -X PUT $api -f message='Update V0.1.49 release status' -f content=$encoded -f branch=main -f sha=$existing.sha | Out-Null
+          $existingSha=gh api "$api?ref=main" --jq '.sha' 2>$null
+          if($LASTEXITCODE-eq0 -and -not [string]::IsNullOrWhiteSpace($existingSha)){
+            gh api -X PUT $api -f message='Update V0.1.49 release status' -f content=$encoded -f branch=main -f sha="$existingSha" | Out-Null
           } else {
             $null=$LASTEXITCODE
             gh api -X PUT $api -f message='Record V0.1.49 release status' -f content=$encoded -f branch=main | Out-Null
