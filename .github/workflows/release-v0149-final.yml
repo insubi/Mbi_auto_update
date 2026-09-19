@@ -122,33 +122,3 @@ jobs:
           }
           Write-Host "V0149_RELEASE_OK $($release.html_url)"
 # release trigger: 2026-09-19 V0.1.49
-      - name: Write release status
-        if: always()
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JOB_STATUS: ${{ job.status }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: |
-          $ErrorActionPreference='Stop'
-          $repo=$env:GITHUB_REPOSITORY
-          $status=@(
-            "status=$env:JOB_STATUS",
-            "run_id=$env:RUN_ID",
-            "run_attempt=$env:RUN_ATTEMPT",
-            "source_branch=v0149-mode-separation",
-            "release_tag=V0.1.49",
-            "release_url=https://github.com/$repo/releases/tag/V0.1.49",
-            "time=$([DateTimeOffset]::UtcNow.ToString('O'))"
-          ) -join "`n"
-          $encoded=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($status + "`n"))
-          $api="repos/$repo/contents/workflow-status/v0149.txt"
-          $existingSha=gh api "$api?ref=main" --jq '.sha' 2>$null
-          if($LASTEXITCODE-eq0 -and -not [string]::IsNullOrWhiteSpace($existingSha)){
-            gh api -X PUT $api -f message='Update V0.1.49 release status' -f content=$encoded -f branch=main -f sha="$existingSha" | Out-Null
-          } else {
-            $null=$LASTEXITCODE
-            gh api -X PUT $api -f message='Record V0.1.49 release status' -f content=$encoded -f branch=main | Out-Null
-          }
-          if($LASTEXITCODE-ne0){throw 'release status write failed'}
