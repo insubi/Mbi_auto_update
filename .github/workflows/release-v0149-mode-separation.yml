@@ -1,0 +1,88 @@
+name: Release V0.1.49 Mode Separation
+on:
+  push:
+    branches: [v0149-mode-separation]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release-v0149
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore exact V0.1.48 and apply reviewed changes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.31/CombinedFishingDungeon_V0.1.31_PeacaAutoRoute.zip' -OutFile current.zip
+          if((Get-FileHash current.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne '616535aa2239c3e2e97f33120fd8c4984fe8a32af744bc69ce9b81254072ced9'){throw 'V0.1.31 source digest mismatch'}
+          Expand-Archive current.zip current
+          $root=(Get-ChildItem current -Directory | Select-Object -First 1).FullName
+          $patches=@('v0132_ulla_fixed_click_final.py','v0133_result_retry_fastpath.py','v0134_runtime_error_upload.py','v0135_visual_test_environment.py','v0136_worldmap_ocr_fix.py','v0137_dungeon_icon_runda_fiod.py','v0137_updater_survival.py','v0138_arrival_timeout_5min.py','v0139_slot_template_fix.py','v0140_slot_hybrid_fix.py','v0141_template_path_fix.py','v0142_entry_exact_click_fix.py','v0143_selected_entry_click_guards.py','v0144_entry_space.py','v0145_entry_state_hardening.py','v0146_retry_entry_guard.py','v0147_recovery_entry_priority.py','v0148_current_challenge_direct_entry.py')
+          foreach($patch in $patches){
+            python "release-source/$patch" $root
+            if($LASTEXITCODE-ne0){throw "patch failed: $patch"}
+          }
+          Copy-Item $root baseline -Recurse
+          python release-source/v0149_mode_separation.py $root
+          if($LASTEXITCODE-ne0){throw 'reviewed overlay failed'}
+          python tests/mode-separation/audit.py baseline $root
+          if($LASTEXITCODE-ne0){throw 'mode isolation audit failed'}
+          dotnet run --project tests/mode-separation/ResultLayoutTests.csproj -c Release
+          if($LASTEXITCODE-ne0){throw 'result layout tests failed'}
+          python release-source/v0149_prepare_release.py $root
+          if($LASTEXITCODE-ne0){throw 'release preparation failed'}
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Windows build, publish and smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          $fish=Join-Path $root 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $root 'MacroWatchdog/MacroWatchdog.csproj'
+          dotnet build $fish -c Release
+          if($LASTEXITCODE-ne0){throw 'Windows app build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'watchdog build failed'}
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish $fish @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'app publish failed'}
+          dotnet publish $watch @pubArgs -o stage/watchdog
+          if($LASTEXITCODE-ne0){throw 'watchdog publish failed'}
+          Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe
+          $exe=(Resolve-Path stage/release/FishingAutomation.exe).Path
+          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.49.0'){throw 'EXE version mismatch'}
+          $proc=Start-Process $exe -WorkingDirectory (Resolve-Path stage/release).Path -PassThru
+          Start-Sleep 5
+          $proc.Refresh()
+          if($proc.HasExited){throw "smoke test exit $($proc.ExitCode)"}
+          Stop-Process $proc.Id -Force
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          New-Item package/release,package/tools,out -ItemType Directory -Force | Out-Null
+          Copy-Item stage/release/* package/release -Recurse -Force
+          Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1
+          'MABI AUTO V0.1.49 Windows Lite - current location / separate Peaca route / Abyss retry' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+          foreach($path in @('release/FishingAutomation.exe','release/MacroWatchdog.exe','release/dungeon/config/targets.json','release/abyss/config/scenario.json','tools/ApplyUpdate.ps1')){
+            if(-not(Test-Path "package/$path")){throw "missing package file: $path"}
+          }
+          $zip='out/MabiAuto_V0.1.49_Windows_Lite.zip'
+          Compress-Archive package/* $zip -CompressionLevel Optimal
+          Expand-Archive $zip verify-package
+          if((Get-Item verify-package/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.49.0'){throw 'archive version mismatch'}
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.49_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "WINDOWS_BUILD_SMOKE_PACKAGE_OK SHA256=$hash"
+      - name: Publish update
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          gh release create V0.1.49 --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.49' --notes-file release-source/v0149_release_notes.md out/MabiAuto_V0.1.49_Windows_Lite.zip out/MabiAuto_V0.1.49_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.49_Source.zip
+          if($LASTEXITCODE-ne0){throw 'release creation failed'}

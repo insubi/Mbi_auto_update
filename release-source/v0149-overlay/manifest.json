@@ -1,0 +1,38 @@
+{
+  "FishingAutomation/MainForm.Dashboard.cs": {
+    "before_sha256": "62df43ffdb6f1e70a3e6599bfb14533fc99ebbf2843481e91a31338cbe079559",
+    "after_sha256": "44cad93cfabd344eb6b9cc20b0d4f261625713d5e04b5006ee12385bdcbaf9f4"
+  },
+  "FishingAutomation/MainForm.ReferenceUI.cs": {
+    "before_sha256": "ac7e28eb1e1391cc05139b3ad6bca617f188e02b50c9ac87c1b863a25a98eeb4",
+    "after_sha256": "86606543f38b66acf3a1254815271f997a04e161bed145a1dce305955199b072"
+  },
+  "FishingAutomation/MainForm.cs": {
+    "before_sha256": "1c8be21c83f1a6d4e5a031bba423dc804238ed0876edf749585956426fab9423",
+    "after_sha256": "f6f8108254c73062cc599c11c08158d4c5764e8e6474d4a006f031740e55ba4b"
+  },
+  "FishingAutomation/abyss/config/scenario.json": {
+    "before_sha256": "69d2fd17d9099dcecfacd7ed47af3e102cfa4869df558f1edd11da75677d193f",
+    "after_sha256": "0cc153051d3b4ea62f07ecf6711fd0181f6dbd4bbc053bc71d1ecd81b704f623"
+  },
+  "FishingAutomation/dungeon/AbyssResultLayout.cs": {
+    "before_sha256": null,
+    "after_sha256": "69adb1e526ed54bf18a210b84be641ca597e7214db7d23faf4ed375361541eda"
+  },
+  "FishingAutomation/dungeon/IScenarioRunner.cs": {
+    "before_sha256": null,
+    "after_sha256": "e80a9672236a0e299c84d329d39dccbda086ffbe09b67ada5f68f5344ec9507e"
+  },
+  "FishingAutomation/dungeon/PeacaRouteEngine.cs": {
+    "before_sha256": null,
+    "after_sha256": "e933c1e7d15dc03f16a4d02a783d9b77ccbc0a96f9b826de1a13e49284f72280"
+  },
+  "FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs": {
+    "before_sha256": null,
+    "after_sha256": "17086cdbcd57fcc493e59dbaed42386d622dfe08522a0a387fd299869e93e0c2"
+  },
+  "FishingAutomation/dungeon/ScenarioEngine.cs": {
+    "before_sha256": "470523374dfae253c757d6a9d52c1b1c2f8885c9cc4b6e5bb5e49345f9fc474e",
+    "after_sha256": "262932fe6eec234828c5b4cf58b799d27496bfc1f5f69822b540cbd36db484fe"
+  }
+}
