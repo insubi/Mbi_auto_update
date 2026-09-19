@@ -1,0 +1,35 @@
+name: Inspect Old Abyss Previews
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-old-abyss-previews.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect older releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach($tag in @('V0.1.47','V0.1.46','V0.1.45','V0.1.44','V0.1.43','V0.1.42')){
+            $dir="scan/$tag"
+            New-Item $dir -ItemType Directory -Force | Out-Null
+            gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern "*Windows_Lite.zip" --dir $dir
+            if($LASTEXITCODE-ne0){ Write-Host "DOWNLOAD_FAIL $tag"; continue }
+            $zip=(Get-ChildItem $dir -Filter '*.zip' | Select-Object -First 1).FullName
+            Expand-Archive $zip "$dir/ex" -Force
+            Write-Host "=== $tag ==="
+            $files=Get-ChildItem "$dir/ex" -Recurse -File | Where-Object {
+              $_.FullName -match '\\abyss\\' -and ($_.Extension -match '\.(png|jpg|jpeg)$')
+            }
+            foreach($f in $files){
+              $rel=$f.FullName.Substring((Resolve-Path "$dir/ex").Path.Length+1)
+              Write-Host "$rel | $($f.Length)"
+            }
+          }
