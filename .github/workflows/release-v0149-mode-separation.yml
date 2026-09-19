@@ -1,7 +1,5 @@
 name: Release V0.1.49 Mode Separation
 on:
-  push:
-    branches: [v0149-mode-separation]
   workflow_dispatch:
 permissions:
   contents: write
