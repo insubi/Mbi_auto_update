@@ -5,7 +5,7 @@ changed=[]
 for p in current.rglob('*'):
  if not p.is_file() or {'bin','obj'} & set(p.relative_to(current).parts): continue
  q=baseline/p.relative_to(current)
- if not q.exists() or p.read_bytes()!=q.read_bytes(): changed.append(str(p.relative_to(current)))
+ if not q.exists() or p.read_bytes()!=q.read_bytes(): changed.append(p.relative_to(current).as_posix())
 expected={'MainForm.cs','MainForm.ReferenceUI.cs','MainForm.Dashboard.cs','abyss/config/scenario.json','dungeon/ScenarioEngine.cs','dungeon/IScenarioRunner.cs','dungeon/PeacaRouteEngine.cs','dungeon/ScenarioEngine.AbyssRetry.cs','dungeon/AbyssResultLayout.cs'}
 assert set(changed)==expected,(changed,expected)
 engine=(current/'dungeon/ScenarioEngine.cs').read_text();old=(baseline/'dungeon/ScenarioEngine.cs').read_text();peaca=(current/'dungeon/PeacaRouteEngine.cs').read_text();main=(current/'MainForm.cs').read_text()
