@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup><Compile Include="../../release-source/v0155-overlay/FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs" Link="ScenarioEngine.AbyssRetry.cs" /></ItemGroup>
+</Project>
