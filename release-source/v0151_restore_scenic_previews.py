@@ -75,17 +75,6 @@ if 'CurrentVersion = "V0.1.50"' not in u:
 u = u.replace('CurrentVersion = "V0.1.50"', 'CurrentVersion = "V0.1.51"', 1)
 write(update, u)
 
-# Some source files may carry the display version. Only replace the exact current tag.
-for path in app.rglob("*.cs"):
-    if path in (refui, update):
-        continue
-    try:
-        t = read(path)
-    except UnicodeDecodeError:
-        continue
-    if "V0.1.50" in t:
-        write(path, t.replace("V0.1.50", "V0.1.51"))
-
 # Final invariants.
 ui = read(refui)
 required = (
