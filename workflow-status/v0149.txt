@@ -1,7 +1,0 @@
-status=failure
-run_id=35414019600
-run_attempt=1
-source_branch=v0149-mode-separation
-release_tag=V0.1.49
-release_url=https://github.com/insubi/Mbi_auto_update/releases/tag/V0.1.49
-time=2026-09-19T01:54:05.8614344+00:00
