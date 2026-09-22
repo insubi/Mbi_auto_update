@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-v0157-auto-update-bootstrap
+  group: release-v0157-auto-update-bootstrap-v2
   cancel-in-progress: false
 
 jobs:
@@ -208,8 +208,21 @@ jobs:
 
           $newZip=(Resolve-Path out/MabiAuto_V0.1.57_Windows_Lite.zip).Path
           Write-Host 'Running repaired V0.1.55 updater against V0.1.57 package...'
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $legacyUpdater -ZipPath $newZip -InstallRoot $install -ProcessId 2147483000
-          if($LASTEXITCODE-ne0){throw "legacy updater process failed exit=$LASTEXITCODE"}
+          $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$legacyUpdater,'-ZipPath',$newZip,'-InstallRoot',$install,'-ProcessId','2147483000')
+          $updateProc=Start-Process powershell.exe -ArgumentList $args -PassThru
+          if(-not $updateProc.WaitForExit(70000)){
+            Stop-Process -Id $updateProc.Id -Force -ErrorAction SilentlyContinue
+            $timeoutLog=Join-Path $install 'update.log'
+            if(Test-Path $timeoutLog){ Write-Host '=== updater log at timeout ==='; Get-Content $timeoutLog }
+            Get-Process FishingAutomation -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            throw 'legacy updater did not exit within 70 seconds'
+          }
+          if($updateProc.ExitCode-ne0){
+            $failedLog=Join-Path $install 'update.log'
+            if(Test-Path $failedLog){ Write-Host '=== updater failure log ==='; Get-Content $failedLog }
+            throw "legacy updater process failed exit=$($updateProc.ExitCode)"
+          }
 
           $newExe=Join-Path $install 'release/FishingAutomation.exe'
           if(-not(Test-Path $newExe)){throw 'updated EXE missing'}
