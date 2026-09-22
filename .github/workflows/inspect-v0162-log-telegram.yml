@@ -1,0 +1,29 @@
+name: Inspect V0.1.62 Log and Telegram
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0162-log-telegram.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect current source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.62/MabiAuto_V0.1.62_Source.zip' -OutFile current.zip
+          Expand-Archive current.zip current -Force
+          $root=(Resolve-Path current).Path
+          $app=Join-Path $root 'FishingAutomation'
+          Write-Host '=== CLEAR SCORE LOG ==='
+          Get-ChildItem $app -Recurse -Filter *.cs | Select-String -Pattern '클리어 후보 점수|title=|touch=' -Context 4,6 | ForEach-Object {$_.ToString()}
+          Write-Host '=== TELEGRAM / NOTIFY FILES ==='
+          Get-ChildItem $app -Recurse -Filter *.cs | Select-String -Pattern 'Telegram|SendMessage|Notify|알림|약어|상태:|모드:|성공:|실패:' -Context 3,8 | ForEach-Object {$_.ToString()}
