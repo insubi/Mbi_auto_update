@@ -114,28 +114,16 @@ jobs:
           "PRODUCTION_DLL=$($dll.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "PRODUCTION_DLL=$($dll.FullName)"
 
-      - name: Run real-screen offline regression tests
+      - name: Run actual-capture offline regression tests
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          $fixture=(Resolve-Path 'tests/abyss-offline/fixtures').Path
           $fishDir=(Resolve-Path (Join-Path $env:SOURCE_ROOT 'FishingAutomation')).Path
+          $actualResult=(Resolve-Path 'tests/abyss-offline/result_buttons_actual.b64').Path
 
-          $expect=@{
-            'abyss_result_real.jpg'='480x85'
-            'abyss_clear_touch_real.jpg'='800x1000'
-          }
-          foreach($name in $expect.Keys){
-            $p=Join-Path $fixture $name
-            if(-not(Test-Path $p)){throw "fixture missing: $name"}
-            $img=[System.Drawing.Image]::FromFile($p)
-            try {
-              $actual="$($img.Width)x$($img.Height)"
-              if($actual-ne$expect[$name]){throw "fixture size mismatch: $name => $actual expected=$($expect[$name])"}
-            } finally { $img.Dispose() }
-          }
+          if((Get-Item $actualResult).Length-lt3000){throw 'actual-capture fixture payload is unexpectedly small'}
 
-          dotnet run --project tests/abyss-offline/AbyssOfflineRegressionTests.csproj -c Release -- $env:PRODUCTION_DLL $fishDir $fixture
+          dotnet run --project tests/abyss-offline/AbyssOfflineRegressionTests.csproj -c Release -- $env:PRODUCTION_DLL $fishDir $actualResult
           if($LASTEXITCODE-ne0){throw 'offline Abyss regression failed'}
 
       - name: Publish Windows package
