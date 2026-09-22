@@ -71,7 +71,7 @@ jobs:
 
           $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
           $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
-          if(-not $project.Contains('<Version>0.1.64</Version>')){throw 'project version mismatch'}
+          if(-not $project.Contains('<Version>0.1.65</Version>')){throw 'project version mismatch'}
           if(-not $update.Contains('CurrentVersion = "V0.1.65"')){throw 'updater version mismatch'}
 
           "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
@@ -97,7 +97,7 @@ jobs:
           Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe -Force
 
           $exe=(Resolve-Path stage/release/FishingAutomation.exe).Path
-          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.64.0'){throw "EXE version mismatch: $((Get-Item $exe).VersionInfo.FileVersion)"}
+          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.65.0'){throw "EXE version mismatch: $((Get-Item $exe).VersionInfo.FileVersion)"}
 
           $proc=Start-Process $exe -WorkingDirectory (Resolve-Path stage/release).Path -PassThru
           Start-Sleep 5
@@ -137,7 +137,7 @@ jobs:
 
           Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $zip verify -Force
-          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.64.0'){throw 'ZIP EXE version mismatch'}
+          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.65.0'){throw 'ZIP EXE version mismatch'}
           foreach($required in @(
             'release/FishingAutomation.exe',
             'release/abyss/config/scenario.json',
