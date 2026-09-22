@@ -87,4 +87,5 @@ jobs:
                   ]: method(t,n)
           '@ | Set-Content extract.py -Encoding UTF8
 
+          $env:PYTHONIOENCODING='utf-8'
           python extract.py $engine $retry
