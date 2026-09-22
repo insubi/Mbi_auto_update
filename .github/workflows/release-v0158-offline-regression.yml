@@ -212,6 +212,15 @@ jobs:
           Expand-Archive legacy/MabiAuto_V0.1.57_Windows_Lite.zip legacy/install -Force
 
           $install=(Resolve-Path legacy/install).Path
+
+          # V0.1.57's supported recovery path creates the compatibility folder needed
+          # by the updater. Reproduce that exact repaired V0.1.57 state before updating.
+          $repair=(Resolve-Path legacy/install/REPAIR_AUTO_UPDATE.cmd).Path
+          & cmd.exe /d /c $repair
+          if($LASTEXITCODE-ne0){throw "V0.1.57 repair bridge failed exit=$LASTEXITCODE"}
+          if(-not(Test-Path (Join-Path $install 'FishingAutomation'))){throw 'V0.1.57 repair did not create compatibility folder'}
+          if(-not(Test-Path (Join-Path $install 'START.cmd'))){throw 'V0.1.57 repair did not create START.cmd'}
+
           $legacyUpdater=(Resolve-Path legacy/install/tools/ApplyUpdate.ps1).Path
           $releaseZip=(Resolve-Path out/MabiAuto_V0.1.58_Windows_Lite.zip).Path
           $testZip=Join-Path $env:TEMP 'MabiAuto_V0.1.58_Windows_Lite_E2E.zip'
