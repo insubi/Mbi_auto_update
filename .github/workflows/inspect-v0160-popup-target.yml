@@ -1,0 +1,39 @@
+name: Inspect V0.1.60 Popup Target
+
+on:
+  push:
+    branches: [inspect-v0160-retry-miss]
+    paths:
+      - '.github/workflows/inspect-v0160-popup-target.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect popup targets and fixture
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.60 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.60_Source.zip' --dir source
+          Expand-Archive source/MabiAuto_V0.1.60_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+          foreach($p in @('FishingAutomation/abyss/config/targets.json','FishingAutomation/dungeon/config/targets.json')){
+            Write-Host "=== $p ==="
+            $j=Get-Content -Raw (Join-Path $root $p) | ConvertFrom-Json
+            $j | Where-Object { $_.Id -in @('abyss_popup_close','potion_popup_close','selected_ocr_strict','retry_ocr_strict') } | ConvertTo-Json -Depth 20
+          }
+          $fixture=(Resolve-Path 'tests/abyss-offline/result_buttons_actual.b64').Path
+          $bytes=[Convert]::FromBase64String(((Get-Content $fixture)-join '').Trim())
+          [IO.File]::WriteAllBytes('fixture.jpg',$bytes)
+          Add-Type -AssemblyName System.Drawing
+          $img=[Drawing.Image]::FromFile((Resolve-Path 'fixture.jpg'))
+          Write-Host "FIXTURE_SIZE=$($img.Width)x$($img.Height) ASPECT=$([Math]::Round($img.Width/[double]$img.Height,6))"
+          $img.Dispose()
