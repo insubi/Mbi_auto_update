@@ -91,14 +91,95 @@ internal static class Program
         Require(engineSource.Contains("Step 5 is not complete until the actual result screen is confirmed.", StringComparison.Ordinal),
             "V0.1.54 result-screen confirmation guard remains in production source");
 
+        VerifyAbyssStateMachine(production, sourceDir);
+
         if (_failures == 0)
         {
             Console.WriteLine("V0158_OFFLINE_ABYSS_REGRESSION_OK");
+            Console.WriteLine("V0159_ABYSS_STATE_MACHINE_OK");
             return 0;
         }
 
         Console.Error.WriteLine($"V0158_OFFLINE_ABYSS_REGRESSION_FAILED count={_failures}");
         return 1;
+    }
+
+    private static void VerifyAbyssStateMachine(Assembly production, string sourceDir)
+    {
+        Type engineType = production.GetType("DungeonVisionBot.ScenarioEngine", throwOnError: true)!;
+        Type stateType = engineType.GetNestedType("AbyssFlowState", BindingFlags.NonPublic)
+            ?? throw new MissingMemberException(engineType.FullName, "AbyssFlowState");
+        MethodInfo canTransition = engineType.GetMethod(
+            "AbyssCanTransition",
+            BindingFlags.Static | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(engineType.FullName, "AbyssCanTransition");
+
+        object State(string name) => Enum.Parse(stateType, name);
+        bool Can(string from, string to) =>
+            (bool)(canTransition.Invoke(null, new[] { State(from), State(to) }) ?? false);
+
+        var allowed = new (string From, string To)[]
+        {
+            ("Unknown", "CombatClearWait"),
+            ("Unknown", "ClearConfirmed"),
+            ("Unknown", "ResultConfirmed"),
+            ("CombatClearWait", "ClearConfirmed"),
+            ("CombatClearWait", "ResultConfirmed"),
+            ("ClearConfirmed", "TouchReady"),
+            ("ClearConfirmed", "ResultConfirmed"),
+            ("TouchReady", "TouchClicked"),
+            ("TouchReady", "ResultConfirmed"),
+            ("TouchClicked", "ResultConfirmed"),
+            ("ResultConfirmed", "RetryClicked"),
+            ("RetryClicked", "Reentering"),
+            ("Reentering", "CombatClearWait"),
+        };
+
+        foreach (var edge in allowed)
+            Require(Can(edge.From, edge.To), $"state transition allowed: {edge.From} -> {edge.To}");
+
+        var forbidden = new (string From, string To)[]
+        {
+            ("CombatClearWait", "TouchClicked"),
+            ("CombatClearWait", "RetryClicked"),
+            ("ClearConfirmed", "RetryClicked"),
+            ("TouchReady", "RetryClicked"),
+            ("TouchClicked", "RetryClicked"),
+            ("ResultConfirmed", "TouchClicked"),
+            ("RetryClicked", "ResultConfirmed"),
+            ("Reentering", "RetryClicked"),
+        };
+
+        foreach (var edge in forbidden)
+            Require(!Can(edge.From, edge.To), $"state transition blocked: {edge.From} -> {edge.To}");
+
+        string stateSource = File.ReadAllText(
+            Path.Combine(sourceDir, "dungeon", "ScenarioEngine.AbyssState.cs"));
+        string retrySource = File.ReadAllText(
+            Path.Combine(sourceDir, "dungeon", "ScenarioEngine.AbyssRetry.cs"));
+
+        Require(stateSource.Contains("어비스 상태 불일치로 입력 차단", StringComparison.Ordinal),
+            "state machine contains input guard");
+        Require(engineSourceMarker(sourceDir,
+                "AbyssRequireState(AbyssFlowState.TouchReady, \"클리어 화면 터치\")"),
+            "clear-screen touch is guarded by TouchReady");
+        Require(engineSourceMarker(sourceDir,
+                "AbyssRequireState(AbyssFlowState.TouchClicked, \"클리어 화면 클릭 후 결과 화면 대기\")"),
+            "result wait is guarded by TouchClicked");
+        Require(retrySource.Contains(
+                "AbyssRequireState(AbyssFlowState.ResultConfirmed, \"다시 하기 클릭\")",
+                StringComparison.Ordinal),
+            "retry click is guarded by ResultConfirmed");
+        Require(retrySource.Contains(
+                "AbyssRequireState(AbyssFlowState.Reentering, \"다시 하기 후 재입장 전환 확인\")",
+                StringComparison.Ordinal),
+            "retry transition wait is guarded by Reentering");
+
+        static bool engineSourceMarker(string dir, string value)
+        {
+            string text = File.ReadAllText(Path.Combine(dir, "dungeon", "ScenarioEngine.cs"));
+            return text.Contains(value, StringComparison.Ordinal);
+        }
     }
 
     private static Bitmap BuildActualResultFrame(string b64Path)
