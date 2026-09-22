@@ -121,7 +121,14 @@ jobs:
           $fishDir=(Resolve-Path (Join-Path $env:SOURCE_ROOT 'FishingAutomation')).Path
           $actualResult=(Resolve-Path 'tests/abyss-offline/result_buttons_actual.b64').Path
 
-          if((Get-Item $actualResult).Length-lt3000){throw 'actual-capture fixture payload is unexpectedly small'}
+          $b64=((Get-Content $actualResult) -join '').Trim()
+          if($b64.Length-ne4032){throw "actual-capture fixture b64 length mismatch: $($b64.Length)"}
+          $bytes=[Convert]::FromBase64String($b64)
+          $fixtureHash=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+          if($fixtureHash-ne'c23e9e68ac7cfbb0a67fd51a72c91df339f3ca0a664a1e57d2d1b1589b23e79d'){
+            throw "actual-capture fixture hash mismatch: $fixtureHash"
+          }
+          Write-Host "ACTUAL_RESULT_FIXTURE_OK len=$($b64.Length) sha256=$fixtureHash"
 
           dotnet run --project tests/abyss-offline/AbyssOfflineRegressionTests.csproj -c Release -- $env:PRODUCTION_DLL $fishDir $actualResult
           if($LASTEXITCODE-ne0){throw 'offline Abyss regression failed'}
