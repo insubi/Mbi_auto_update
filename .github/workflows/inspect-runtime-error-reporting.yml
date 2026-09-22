@@ -25,7 +25,7 @@ jobs:
           gh release download V0.1.60 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.60_Source.zip' --dir source
           Expand-Archive source/MabiAuto_V0.1.60_Source.zip source/current -Force
           $root=(Resolve-Path source/current).Path
-          foreach($name in @('RuntimeErrorUploader.cs','TelegramNotifier.cs','AppLog.cs','MainForm.cs')){
+          foreach($name in @('RuntimeErrorUploader.cs','TelegramNotifier.cs','AppLog.cs','MainForm.cs','InputController.cs','InterceptionInputController.cs','InterceptionMouse.cs')){
             $f=Get-ChildItem $root -Recurse -Filter $name | Select-Object -First 1
             if($f){
               Write-Host "===== $name : $($f.FullName.Substring($root.Length+1)) ====="
