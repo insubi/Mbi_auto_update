@@ -1,0 +1,54 @@
+name: Inspect V0.1.58 Abyss State Flow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0158-abyss-state.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect V0.1.58 source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.58 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.58_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.58 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.58_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          Write-Host '=== scenario config ==='
+          Get-Content (Join-Path $root 'FishingAutomation/abyss/config/scenario.json')
+
+          Write-Host '=== ScenarioEngine relevant methods ==='
+          $engine=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs')
+          foreach($needle in @(
+            'ExecuteStepAsync',
+            'DetectAbyssConfirmedClearAsync',
+            'AdvanceAbyssClearScreenAsync',
+            'WaitForAbyssTouchPromptAsync',
+            'WaitForAbyssClearScreenGoneAsync',
+            'RunAsync'
+          )){
+            $i=$engine.IndexOf($needle)
+            if($i-ge0){
+              Write-Host "----- $needle -----"
+              Write-Host $engine.Substring([Math]::Max(0,$i-1600),[Math]::Min(9000,$engine.Length-[Math]::Max(0,$i-1600)))
+            }
+          }
+
+          Write-Host '=== AbyssRetry ==='
+          Get-Content (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+
+          Write-Host '=== IScenarioRunner ==='
+          Get-Content (Join-Path $root 'FishingAutomation/dungeon/IScenarioRunner.cs')
