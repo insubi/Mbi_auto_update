@@ -201,21 +201,11 @@ engine = engine.replace(old_death, new_death, 1)
 # Template-only detection is already enforced in targets.json; additionally
 # block the click on both the first and confirmation frames if death UI exists.
 # ---------------------------------------------------------------------------
-old_scene = '''            if (m.Target.Equals("scene_skip", StringComparison.OrdinalIgnoreCase))
-            {
-                Log?.Invoke($"[monitor] scene_skip 1/2 확인 ({r.ReadText ?? r.Score.ToString("0.000")}) -> 별도 프레임 재확인");
-                await Task.Delay(220, ct);
-                using var confirmFrame = await CaptureGameWindowAsync(ct);
-                var confirm = await _detector.DetectAsync(m.Target, confirmFrame, ct);
-                if (!confirm.Found)
-                {
-                    Log?.Invoke("[monitor] scene_skip 2차 확인 실패 -> 클릭 취소");
-                    continue;
-                }
-                r = confirm;
-                Log?.Invoke($"[monitor] scene_skip 2/2 연속 확인 -> 클릭 허용 ({r.ReadText ?? r.Score.ToString("0.000")})");
-            }
-'''
+scene_start = engine.find('            if (m.Target.Equals("scene_skip", StringComparison.OrdinalIgnoreCase))\n')
+scene_end = engine.find("            _monitorLastAction[m.Target] = Environment.TickCount64;\n", scene_start)
+if scene_start < 0 or scene_end < 0 or scene_end <= scene_start:
+    raise SystemExit("scene_skip runtime block boundary mismatch")
+
 new_scene = '''            if (m.Target.Equals("scene_skip", StringComparison.OrdinalIgnoreCase))
             {
                 var sceneDeath1 = DetectAbyssDeathVisualState(frame);
@@ -251,10 +241,9 @@ new_scene = '''            if (m.Target.Equals("scene_skip", StringComparison.Or
                 r = confirm;
                 Log?.Invoke($"[monitor] scene_skip 2/2 이미지 연속 확인 -> 클릭 허용 ({r.Score:0.000})");
             }
+
 '''
-if engine.count(old_scene) != 1:
-    raise SystemExit("scene_skip two-frame block mismatch")
-engine = engine.replace(old_scene, new_scene, 1)
+engine = engine[:scene_start] + new_scene + engine[scene_end:]
 
 write(engine_path, engine)
 
