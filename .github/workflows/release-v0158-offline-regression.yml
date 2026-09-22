@@ -121,12 +121,17 @@ jobs:
           $fixture=(Resolve-Path 'tests/abyss-offline/fixtures').Path
           $fishDir=(Resolve-Path (Join-Path $env:SOURCE_ROOT 'FishingAutomation')).Path
 
-          foreach($name in @('abyss_result_real.jpg','abyss_clear_touch_real.jpg')){
+          $expect=@{
+            'abyss_result_real.jpg'='480x85'
+            'abyss_clear_touch_real.jpg'='800x1000'
+          }
+          foreach($name in $expect.Keys){
             $p=Join-Path $fixture $name
             if(-not(Test-Path $p)){throw "fixture missing: $name"}
             $img=[System.Drawing.Image]::FromFile($p)
             try {
-              if($img.Width-ne800 -or $img.Height-ne1000){throw "fixture must be 800x1000: $name => $($img.Width)x$($img.Height)"}
+              $actual="$($img.Width)x$($img.Height)"
+              if($actual-ne$expect[$name]){throw "fixture size mismatch: $name => $actual expected=$($expect[$name])"}
             } finally { $img.Dispose() }
           }
 
