@@ -206,8 +206,10 @@ jobs:
             throw 'repair bridge did not add UTF-8 BOM to V0.1.55 updater'
           }
 
-          $newZip=(Resolve-Path out/MabiAuto_V0.1.57_Windows_Lite.zip).Path
-          Write-Host 'Running repaired V0.1.55 updater against V0.1.57 package...'
+          $releaseZip=(Resolve-Path out/MabiAuto_V0.1.57_Windows_Lite.zip).Path
+          $newZip=Join-Path $env:TEMP 'MabiAuto_V0.1.57_Windows_Lite_E2E.zip'
+          Copy-Item $releaseZip $newZip -Force
+          Write-Host 'Running repaired V0.1.55 updater against a disposable copy of V0.1.57 package...'
           $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$legacyUpdater,'-ZipPath',$newZip,'-InstallRoot',$install,'-ProcessId','2147483000')
           $updateProc=Start-Process powershell.exe -ArgumentList $args -PassThru
           if(-not $updateProc.WaitForExit(70000)){
