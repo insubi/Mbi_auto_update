@@ -1,0 +1,45 @@
+name: Inspect V0.1.57 Offline Testability
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0157-offline-testability.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect production detector surfaces
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.57 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.57_Source.zip' --dir source
+          Expand-Archive source/MabiAuto_V0.1.57_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+          $fish=Join-Path $root 'FishingAutomation'
+
+          Write-Host '=== ScenarioEngine constructor ==='
+          Select-String -Path (Join-Path $fish 'dungeon/ScenarioEngine.cs') -Pattern 'ScenarioEngine\(' -Context 4,20
+
+          Write-Host '=== Result helper methods ==='
+          Select-String -Path (Join-Path $fish 'dungeon/ScenarioEngine.AbyssRetry.cs') -Pattern 'ScaleAbyssResultRoi|GetGreenButtonRatio|TryDetectAbyssResultButtonRow|DetectAbyssResultRetryAsync' -Context 3,35
+
+          Write-Host '=== Target detector ==='
+          $td=Get-ChildItem $fish -Recurse -Filter '*.cs' | Where-Object { (Get-Content -Raw $_.FullName) -match 'class TargetDetector' } | Select-Object -First 1
+          if($td){ Write-Host "FILE=$($td.FullName)"; Get-Content $td.FullName }
+
+          Write-Host '=== target definitions ==='
+          $targets=Get-ChildItem $fish -Recurse -Filter 'targets.json' | Select-Object -First 5
+          foreach($t in $targets){ Write-Host "FILE=$($t.FullName)"; Select-String -Path $t.FullName -Pattern 'abyss_dungeon_clear_visual|abyss_touch_screen|abyss_result_retry' -Context 0,12 }
+
+          Write-Host '=== project assembly metadata ==='
+          Get-Content (Join-Path $fish 'FishingAutomation.csproj')
