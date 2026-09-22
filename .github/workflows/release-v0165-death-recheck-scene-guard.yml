@@ -1,4 +1,5 @@
 name: Release V0.1.65 Death Recheck and Scene Guard
+# retry-after-static-fix
 
 on:
   push:
