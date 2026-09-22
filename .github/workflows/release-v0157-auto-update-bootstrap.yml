@@ -54,7 +54,7 @@ jobs:
             'FishingAutomation/UpdateManager.cs',
             'tools/ApplyUpdate.ps1'
           )
-          $allowedNew=@('START.cmd')
+          $allowedNew=@('START.cmd','REPAIR_AUTO_UPDATE.cmd')
 
           $after=@{}
           Get-ChildItem $root -Recurse -File | ForEach-Object {
@@ -87,6 +87,15 @@ jobs:
           if(-not(Test-Path $start)){throw 'START.cmd missing after patch'}
           $startText=Get-Content -Raw $start
           if(-not $startText.Contains('release\FishingAutomation.exe')){throw 'START.cmd target mismatch'}
+
+          $repair=Join-Path $root 'REPAIR_AUTO_UPDATE.cmd'
+          if(-not(Test-Path $repair)){throw 'REPAIR_AUTO_UPDATE.cmd missing after patch'}
+
+          $updaterPath=Join-Path $root 'tools/ApplyUpdate.ps1'
+          $bytes=[IO.File]::ReadAllBytes($updaterPath)
+          if($bytes.Length-lt3 -or $bytes[0]-ne0xEF -or $bytes[1]-ne0xBB -or $bytes[2]-ne0xBF){
+            throw 'V0.1.57 ApplyUpdate.ps1 must be UTF-8 BOM for Windows PowerShell 5.1'
+          }
 
           $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
           $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
@@ -130,6 +139,8 @@ jobs:
           Copy-Item stage/release/* package/release -Recurse -Force
           Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1 -Force
           Copy-Item (Join-Path $root 'START.cmd') package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') package/REPAIR_AUTO_UPDATE.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') out/MabiAuto_AutoUpdate_Repair_V0.1.55-56.cmd -Force
           'MABI AUTO V0.1.57 Windows Lite - auto update bootstrap fixed' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
 
           $zip='out/MabiAuto_V0.1.57_Windows_Lite.zip'
@@ -138,7 +149,12 @@ jobs:
           Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $zip verify -Force
           if(-not(Test-Path verify/START.cmd)){throw 'ZIP START.cmd missing'}
+          if(-not(Test-Path verify/REPAIR_AUTO_UPDATE.cmd)){throw 'ZIP repair bridge missing'}
           if(-not(Test-Path verify/tools/ApplyUpdate.ps1)){throw 'ZIP updater missing'}
+          $zipUpdaterBytes=[IO.File]::ReadAllBytes((Resolve-Path verify/tools/ApplyUpdate.ps1))
+          if($zipUpdaterBytes.Length-lt3 -or $zipUpdaterBytes[0]-ne0xEF -or $zipUpdaterBytes[1]-ne0xBB -or $zipUpdaterBytes[2]-ne0xBF){
+            throw 'ZIP updater lost UTF-8 BOM'
+          }
           if(-not(Test-Path verify/release/FishingAutomation.exe)){throw 'ZIP app missing'}
           if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.57.0'){throw 'ZIP EXE version mismatch'}
 
@@ -150,6 +166,7 @@ jobs:
           Copy-Item (Join-Path $root 'MacroWatchdog') source-package/MacroWatchdog -Recurse
           Copy-Item (Join-Path $root 'tools') source-package/tools -Recurse
           Copy-Item (Join-Path $root 'START.cmd') source-package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') source-package/REPAIR_AUTO_UPDATE.cmd -Force
           Get-ChildItem source-package -Recurse -Directory | Where-Object { $_.Name -in @('bin','obj','debug') } | Remove-Item -Recurse -Force
           Copy-Item release-source/v0157_release_notes.md source-package/RELEASE_NOTES.md
           Compress-Archive source-package/* out/MabiAuto_V0.1.57_Source.zip -CompressionLevel Optimal
@@ -175,11 +192,22 @@ jobs:
             throw 'legacy EXE version mismatch'
           }
 
-          $legacyUpdater=(Resolve-Path legacy/install/tools/ApplyUpdate.ps1).Path
-          $newZip=(Resolve-Path out/MabiAuto_V0.1.57_Windows_Lite.zip).Path
           $install=(Resolve-Path legacy/install).Path
 
-          Write-Host 'Running exact V0.1.55 updater against V0.1.57 package...'
+          Copy-Item out/MabiAuto_AutoUpdate_Repair_V0.1.55-56.cmd (Join-Path $install 'REPAIR_AUTO_UPDATE.cmd') -Force
+          Write-Host 'Repairing the exact V0.1.55 installed updater...'
+          & cmd.exe /d /c (Join-Path $install 'REPAIR_AUTO_UPDATE.cmd')
+          if($LASTEXITCODE-ne0){throw "repair bridge failed exit=$LASTEXITCODE"}
+
+          if(-not(Test-Path (Join-Path $install 'START.cmd'))){throw 'repair bridge did not create START.cmd'}
+          $legacyUpdater=(Resolve-Path (Join-Path $install 'tools/ApplyUpdate.ps1')).Path
+          $legacyBytes=[IO.File]::ReadAllBytes($legacyUpdater)
+          if($legacyBytes.Length-lt3 -or $legacyBytes[0]-ne0xEF -or $legacyBytes[1]-ne0xBB -or $legacyBytes[2]-ne0xBF){
+            throw 'repair bridge did not add UTF-8 BOM to V0.1.55 updater'
+          }
+
+          $newZip=(Resolve-Path out/MabiAuto_V0.1.57_Windows_Lite.zip).Path
+          Write-Host 'Running repaired V0.1.55 updater against V0.1.57 package...'
           & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $legacyUpdater -ZipPath $newZip -InstallRoot $install -ProcessId 2147483000
           if($LASTEXITCODE-ne0){throw "legacy updater process failed exit=$LASTEXITCODE"}
 
@@ -220,13 +248,13 @@ jobs:
             $null=$LASTEXITCODE
           }
 
-          gh release create $tag --repo $repo --target $target --title 'Mabi Auto V0.1.57' --notes-file release-source/v0157_release_notes.md out/MabiAuto_V0.1.57_Windows_Lite.zip out/MabiAuto_V0.1.57_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.57_Source.zip
+          gh release create $tag --repo $repo --target $target --title 'Mabi Auto V0.1.57' --notes-file release-source/v0157_release_notes.md out/MabiAuto_V0.1.57_Windows_Lite.zip out/MabiAuto_V0.1.57_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.57_Source.zip out/MabiAuto_AutoUpdate_Repair_V0.1.55-56.cmd
           if($LASTEXITCODE-ne0){throw 'V0.1.57 release creation failed'}
 
           $release=gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
           if($release.draft -or $release.prerelease){throw 'V0.1.57 must be stable/public'}
           $names=@($release.assets | ForEach-Object {$_.name})
-          foreach($required in @('MabiAuto_V0.1.57_Windows_Lite.zip','MabiAuto_V0.1.57_Windows_Lite.zip.sha256','MabiAuto_V0.1.57_Source.zip')){
+          foreach($required in @('MabiAuto_V0.1.57_Windows_Lite.zip','MabiAuto_V0.1.57_Windows_Lite.zip.sha256','MabiAuto_V0.1.57_Source.zip','MabiAuto_AutoUpdate_Repair_V0.1.55-56.cmd')){
             if($required -notin $names){throw "release asset missing: $required"}
           }
           Write-Host "V0157_RELEASE_OK $($release.html_url)"
