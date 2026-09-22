@@ -60,7 +60,9 @@ internal static class Program
             .FirstOrDefault(p => File.ReadAllText(p).Contains("abyss_dungeon_clear_visual", StringComparison.Ordinal))
             ?? throw new FileNotFoundException("Could not locate targets.json containing abyss_dungeon_clear_visual.");
 
-        object detector = BuildTargetDetector(production, targetsJson, sourceDir);
+        string detectorBaseDir = Directory.GetParent(Path.GetDirectoryName(targetsJson)!)!.FullName;
+        Console.WriteLine($"DETECTOR_BASE {detectorBaseDir}");
+        object detector = BuildTargetDetector(production, targetsJson, detectorBaseDir);
         using var clearFrame = BuildProductionTemplateFrame(sourceDir, targetsJson,
             "abyss_dungeon_clear_visual", "abyss_touch_screen");
 
