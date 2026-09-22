@@ -153,6 +153,45 @@ internal static class Program
         foreach (var edge in forbidden)
             Require(!Can(edge.From, edge.To), $"state transition blocked: {edge.From} -> {edge.To}");
 
+        void RequirePath(params string[] states)
+        {
+            for (int i = 0; i + 1 < states.Length; i++)
+            {
+                Require(
+                    Can(states[i], states[i + 1]),
+                    $"canonical state path: {states[i]} -> {states[i + 1]}");
+            }
+        }
+
+        RequirePath(
+            "Unknown",
+            "CombatClearWait",
+            "ClearConfirmed",
+            "TouchReady",
+            "TouchClicked",
+            "ResultConfirmed",
+            "RetryClicked",
+            "Reentering",
+            "CombatClearWait");
+
+        // Recovery may attach directly to an already-visible result screen, but
+        // it must still pass through RetryClicked -> Reentering before combat wait.
+        RequirePath(
+            "Unknown",
+            "ResultConfirmed",
+            "RetryClicked",
+            "Reentering",
+            "CombatClearWait");
+
+        Require(!Can("CombatClearWait", "TouchReady"),
+            "state transition blocked: CombatClearWait -> TouchReady");
+        Require(!Can("ClearConfirmed", "TouchClicked"),
+            "state transition blocked: ClearConfirmed -> TouchClicked");
+        Require(!Can("CombatClearWait", "Reentering"),
+            "state transition blocked: CombatClearWait -> Reentering");
+
+        string engineStateSource = File.ReadAllText(
+            Path.Combine(sourceDir, "dungeon", "ScenarioEngine.cs"));
         string stateSource = File.ReadAllText(
             Path.Combine(sourceDir, "dungeon", "ScenarioEngine.AbyssState.cs"));
         string retrySource = File.ReadAllText(
@@ -174,6 +213,104 @@ internal static class Program
                 "AbyssRequireState(AbyssFlowState.Reentering, \"다시 하기 후 재입장 전환 확인\")",
                 StringComparison.Ordinal),
             "retry transition wait is guarded by Reentering");
+
+        int advanceStart = engineStateSource.IndexOf(
+            "private async Task AdvanceAbyssClearScreenAsync",
+            StringComparison.Ordinal);
+        int touchGuard = engineStateSource.IndexOf(
+            "AbyssRequireState(AbyssFlowState.TouchReady, \"클리어 화면 터치\")",
+            Math.Max(0, advanceStart),
+            StringComparison.Ordinal);
+        int touchClick = engineStateSource.IndexOf(
+            "_input.ClickClientPoint(_hwnd, touch.Center);",
+            Math.Max(0, advanceStart),
+            StringComparison.Ordinal);
+        int touchClickedState = engineStateSource.IndexOf(
+            "AbyssTransitionTo(AbyssFlowState.TouchClicked",
+            Math.Max(0, advanceStart),
+            StringComparison.Ordinal);
+        int resultWait = engineStateSource.IndexOf(
+            "await WaitForAbyssClearScreenGoneAsync(ct);",
+            Math.Max(0, advanceStart),
+            StringComparison.Ordinal);
+        Require(
+            advanceStart >= 0 &&
+            touchGuard > advanceStart &&
+            touchClick > touchGuard &&
+            touchClickedState > touchClick &&
+            resultWait > touchClickedState,
+            "clear flow source order is guard -> touch click -> TouchClicked -> result wait");
+
+        int resultWaitStart = engineStateSource.IndexOf(
+            "private async Task WaitForAbyssClearScreenGoneAsync",
+            StringComparison.Ordinal);
+        int resultWaitGuard = engineStateSource.IndexOf(
+            "AbyssRequireState(AbyssFlowState.TouchClicked, \"클리어 화면 클릭 후 결과 화면 대기\")",
+            Math.Max(0, resultWaitStart),
+            StringComparison.Ordinal);
+        int resultConfirmedState = engineStateSource.IndexOf(
+            "AbyssTransitionTo(AbyssFlowState.ResultConfirmed",
+            Math.Max(0, resultWaitStart),
+            StringComparison.Ordinal);
+        Require(
+            resultWaitStart >= 0 &&
+            resultWaitGuard > resultWaitStart &&
+            resultConfirmedState > resultWaitGuard,
+            "result wait source order is TouchClicked guard -> ResultConfirmed");
+
+        int retryStart = retrySource.IndexOf(
+            "private async Task RetryAbyssResultAsync",
+            StringComparison.Ordinal);
+        int retryResultConfirmed = retrySource.IndexOf(
+            "AbyssTransitionTo(AbyssFlowState.ResultConfirmed",
+            Math.Max(0, retryStart),
+            StringComparison.Ordinal);
+        int retryGuard = retrySource.IndexOf(
+            "AbyssRequireState(AbyssFlowState.ResultConfirmed, \"다시 하기 클릭\")",
+            Math.Max(0, retryStart),
+            StringComparison.Ordinal);
+        int retryClick = retrySource.IndexOf(
+            "_input.ClickClientPoint(_hwnd, retry.Center);",
+            Math.Max(0, retryStart),
+            StringComparison.Ordinal);
+        int retryClickedState = retrySource.IndexOf(
+            "AbyssTransitionTo(AbyssFlowState.RetryClicked",
+            Math.Max(0, retryStart),
+            StringComparison.Ordinal);
+        int reenteringState = retrySource.IndexOf(
+            "AbyssTransitionTo(AbyssFlowState.Reentering",
+            Math.Max(0, retryStart),
+            StringComparison.Ordinal);
+        int retryWait = retrySource.IndexOf(
+            "await WaitForAbyssRetryTransitionAsync(ct);",
+            Math.Max(0, retryStart),
+            StringComparison.Ordinal);
+        Require(
+            retryStart >= 0 &&
+            retryResultConfirmed > retryStart &&
+            retryGuard > retryResultConfirmed &&
+            retryClick > retryGuard &&
+            retryClickedState > retryClick &&
+            reenteringState > retryClickedState &&
+            retryWait > reenteringState,
+            "retry source order is ResultConfirmed -> guard -> click -> RetryClicked -> Reentering -> transition wait");
+
+        int transitionStart = retrySource.IndexOf(
+            "private async Task WaitForAbyssRetryTransitionAsync",
+            StringComparison.Ordinal);
+        int transitionGuard = retrySource.IndexOf(
+            "AbyssRequireState(AbyssFlowState.Reentering, \"다시 하기 후 재입장 전환 확인\")",
+            Math.Max(0, transitionStart),
+            StringComparison.Ordinal);
+        int combatWaitState = retrySource.IndexOf(
+            "AbyssFlowState.CombatClearWait",
+            Math.Max(0, transitionStart),
+            StringComparison.Ordinal);
+        Require(
+            transitionStart >= 0 &&
+            transitionGuard > transitionStart &&
+            combatWaitState > transitionGuard,
+            "retry transition source order is Reentering guard -> CombatClearWait");
 
         static bool engineSourceMarker(string dir, string value)
         {
