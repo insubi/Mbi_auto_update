@@ -28,18 +28,20 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore V0.1.65 source and apply V0.1.66
+      - name: Restore V0.1.64 source and apply V0.1.65 + V0.1.66
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference='Stop'
           New-Item source -ItemType Directory -Force | Out-Null
-          gh release download V0.1.65 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.65_Source.zip' --dir source
-          if($LASTEXITCODE-ne0){throw 'V0.1.65 source download failed'}
-          Expand-Archive source/MabiAuto_V0.1.65_Source.zip source/current -Force
+          gh release download V0.1.64 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.64_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.64 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.64_Source.zip source/current -Force
           $root=(Resolve-Path source/current).Path
 
+          python release-source/v0165_death_recheck_scene_guard.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.65 base patch failed'}
           python release-source/v0166_death_scene_video_hardening.py $root
           if($LASTEXITCODE-ne0){throw 'V0.1.66 patch failed'}
 
