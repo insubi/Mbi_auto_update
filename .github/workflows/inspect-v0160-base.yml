@@ -28,39 +28,19 @@ jobs:
           $root=(Resolve-Path source/current).Path
           "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Inspect popup and result code
+      - name: Inspect production path wiring
         shell: pwsh
         run: |
-          $ErrorActionPreference='Stop'
           $root=$env:SOURCE_ROOT
-          Write-Host '=== FILES ==='
-          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -File |
-            Where-Object { $_.Name -match 'ScenarioEngine|TargetDetector|scenario.json|targets.json' } |
-            ForEach-Object { Write-Host $_.FullName.Substring($root.Length+1) }
-
-          Write-Host '=== POPUP/ESC SEARCH ==='
-          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -File -Include *.cs,*.json |
-            Select-String -Pattern 'abyss_popup_close|popup_close|회복 물약|물약|구매하기|닫기|TapScanCode\(0x01\)|ESC' -Context 5,12 |
-            ForEach-Object { $_.ToString(); $_.Context.PreContext; $_.Line; $_.Context.PostContext; '---' }
-
-          Write-Host '=== CHECK MONITORS ==='
-          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -File -Filter '*.cs' |
-            Select-String -Pattern 'CheckMonitorsAsync' -Context 20,120 |
+          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -File -Include *.cs |
+            Select-String -Pattern 'dungeon_config|Path.Combine.*dungeon|baseDir|abyss.*config|dungeon.*config' -Context 5,12 |
             ForEach-Object { $_.Path; $_.Context.PreContext; $_.Line; $_.Context.PostContext; '---' }
 
-          Write-Host '=== RESULT DETECTION ==='
-          Get-ChildItem (Join-Path $root 'FishingAutomation/dungeon') -Recurse -File -Filter '*.cs' |
-            Select-String -Pattern 'TryDetectAbyssResultButtonRow|DetectAbyssResultRetryAsync|RetryAbyssResultAsync|AbyssResult' -Context 25,100 |
-            ForEach-Object { $_.Path; $_.Context.PreContext; $_.Line; $_.Context.PostContext; '---' }
+          Write-Host '=== NORMAL SCENARIO ==='
+          Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/config/scenario.json')
+          Write-Host '=== NORMAL TARGET POPUP CHECK ==='
+          $normalTargets=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/config/targets.json')
+          if($normalTargets -match 'popup_close|abyss_popup_close|물약|닫기'){ Write-Host $normalTargets } else { Write-Host 'NO_NORMAL_POPUP_TARGET' }
 
-          Write-Host '=== SCENARIOS ==='
-          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -File -Filter 'scenario.json' |
-            ForEach-Object { Write-Host ('--- ' + $_.FullName.Substring($root.Length+1)); Get-Content -Raw $_.FullName }
-
-          Write-Host '=== TARGETS WITH POPUP/RESULT ==='
-          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -File -Filter 'targets.json' |
-            ForEach-Object {
-              Write-Host ('--- ' + $_.FullName.Substring($root.Length+1))
-              $txt=Get-Content -Raw $_.FullName
-              if($txt -match 'popup|result|retry|닫기|물약'){ Write-Host $txt }
-            }
+          Write-Host '=== LEGACY SCENARIO ==='
+          Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon_config/scenario.json')
