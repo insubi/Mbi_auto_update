@@ -2,6 +2,7 @@ using System.Collections;
 using System.Drawing;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.Loader;
 using System.Text.Json;
 
 internal static class Program
@@ -21,6 +22,12 @@ internal static class Program
         string fixtureDir = Path.GetFullPath(args[2]);
         string assemblyDir = Path.GetDirectoryName(assemblyPath)!;
         Environment.SetEnvironmentVariable("PATH", assemblyDir + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH"));
+
+        AssemblyLoadContext.Default.Resolving += (_, name) =>
+        {
+            string candidate = Path.Combine(assemblyDir, name.Name + ".dll");
+            return File.Exists(candidate) ? AssemblyLoadContext.Default.LoadFromAssemblyPath(candidate) : null;
+        };
 
         Assembly production = Assembly.LoadFrom(assemblyPath);
         string resultPath = Path.Combine(fixtureDir, "abyss_result_real.jpg");
