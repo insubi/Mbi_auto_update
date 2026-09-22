@@ -15,22 +15,20 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect V0.1.55 Windows Lite package
+      - name: Inspect watchdog bootstrap
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference='Stop'
-          New-Item pkg -ItemType Directory -Force | Out-Null
-          gh release download V0.1.55 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.55_Windows_Lite.zip' --dir pkg
-          Expand-Archive pkg/MabiAuto_V0.1.55_Windows_Lite.zip pkg/install -Force
-
-          Write-Host '=== TOP LEVEL ==='
-          Get-ChildItem pkg/install -Force | ForEach-Object { Write-Host "$($_.Name) container=$($_.PSIsContainer)" }
-
-          Write-Host "START_EXISTS=$([bool](Test-Path pkg/install/START.cmd))"
-          Write-Host "UPDATER_EXISTS=$([bool](Test-Path pkg/install/tools/ApplyUpdate.ps1))"
-          Write-Host "EXE_EXISTS=$([bool](Test-Path pkg/install/release/FishingAutomation.exe))"
-
-          Write-Host '=== ApplyUpdate restart lines ==='
-          Select-String -Path pkg/install/tools/ApplyUpdate.ps1 -Pattern 'START.cmd|Start-Process' -Context 1,1
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.55 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.55_Source.zip' --dir source
+          Expand-Archive source/MabiAuto_V0.1.55_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+          $matches=Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -Filter '*.cs' | Where-Object {
+            (Get-Content -Raw $_.FullName) -match 'class WatchdogClient'
+          }
+          foreach($m in $matches){
+            Write-Host "=== $($m.FullName) ==="
+            Get-Content $m.FullName
+          }
