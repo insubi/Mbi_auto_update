@@ -15,29 +15,22 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
-      - name: Find updater method definitions
+      - name: Inspect V0.1.55 Windows Lite package
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference='Stop'
-          New-Item source -ItemType Directory -Force | Out-Null
-          gh release download V0.1.55 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.55_Source.zip' --dir source
-          Expand-Archive source/MabiAuto_V0.1.55_Source.zip source/current -Force
-          $root=(Resolve-Path source/current).Path
+          New-Item pkg -ItemType Directory -Force | Out-Null
+          gh release download V0.1.55 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.55_Windows_Lite.zip' --dir pkg
+          Expand-Archive pkg/MabiAuto_V0.1.55_Windows_Lite.zip pkg/install -Force
 
-          Write-Host '=== method locations ==='
-          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -Filter '*.cs' | ForEach-Object {
-            Select-String -Path $_.FullName -Pattern 'CheckForUpdatesAsync|RunStartupDiagnosticsAsync' | ForEach-Object {
-              Write-Host "$($_.Path):$($_.LineNumber):$($_.Line)"
-            }
-          }
+          Write-Host '=== TOP LEVEL ==='
+          Get-ChildItem pkg/install -Force | ForEach-Object { Write-Host "$($_.Name) container=$($_.PSIsContainer)" }
 
-          $files=Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -Filter '*.cs'
-          foreach($file in $files){
-            $raw=Get-Content -Raw $file.FullName
-            if($raw.Contains('CheckForUpdatesAsync')){
-              Write-Host "=== FILE $($file.FullName) ==="
-              Write-Host $raw
-            }
-          }
+          Write-Host "START_EXISTS=$([bool](Test-Path pkg/install/START.cmd))"
+          Write-Host "UPDATER_EXISTS=$([bool](Test-Path pkg/install/tools/ApplyUpdate.ps1))"
+          Write-Host "EXE_EXISTS=$([bool](Test-Path pkg/install/release/FishingAutomation.exe))"
+
+          Write-Host '=== ApplyUpdate restart lines ==='
+          Select-String -Path pkg/install/tools/ApplyUpdate.ps1 -Pattern 'START.cmd|Start-Process' -Context 1,1
