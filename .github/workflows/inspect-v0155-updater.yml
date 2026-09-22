@@ -1,0 +1,33 @@
+name: Inspect V0.1.55 Updater
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0155-updater.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download V0.1.55 source and print updater
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.55 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.55_Source.zip' --dir source
+          Expand-Archive source/MabiAuto_V0.1.55_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+          Write-Host '=== UpdateManager.cs ==='
+          Get-Content (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+          Write-Host '=== ApplyUpdate.ps1 ==='
+          Get-Content (Join-Path $root 'tools/ApplyUpdate.ps1')
+          Write-Host '=== MainForm update calls ==='
+          Select-String -Path (Join-Path $root 'FishingAutomation/MainForm.cs') -Pattern 'CheckForUpdatesAsync|UpdateManager|update' -Context 3,5
