@@ -1,4 +1,4 @@
-name: Inspect V0.1.62 Log and Telegram
+name: Inspect V0.1.63 Log and Telegram
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference='Stop'
-          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.62/MabiAuto_V0.1.62_Source.zip' -OutFile current.zip
+          Invoke-WebRequest -Uri 'https://github.com/insubi/Mbi_auto_update/releases/download/V0.1.63/MabiAuto_V0.1.63_Source.zip' -OutFile current.zip
           Expand-Archive current.zip current -Force
           $root=(Resolve-Path current).Path
           $app=Join-Path $root 'FishingAutomation'
