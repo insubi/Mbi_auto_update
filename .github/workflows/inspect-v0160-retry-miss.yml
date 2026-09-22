@@ -1,0 +1,37 @@
+name: Inspect V0.1.60 Retry Miss
+
+on:
+  push:
+    branches: [inspect-v0160-retry-miss]
+    paths:
+      - '.github/workflows/inspect-v0160-retry-miss.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download V0.1.60 source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.60 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.60_Source.zip' --dir source
+          Expand-Archive source/MabiAuto_V0.1.60_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+          Write-Host '=== ABYSS RETRY SOURCE ==='
+          Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          Write-Host '=== ABYSS STATE SOURCE ==='
+          Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssState.cs')
+          Write-Host '=== ABYSS SCENARIO ==='
+          Get-Content -Raw (Join-Path $root 'FishingAutomation/abyss/config/scenario.json')
+          Write-Host '=== RETRY REFERENCES ==='
+          Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -File -Include *.cs,*.json |
+            Select-String -Pattern 'RetryAbyssResultAsync|DetectAbyssResultRetryAsync|ResultConfirmed|다시 하기|AbyssRetry' -Context 5,15 |
+            ForEach-Object { $_.Path; $_.Context.PreContext; $_.Line; $_.Context.PostContext; '---' }
