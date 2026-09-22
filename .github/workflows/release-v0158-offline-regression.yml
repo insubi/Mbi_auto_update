@@ -1,0 +1,270 @@
+name: Release V0.1.58 Offline Abyss Regression
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v0158-offline-regression.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v0158-offline-regression
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout V0.1.58 test branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0158-offline-abyss-regression-tests
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.57 source and audit metadata-only patch
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.57 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.57_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.57 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.57_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          $before=@{}
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel=$_.FullName.Substring($root.Length+1).Replace('\','/')
+            $before[$rel]=(Get-FileHash $_.FullName -Algorithm SHA256).Hash
+          }
+
+          python release-source/v0158_metadata_only.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.58 metadata patch failed'}
+
+          $allowed=@(
+            'FishingAutomation/FishingAutomation.csproj',
+            'FishingAutomation/UpdateManager.cs'
+          )
+          $after=@{}
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel=$_.FullName.Substring($root.Length+1).Replace('\','/')
+            $after[$rel]=(Get-FileHash $_.FullName -Algorithm SHA256).Hash
+          }
+
+          foreach($rel in $before.Keys){
+            if(-not $after.ContainsKey($rel)){throw "metadata patch deleted runtime file: $rel"}
+            if($before[$rel]-ne$after[$rel] -and $rel -notin $allowed){
+              throw "V0.1.58 changed runtime file outside metadata allowlist: $rel"
+            }
+          }
+          foreach($rel in $after.Keys){
+            if(-not $before.ContainsKey($rel)){throw "V0.1.58 unexpectedly added runtime file: $rel"}
+          }
+          foreach($rel in $allowed){
+            if($before[$rel]-eq$after[$rel]){throw "expected metadata file did not change: $rel"}
+          }
+
+          $critical=@(
+            'FishingAutomation/MainForm.cs',
+            'FishingAutomation/MainForm.ReferenceUI.cs',
+            'FishingAutomation/dungeon/ScenarioEngine.cs',
+            'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs',
+            'FishingAutomation/dungeon/ScenarioEngine.Diagnostics.cs',
+            'FishingAutomation/dungeon/PeacaRouteEngine.cs',
+            'FishingAutomation/abyss/config/scenario.json',
+            'tools/ApplyUpdate.ps1',
+            'START.cmd',
+            'REPAIR_AUTO_UPDATE.cmd'
+          )
+          foreach($rel in $critical){
+            if(-not $before.ContainsKey($rel)){throw "critical V0.1.57 file missing: $rel"}
+            if($before[$rel]-ne$after[$rel]){throw "critical V0.1.57 behavior changed: $rel"}
+          }
+
+          $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
+          $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+          if(-not $project.Contains('<Version>0.1.58</Version>')){throw 'project version mismatch'}
+          if(-not $update.Contains('CurrentVersion = "V0.1.58"')){throw 'updater version mismatch'}
+
+          Write-Host 'V0158_METADATA_ONLY_AUDIT_OK'
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Build production app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          dotnet build $fish -c Release -r win-x64
+          if($LASTEXITCODE-ne0){throw 'production build failed'}
+
+          $dll=Get-ChildItem (Join-Path $env:SOURCE_ROOT 'FishingAutomation/bin/Release') -Recurse -Filter 'FishingAutomation.dll' |
+            Where-Object { $_.FullName -match 'win-x64' } |
+            Sort-Object LastWriteTimeUtc -Descending |
+            Select-Object -First 1
+          if(-not $dll){throw 'production FishingAutomation.dll not found'}
+
+          "PRODUCTION_DLL=$($dll.FullName)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "PRODUCTION_DLL=$($dll.FullName)"
+
+      - name: Run real-screen offline regression tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fixture=(Resolve-Path 'tests/abyss-offline/fixtures').Path
+          $fishDir=(Resolve-Path (Join-Path $env:SOURCE_ROOT 'FishingAutomation')).Path
+
+          foreach($name in @('abyss_result_real.jpg','abyss_clear_touch_real.jpg')){
+            $p=Join-Path $fixture $name
+            if(-not(Test-Path $p)){throw "fixture missing: $name"}
+            $img=[System.Drawing.Image]::FromFile($p)
+            try {
+              if($img.Width-ne800 -or $img.Height-ne1000){throw "fixture must be 800x1000: $name => $($img.Width)x$($img.Height)"}
+            } finally { $img.Dispose() }
+          }
+
+          dotnet run --project tests/abyss-offline/AbyssOfflineRegressionTests.csproj -c Release -- $env:PRODUCTION_DLL $fishDir $fixture
+          if($LASTEXITCODE-ne0){throw 'offline Abyss regression failed'}
+
+      - name: Publish Windows package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          $fish=Join-Path $root 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $root 'MacroWatchdog/MacroWatchdog.csproj'
+
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'watchdog build failed'}
+
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish $fish @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'app publish failed'}
+          dotnet publish $watch @pubArgs -o stage/watchdog
+          if($LASTEXITCODE-ne0){throw 'watchdog publish failed'}
+          Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe -Force
+
+          $exe=(Resolve-Path stage/release/FishingAutomation.exe).Path
+          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.58.0'){throw "EXE version mismatch: $((Get-Item $exe).VersionInfo.FileVersion)"}
+
+          $proc=Start-Process $exe -WorkingDirectory (Resolve-Path stage/release).Path -PassThru
+          Start-Sleep 5
+          $proc.Refresh()
+          if($proc.HasExited){throw "smoke test exit $($proc.ExitCode)"}
+          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          New-Item package/release,package/tools,out -ItemType Directory -Force | Out-Null
+          Copy-Item stage/release/* package/release -Recurse -Force
+          Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1 -Force
+          Copy-Item (Join-Path $root 'START.cmd') package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') package/REPAIR_AUTO_UPDATE.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') out/MabiAuto_AutoUpdate_Repair_V0.1.55-56.cmd -Force
+          'MABI AUTO V0.1.58 Windows Lite - offline regression tests only' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+
+          $zip='out/MabiAuto_V0.1.58_Windows_Lite.zip'
+          Compress-Archive package/* $zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip verify -Force
+          foreach($required in @('START.cmd','REPAIR_AUTO_UPDATE.cmd','tools/ApplyUpdate.ps1','release/FishingAutomation.exe')){
+            if(-not(Test-Path (Join-Path 'verify' $required))){throw "ZIP required updater file missing: $required"}
+          }
+          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.58.0'){throw 'ZIP EXE version mismatch'}
+
+          $updaterBytes=[IO.File]::ReadAllBytes((Resolve-Path verify/tools/ApplyUpdate.ps1))
+          if($updaterBytes.Length-lt3 -or $updaterBytes[0]-ne0xEF -or $updaterBytes[1]-ne0xBB -or $updaterBytes[2]-ne0xBF){
+            throw 'V0.1.57 updater UTF-8 BOM regression'
+          }
+
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.58_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+
+          New-Item source-package -ItemType Directory -Force | Out-Null
+          Copy-Item (Join-Path $root 'FishingAutomation') source-package/FishingAutomation -Recurse
+          Copy-Item (Join-Path $root 'MacroWatchdog') source-package/MacroWatchdog -Recurse
+          Copy-Item (Join-Path $root 'tools') source-package/tools -Recurse
+          Copy-Item (Join-Path $root 'START.cmd') source-package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') source-package/REPAIR_AUTO_UPDATE.cmd -Force
+          Copy-Item tests/abyss-offline source-package/tests/abyss-offline -Recurse
+          Get-ChildItem source-package -Recurse -Directory | Where-Object { $_.Name -in @('bin','obj','debug') } | Remove-Item -Recurse -Force
+          Copy-Item release-source/v0158_release_notes.md source-package/RELEASE_NOTES.md
+          Compress-Archive source-package/* out/MabiAuto_V0.1.58_Source.zip -CompressionLevel Optimal
+
+          Write-Host "V0158_PACKAGE_OK SHA256=$hash"
+
+      - name: End-to-end auto-update V0.1.57 to V0.1.58
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item legacy -ItemType Directory -Force | Out-Null
+          gh release download V0.1.57 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.57_Windows_Lite.zip' --dir legacy
+          if($LASTEXITCODE-ne0){throw 'V0.1.57 Windows Lite download failed'}
+          Expand-Archive legacy/MabiAuto_V0.1.57_Windows_Lite.zip legacy/install -Force
+
+          $install=(Resolve-Path legacy/install).Path
+          $legacyUpdater=(Resolve-Path legacy/install/tools/ApplyUpdate.ps1).Path
+          $releaseZip=(Resolve-Path out/MabiAuto_V0.1.58_Windows_Lite.zip).Path
+          $testZip=Join-Path $env:TEMP 'MabiAuto_V0.1.58_Windows_Lite_E2E.zip'
+          Copy-Item $releaseZip $testZip -Force
+
+          $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$legacyUpdater,'-ZipPath',$testZip,'-InstallRoot',$install,'-ProcessId','2147483000')
+          $p=Start-Process powershell.exe -ArgumentList $args -PassThru
+          if(-not $p.WaitForExit(70000)){
+            Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+            if(Test-Path (Join-Path $install 'update.log')){Get-Content (Join-Path $install 'update.log')}
+            throw 'V0.1.57 updater did not exit within 70 seconds'
+          }
+          if($p.ExitCode-ne0){
+            if(Test-Path (Join-Path $install 'update.log')){Get-Content (Join-Path $install 'update.log')}
+            throw "V0.1.57 updater failed exit=$($p.ExitCode)"
+          }
+
+          $newExe=Join-Path $install 'release/FishingAutomation.exe'
+          if((Get-Item $newExe).VersionInfo.FileVersion-ne'0.1.58.0'){throw 'updated version is not 0.1.58.0'}
+          $log=Get-Content -Raw (Join-Path $install 'update.log')
+          if(-not $log.Contains('New version startup health check OK. Update committed.')){
+            throw 'V0.1.57 -> V0.1.58 health check did not commit'
+          }
+
+          Get-Process FishingAutomation -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'V0158_AUTO_UPDATE_E2E_OK'
+
+      - name: Publish V0.1.58
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo=$env:GITHUB_REPOSITORY
+          $tag='V0.1.58'
+          $target=(git rev-parse HEAD).Trim()
+
+          gh release view $tag --repo $repo *> $null
+          if($LASTEXITCODE-eq0){
+            gh release delete $tag --repo $repo --yes --cleanup-tag
+            if($LASTEXITCODE-ne0){throw 'existing V0.1.58 release cleanup failed'}
+          } else {
+            $null=$LASTEXITCODE
+          }
+
+          gh release create $tag --repo $repo --target $target --title 'Mabi Auto V0.1.58' --notes-file release-source/v0158_release_notes.md out/MabiAuto_V0.1.58_Windows_Lite.zip out/MabiAuto_V0.1.58_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.58_Source.zip out/MabiAuto_AutoUpdate_Repair_V0.1.55-56.cmd
+          if($LASTEXITCODE-ne0){throw 'V0.1.58 release creation failed'}
+
+          $release=gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          if($release.draft -or $release.prerelease){throw 'V0.1.58 must be stable/public'}
+          $names=@($release.assets | ForEach-Object {$_.name})
+          foreach($required in @('MabiAuto_V0.1.58_Windows_Lite.zip','MabiAuto_V0.1.58_Windows_Lite.zip.sha256','MabiAuto_V0.1.58_Source.zip','MabiAuto_AutoUpdate_Repair_V0.1.55-56.cmd')){
+            if($required -notin $names){throw "release asset missing: $required"}
+          }
+          Write-Host "V0158_RELEASE_OK $($release.html_url)"
