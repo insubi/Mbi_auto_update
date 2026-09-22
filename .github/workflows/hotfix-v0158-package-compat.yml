@@ -1,0 +1,180 @@
+name: Hotfix V0.1.58 Package Compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hotfix-v0158-package-compat.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hotfix-v0158-package-compat
+  cancel-in-progress: false
+
+jobs:
+  hotfix:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout V0.1.58 test branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0158-offline-abyss-regression-tests
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.57 source and apply V0.1.58 metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.57 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.57_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.57 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.57_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          $before=@{}
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel=$_.FullName.Substring($root.Length+1).Replace('\','/')
+            $before[$rel]=(Get-FileHash $_.FullName -Algorithm SHA256).Hash
+          }
+
+          python release-source/v0158_metadata_only.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.58 metadata patch failed'}
+
+          $allowed=@('FishingAutomation/FishingAutomation.csproj','FishingAutomation/UpdateManager.cs')
+          Get-ChildItem $root -Recurse -File | ForEach-Object {
+            $rel=$_.FullName.Substring($root.Length+1).Replace('\','/')
+            $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            if($before.ContainsKey($rel) -and $before[$rel]-ne$hash -and $rel -notin $allowed){
+              throw "runtime file changed unexpectedly: $rel"
+            }
+          }
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'V0158_METADATA_ONLY_OK'
+
+      - name: Build compatible V0.1.58 package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          $fish=Join-Path $root 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $root 'MacroWatchdog/MacroWatchdog.csproj'
+
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'watchdog build failed'}
+
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish $fish @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'app publish failed'}
+          dotnet publish $watch @pubArgs -o stage/watchdog
+          if($LASTEXITCODE-ne0){throw 'watchdog publish failed'}
+          Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe -Force
+
+          if((Get-Item stage/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.58.0'){
+            throw 'EXE version mismatch'
+          }
+
+          New-Item package/release,package/tools,package/FishingAutomation,out -ItemType Directory -Force | Out-Null
+          Copy-Item stage/release/* package/release -Recurse -Force
+          Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1 -Force
+          Copy-Item (Join-Path $root 'START.cmd') package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') package/REPAIR_AUTO_UPDATE.cmd -Force
+
+          'Compatibility directory for V0.1.57 updater.' | Set-Content package/FishingAutomation/.update_compat -Encoding ASCII
+          'MABI AUTO V0.1.58 Windows Lite - V0.1.57 updater compatibility packaging' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+
+          $zip='out/MabiAuto_V0.1.58_Windows_Lite.zip'
+          Compress-Archive package/* $zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip verify -Force
+          foreach($required in @(
+            'release/FishingAutomation.exe',
+            'tools/ApplyUpdate.ps1',
+            'START.cmd',
+            'REPAIR_AUTO_UPDATE.cmd',
+            'FishingAutomation/.update_compat'
+          )){
+            if(-not(Test-Path (Join-Path verify $required))){throw "ZIP required file missing: $required"}
+          }
+          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.58.0'){
+            throw 'ZIP EXE version mismatch'
+          }
+
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.58_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+          Write-Host "V0158_COMPAT_PACKAGE_OK SHA256=$hash"
+
+      - name: Test clean V0.1.57 auto-update without repair
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item legacy -ItemType Directory -Force | Out-Null
+          gh release download V0.1.57 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.57_Windows_Lite.zip' --dir legacy
+          if($LASTEXITCODE-ne0){throw 'V0.1.57 Windows Lite download failed'}
+          Expand-Archive legacy/MabiAuto_V0.1.57_Windows_Lite.zip legacy/install -Force
+
+          $install=(Resolve-Path legacy/install).Path
+          if(Test-Path (Join-Path $install 'FishingAutomation')){
+            Remove-Item (Join-Path $install 'FishingAutomation') -Recurse -Force
+          }
+          if(Test-Path (Join-Path $install 'FishingAutomation')){
+            throw 'clean-install precondition failed: compatibility folder still exists'
+          }
+
+          $legacyUpdater=(Resolve-Path legacy/install/tools/ApplyUpdate.ps1).Path
+          $releaseZip=(Resolve-Path out/MabiAuto_V0.1.58_Windows_Lite.zip).Path
+          $testZip=Join-Path $env:TEMP 'MabiAuto_V0.1.58_Windows_Lite_CleanE2E.zip'
+          Copy-Item $releaseZip $testZip -Force
+
+          $args=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$legacyUpdater,'-ZipPath',$testZip,'-InstallRoot',$install,'-ProcessId','2147483000')
+          $p=Start-Process powershell.exe -ArgumentList $args -PassThru
+          if(-not $p.WaitForExit(90000)){
+            Stop-Process $p.Id -Force -ErrorAction SilentlyContinue
+            if(Test-Path (Join-Path $install 'update.log')){Get-Content (Join-Path $install 'update.log')}
+            throw 'clean V0.1.57 updater did not exit within 90 seconds'
+          }
+          if($p.ExitCode-ne0){
+            if(Test-Path (Join-Path $install 'update.log')){Get-Content (Join-Path $install 'update.log')}
+            throw "clean V0.1.57 updater failed exit=$($p.ExitCode)"
+          }
+
+          $newExe=Join-Path $install 'release/FishingAutomation.exe'
+          if((Get-Item $newExe).VersionInfo.FileVersion-ne'0.1.58.0'){throw 'updated version is not 0.1.58.0'}
+          if(-not(Test-Path (Join-Path $install 'FishingAutomation'))){throw 'compatibility directory missing after update'}
+
+          $log=Get-Content -Raw (Join-Path $install 'update.log')
+          if(-not $log.Contains('New version startup health check OK. Update committed.')){
+            throw 'clean V0.1.57 -> V0.1.58 health check did not commit'
+          }
+
+          Get-Process FishingAutomation -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'V0158_CLEAN_V0157_AUTO_UPDATE_OK'
+
+      - name: Replace V0.1.58 Windows assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          gh release upload V0.1.58 --repo $env:GITHUB_REPOSITORY --clobber out/MabiAuto_V0.1.58_Windows_Lite.zip out/MabiAuto_V0.1.58_Windows_Lite.zip.sha256
+          if($LASTEXITCODE-ne0){throw 'V0.1.58 asset replacement failed'}
+
+          $release=gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/V0.1.58" | ConvertFrom-Json
+          $names=@($release.assets | ForEach-Object {$_.name})
+          foreach($required in @('MabiAuto_V0.1.58_Windows_Lite.zip','MabiAuto_V0.1.58_Windows_Lite.zip.sha256')){
+            if($required -notin $names){throw "release asset missing after replacement: $required"}
+          }
+          Write-Host "V0158_COMPAT_ASSETS_REPLACED $($release.html_url)"
