@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect V0.1.58 source
+      - name: Inspect exact V0.1.58 methods
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -23,32 +23,68 @@ jobs:
           $ErrorActionPreference='Stop'
           New-Item source -ItemType Directory -Force | Out-Null
           gh release download V0.1.58 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.58_Source.zip' --dir source
-          if($LASTEXITCODE-ne0){throw 'V0.1.58 source download failed'}
           Expand-Archive source/MabiAuto_V0.1.58_Source.zip source/current -Force
           $root=(Resolve-Path source/current).Path
+          $engine=(Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs')
+          $retry=(Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
 
-          Write-Host '=== scenario config ==='
-          Get-Content (Join-Path $root 'FishingAutomation/abyss/config/scenario.json')
+          @'
+          from pathlib import Path
+          import sys
 
-          Write-Host '=== ScenarioEngine relevant methods ==='
-          $engine=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs')
-          foreach($needle in @(
-            'ExecuteStepAsync',
-            'DetectAbyssConfirmedClearAsync',
-            'AdvanceAbyssClearScreenAsync',
-            'WaitForAbyssTouchPromptAsync',
-            'WaitForAbyssClearScreenGoneAsync',
-            'RunAsync'
-          )){
-            $i=$engine.IndexOf($needle)
-            if($i-ge0){
-              Write-Host "----- $needle -----"
-              Write-Host $engine.Substring([Math]::Max(0,$i-1600),[Math]::Min(9000,$engine.Length-[Math]::Max(0,$i-1600)))
-            }
-          }
+          def method(text, needle):
+              i=text.find(needle)
+              if i<0:
+                  print("MISSING", needle)
+                  return
+              b=text.find("{", i)
+              depth=0
+              in_str=False
+              verbatim=False
+              esc=False
+              j=b
+              while j < len(text):
+                  ch=text[j]
+                  if in_str:
+                      if verbatim:
+                          if ch=='"':
+                              if j+1 < len(text) and text[j+1]=='"':
+                                  j += 2; continue
+                              in_str=False; verbatim=False
+                      else:
+                          if esc: esc=False
+                          elif ch=='\\': esc=True
+                          elif ch=='"': in_str=False
+                  else:
+                      if ch=='"':
+                          in_str=True
+                          verbatim=(j>0 and text[j-1]=='@')
+                      elif ch=='{': depth+=1
+                      elif ch=='}':
+                          depth-=1
+                          if depth==0:
+                              print("===== "+needle+" =====")
+                              print(text[i:j+1])
+                              return
+                  j+=1
+              print("UNTERMINATED", needle)
 
-          Write-Host '=== AbyssRetry ==='
-          Get-Content (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          for p in sys.argv[1:]:
+              t=Path(p).read_text(encoding='utf-8-sig')
+              if p.endswith('ScenarioEngine.cs'):
+                  for n in [
+                      'public async Task RunAsync(CancellationToken ct)',
+                      'private async Task ExecuteStepAsync(ScenarioStep step, CancellationToken ct)',
+                      'private async Task<DetectionResult> DetectAbyssConfirmedClearAsync',
+                      'private async Task<DetectionResult> WaitForAbyssTouchPromptAsync',
+                      'private async Task WaitForAbyssClearScreenGoneAsync',
+                      'private async Task AdvanceAbyssClearScreenAsync'
+                  ]: method(t,n)
+              else:
+                  for n in [
+                      'private async Task RetryAbyssResultAsync',
+                      'private async Task WaitForAbyssRetryTransitionAsync'
+                  ]: method(t,n)
+          '@ | Set-Content extract.py -Encoding UTF8
 
-          Write-Host '=== IScenarioRunner ==='
-          Get-Content (Join-Path $root 'FishingAutomation/dungeon/IScenarioRunner.cs')
+          python extract.py $engine $retry
