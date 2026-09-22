@@ -1,0 +1,37 @@
+name: Inspect V0.1.58 Abyss Targets
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0158-abyss-targets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: List Abyss target IDs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.58 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.58_Source.zip' --dir source
+          Expand-Archive source/MabiAuto_V0.1.58_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+          $targets=Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -Filter 'targets.json'
+          foreach($t in $targets){
+            Write-Host "=== $($t.FullName) ==="
+            $json=Get-Content -Raw $t.FullName | ConvertFrom-Json
+            foreach($x in $json){
+              if($x.Id -like 'abyss_*'){
+                Write-Host ("ID={0} TYPE={1} ROI={2}" -f $x.Id,$x.Type,($x.Roi|ConvertTo-Json -Compress))
+              }
+            }
+          }
