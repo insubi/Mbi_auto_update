@@ -285,7 +285,6 @@ for marker in (
     "실제 결과 화면 후보 1/2",
     "실제 결과 화면 2/2 확인",
     "회복 물약 팝업 ESC 후 닫힘 2프레임 확인",
-    "V0163_GLOBAL_INPUT_LOCK",
     "V0164_ABYSS_CLEAR_LOG_SIMPLIFIED",
 ):
     if marker not in patched:
