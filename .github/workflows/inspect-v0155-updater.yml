@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
-      - name: Download V0.1.55 source and print updater
+      - name: Download V0.1.55 source and inspect startup updater flow
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -25,9 +25,45 @@ jobs:
           gh release download V0.1.55 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.55_Source.zip' --dir source
           Expand-Archive source/MabiAuto_V0.1.55_Source.zip source/current -Force
           $root=(Resolve-Path source/current).Path
-          Write-Host '=== UpdateManager.cs ==='
-          Get-Content (Join-Path $root 'FishingAutomation/UpdateManager.cs')
-          Write-Host '=== ApplyUpdate.ps1 ==='
-          Get-Content (Join-Path $root 'tools/ApplyUpdate.ps1')
-          Write-Host '=== MainForm update calls ==='
-          Select-String -Path (Join-Path $root 'FishingAutomation/MainForm.cs') -Pattern 'CheckForUpdatesAsync|UpdateManager|update' -Context 3,5
+          $main=Get-Content -Raw (Join-Path $root 'FishingAutomation/MainForm.cs')
+
+          function Print-Method([string]$name) {
+            $needle="private async Task $name"
+            $start=$main.IndexOf($needle)
+            if($start-lt0){ $needle="private Task $name"; $start=$main.IndexOf($needle) }
+            if($start-lt0){ Write-Host "METHOD_NOT_FOUND $name"; return }
+            $brace=$main.IndexOf('{',$start)
+            $depth=0
+            $inString=$false
+            $escape=$false
+            $end=$brace
+            for($i=$brace;$i-lt$main.Length;$i++){
+              $ch=$main[$i]
+              if($inString){
+                if($escape){$escape=$false;continue}
+                if($ch-eq'\'){$escape=$true;continue}
+                if($ch-eq'"'){$inString=$false}
+                continue
+              }
+              if($ch-eq'"'){$inString=$true;continue}
+              if($ch-eq'{'){$depth++}
+              elseif($ch-eq'}'){
+                $depth--
+                if($depth-eq0){$end=$i+1;break}
+              }
+            }
+            Write-Host "=== $name ==="
+            Write-Host $main.Substring($start,$end-$start)
+          }
+
+          Print-Method 'CheckForUpdatesAsync'
+          Print-Method 'RunStartupDiagnosticsAsync'
+
+          Write-Host '=== startup shown block ==='
+          $idx=$main.IndexOf('Shown +=')
+          if($idx-ge0){ Write-Host $main.Substring($idx,[Math]::Min(2200,$main.Length-$idx)) }
+
+          Write-Host '=== update version logic live test ==='
+          $api=Invoke-RestMethod -Headers @{'User-Agent'='MabiAuto31';'Accept'='application/vnd.github+json'} -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases?per_page=30"
+          $stable=@($api | Where-Object { -not $_.draft -and -not $_.prerelease -and $_.tag_name -match '^[vV][0-9.]+$' })
+          $stable | Select-Object -First 8 | ForEach-Object { Write-Host "RELEASE $($_.tag_name) assets=$(@($_.assets).Count)" }
