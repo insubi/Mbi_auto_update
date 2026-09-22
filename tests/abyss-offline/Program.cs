@@ -35,10 +35,11 @@ internal static class Program
         Require(File.Exists(resultPath), "real result fixture exists");
         Require(File.Exists(clearPath), "real clear/touch fixture exists");
 
-        using var result = new Bitmap(resultPath);
+        using var resultRow = new Bitmap(resultPath);
         using var clear = new Bitmap(clearPath);
+        using var result = BuildCanonicalResultFrame(resultRow);
 
-        Console.WriteLine($"FIXTURE result={result.Width}x{result.Height} clear={clear.Width}x{clear.Height}");
+        Console.WriteLine($"FIXTURE result-row={resultRow.Width}x{resultRow.Height} reconstructed={result.Width}x{result.Height} clear={clear.Width}x{clear.Height}");
 
         // Call the exact private V0.1.55+ production visual-row detector by reflection.
         bool resultFound = InvokeResultVisualDetector(production, result, out Rectangle resultRetry);
@@ -154,6 +155,21 @@ internal static class Program
         Rectangle bounds = (Rectangle)rt.GetProperty("Bounds")!.GetValue(result)!;
         string? text = rt.GetProperty("ReadText")!.GetValue(result) as string;
         return new DetectionView(found, score, bounds, text);
+    }
+
+    private static Bitmap BuildCanonicalResultFrame(Bitmap buttonRow)
+    {
+        if (buttonRow.Width != 480 || buttonRow.Height != 85)
+            throw new InvalidOperationException($"Result button-row fixture must be 480x85, got {buttonRow.Width}x{buttonRow.Height}.");
+
+        var frame = new Bitmap(800, 1000);
+        using Graphics g = Graphics.FromImage(frame);
+        g.Clear(Color.Black);
+
+        // V0.1.55 production canonical row spans x=160..640, y=905..990.
+        // Preserve the captured pixels exactly and place them at their real client coordinates.
+        g.DrawImageUnscaled(buttonRow, 160, 905);
+        return frame;
     }
 
     private static Bitmap Resize(Bitmap source, int width, int height)
