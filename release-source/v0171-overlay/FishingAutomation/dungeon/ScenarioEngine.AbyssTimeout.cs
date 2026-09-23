@@ -7,10 +7,10 @@ internal sealed partial class ScenarioEngine
     private long? _abyssCombatStartedAt;
     private bool _abyssExitInProgress;
 
-    private void ResetAbyssExitState()
+    private void ResetAbyssExitState(bool clearConfirmed = false)
     {
         _abyssExitInProgress = false;
-        Log?.Invoke("[어비스 퇴장 상태 초기화] 정상 진행");
+        Log?.Invoke(clearConfirmed ? "[어비스 퇴장 상태 초기화] 클리어 확인" : "[어비스 퇴장 상태 초기화] 정상 진행");
     }
 
     private async Task StartAbyssCombatClockAsync(CancellationToken ct)
@@ -44,7 +44,7 @@ internal sealed partial class ScenarioEngine
         var touch = await _detector.DetectAsync("abyss_touch_screen", frame, ct);
         if (touch.Found)
         {
-            ResetAbyssExitState();
+            ResetAbyssExitState(true);
             AbyssTransitionTo(AbyssFlowState.ClearConfirmed, "10분 경계에서 화면 터치 문구 확인");
             await AdvanceAbyssClearScreenAsync(touch, ct);
             return true;
@@ -52,7 +52,7 @@ internal sealed partial class ScenarioEngine
         var result = await DetectAbyssResultRetryAsync(frame, ct);
         if (result.Found)
         {
-            ResetAbyssExitState();
+            ResetAbyssExitState(true);
             AbyssTransitionTo(AbyssFlowState.ClearConfirmed, "10분 경계에서 실제 결과 화면 확인");
             AbyssTransitionTo(AbyssFlowState.ResultConfirmed, "기존 결과 처리로 연결");
             return true;

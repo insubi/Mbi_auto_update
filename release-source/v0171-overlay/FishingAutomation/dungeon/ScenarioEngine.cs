@@ -1002,10 +1002,10 @@ internal sealed partial class ScenarioEngine : IScenarioRunner
         DiagnosticObserveDetection("abyss_dungeon_clear_visual", clearTitle);
         var touch = await _detector.DetectAsync("abyss_touch_screen", frame, ct);
         DiagnosticObserveDetection("abyss_touch_screen", touch);
-        if (touch.Found)
+        if (clearTitle.Found && touch.Found)
         {
-            ResetAbyssExitState();
-            AbyssTransitionTo(AbyssFlowState.ClearConfirmed, "화면 터치 문구 확인");
+            ResetAbyssExitState(true);
+            AbyssTransitionTo(AbyssFlowState.ClearConfirmed, "클리어 타이틀 + 화면 터치 문구 동시 확인");
             return touch;
         }
 

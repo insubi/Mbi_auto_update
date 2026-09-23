@@ -638,7 +638,7 @@ public sealed partial class MainForm
         if (text.Contains("[어비스 퇴장 상태 초기화]"))
         {
             _stageStartedAt = _restartAt = null;
-            SetStatus("클리어 화면 확인 · 결과 처리", Blue);
+            if (text.Contains("클리어 확인")) SetStatus("클리어 화면 확인 · 결과 처리", Blue);
         }
         if (text.Contains("판 완료")) { _stageStartedAt = null; _stageProgress = 100; SetStatus("완료 · 다음 입장 준비", Green); }
     }
