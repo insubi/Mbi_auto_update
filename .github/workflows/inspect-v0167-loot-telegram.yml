@@ -1,0 +1,41 @@
+name: Inspect V0.1.67 Loot Telegram
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0167-loot-telegram.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect V0.1.67 source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item current -ItemType Directory -Force | Out-Null
+          gh release download V0.1.67 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.67_Source.zip' --dir current
+          Expand-Archive current/MabiAuto_V0.1.67_Source.zip current/src -Force
+          $root=(Resolve-Path current/src).Path
+          $e=Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs'
+          $t=Join-Path $root 'FishingAutomation/MainForm.Telegram.cs'
+          Write-Host '=== RESULT RETRY METHOD ==='
+          Get-Content $e | Select-String -Pattern 'DetectAbyssResultRetryAsync' -Context 20,120 | ForEach-Object {$_.ToString()}
+          Write-Host '=== RESULT CONFIRMED FLOW ==='
+          Get-Content $e | Select-String -Pattern '실제 결과 화면 2/2 확인' -Context 50,110 | ForEach-Object {$_.ToString()}
+          Write-Host '=== ENGINE FIELDS/CTOR ==='
+          Get-Content $e | Select-String -Pattern 'class ScenarioEngine|private readonly|public ScenarioEngine' -Context 0,80 | ForEach-Object {$_.ToString()}
+          Write-Host '=== OCR USAGE ==='
+          Get-Content $e | Select-String -Pattern 'Ocr|Recognize|TextDetector|DetectAsync' -Context 2,8 | Select-Object -First 120 | ForEach-Object {$_.ToString()}
+          Write-Host '=== TELEGRAM COMMANDS ==='
+          Get-Content $t | Select-String -Pattern '/status|case|StartsWith|switch|Command|message.Text' -Context 10,35 | ForEach-Object {$_.ToString()}
+          Write-Host '=== PROJECT FILE LIST ==='
+          Get-ChildItem (Join-Path $root 'FishingAutomation') -File -Recurse | Where-Object { $_.Name -match 'Ocr|Detect|Telegram|Stat|Json|ScenarioEngine' } | ForEach-Object { $_.FullName.Replace($root,'') }
