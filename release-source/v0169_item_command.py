@@ -23,11 +23,15 @@ tracked = [p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in
 before = {p.relative_to(root).as_posix(): digest(p) for p in tracked}
 
 telegram = read(telegram_path)
+
 if 'case "/stone":' not in telegram:
     raise SystemExit("/stone command marker missing")
 telegram = telegram.replace('case "/stone":', 'case "/item":', 1)
+
 if 'case "/stonereset":' not in telegram:
-    raise SystemExit("/stonereset command must remain")
+    raise SystemExit("/stonereset command marker missing")
+telegram = telegram.replace('case "/stonereset":', 'case "/itemreset":', 1)
+
 write(telegram_path, telegram)
 
 project = read(project_path)
@@ -48,12 +52,12 @@ update = update.replace('CurrentVersion = "V0.1.68"', 'CurrentVersion = "V0.1.69
 write(update_path, update)
 
 patched = read(telegram_path)
-if 'case "/item":' not in patched:
-    raise SystemExit("/item command not added")
-if 'case "/stone":' in patched:
-    raise SystemExit("old /stone command still present")
-if 'case "/stonereset":' not in patched:
-    raise SystemExit("/stonereset was changed unexpectedly")
+for marker in ('case "/item":', 'case "/itemreset":'):
+    if marker not in patched:
+        raise SystemExit(f"new command missing: {marker}")
+for old in ('case "/stone":', 'case "/stonereset":'):
+    if old in patched:
+        raise SystemExit(f"old command still present: {old}")
 
 allowed = {
     telegram_path.relative_to(root).as_posix(),
@@ -68,4 +72,4 @@ unexpected = sorted(changed - allowed)
 if unexpected:
     raise SystemExit("unexpected runtime/source changes: " + ", ".join(unexpected))
 
-print("V0.1.69 applied: Telegram /stone renamed to /item; /stonereset unchanged")
+print("V0.1.69 applied: Telegram /stone -> /item and /stonereset -> /itemreset")
