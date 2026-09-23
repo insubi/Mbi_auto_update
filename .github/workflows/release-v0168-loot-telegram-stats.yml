@@ -1,0 +1,191 @@
+name: Release V0.1.68 Loot Telegram Stats
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v0168-loot-telegram-stats.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v0168-loot-telegram-stats
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout V0.1.68 patch branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0168-loot-telegram-stats
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.67 source and apply V0.1.68
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.67 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.67_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.67 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.67_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          python release-source/v0168_loot_telegram_stats.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.68 patch failed'}
+
+          $retry=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          $ocr=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/OcrRecognizer.cs')
+          $tg=Get-Content -Raw (Join-Path $root 'FishingAutomation/MainForm.Telegram.cs')
+          $stats=Get-Content -Raw (Join-Path $root 'FishingAutomation/LootStats.cs')
+
+          foreach($marker in @(
+            'V0168_ABYSS_LOOT_TRACKING',
+            'DetectAbyssLootAsync',
+            '_abyssLootCountedForCurrentResult',
+            '[어비스 전리품] 이번 판 획득 카운트:',
+            'V0168_ABYSS_LOOT_OCR_LINES',
+            'case "/stone":',
+            'case "/stonereset":',
+            '허상의 마력석',
+            '포식의 마력석',
+            '심해의 마력석',
+            '룬새김 장식(★10)+',
+            '룬결속 장식(★10)+',
+            '모르 코르셰어 코트',
+            '모르 코르셰어 글러브',
+            '모르 코르셰어 부츠',
+            '모르 코르셰어 트리코른'
+          )){
+            if(-not (($retry+$ocr+$tg+$stats).Contains($marker))){throw "V0.1.68 marker missing: $marker"}
+          }
+
+          $engine=Get-ChildItem (Join-Path $root 'FishingAutomation/dungeon') -Filter 'ScenarioEngine*.cs' | Get-Content -Raw
+          $engineText=$engine -join "`n"
+          foreach($marker in @(
+            'V0167_ABYSS_DEATH_WAIT_NONBLOCKING',
+            'V0166_ABYSS_SCENE_SKIP_OUTLINE',
+            'V0164_ABYSS_CLEAR_LOG_SIMPLIFIED',
+            '실제 결과 화면 2/2 확인'
+          )){
+            if(-not $engineText.Contains($marker)){throw "existing marker missing: $marker"}
+          }
+
+          $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
+          $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+          if(-not $project.Contains('<Version>0.1.68</Version>')){throw 'project version mismatch'}
+          if(-not $update.Contains('CurrentVersion = "V0.1.68"')){throw 'updater version mismatch'}
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'V0168_SOURCE_PATCH_OK'
+
+      - name: Build and smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $env:SOURCE_ROOT 'MacroWatchdog/MacroWatchdog.csproj'
+
+          dotnet build $fish -c Release -r win-x64
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish $fish @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'app publish failed'}
+          dotnet publish $watch @pubArgs -o stage/watchdog
+          if($LASTEXITCODE-ne0){throw 'watchdog publish failed'}
+          Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe -Force
+
+          $exe=(Resolve-Path stage/release/FishingAutomation.exe).Path
+          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.68.0'){throw "EXE version mismatch: $((Get-Item $exe).VersionInfo.FileVersion)"}
+
+          $proc=Start-Process $exe -WorkingDirectory (Resolve-Path stage/release).Path -PassThru
+          Start-Sleep 5
+          $proc.Refresh()
+          if($proc.HasExited){throw "smoke test exit $($proc.ExitCode)"}
+          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          Write-Host 'V0168_BUILD_SMOKE_OK'
+
+      - name: Package Windows and source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          New-Item package/release,package/tools,package/FishingAutomation,out,source-package -ItemType Directory -Force | Out-Null
+          Copy-Item stage/release/* package/release -Recurse -Force
+          Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1 -Force
+          Copy-Item (Join-Path $root 'START.cmd') package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') package/REPAIR_AUTO_UPDATE.cmd -Force
+          'Compatibility directory for legacy updater notification restore.' | Set-Content package/FishingAutomation/.update_compat -Encoding ASCII
+          'MABI AUTO V0.1.68 Windows Lite - Abyss loot stats and Telegram commands' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+
+          $zip='out/MabiAuto_V0.1.68_Windows_Lite.zip'
+          Compress-Archive package/* $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.68_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+
+          Copy-Item (Join-Path $root 'FishingAutomation') source-package/FishingAutomation -Recurse
+          Copy-Item (Join-Path $root 'MacroWatchdog') source-package/MacroWatchdog -Recurse
+          Copy-Item (Join-Path $root 'tools') source-package/tools -Recurse
+          Copy-Item (Join-Path $root 'START.cmd') source-package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') source-package/REPAIR_AUTO_UPDATE.cmd -Force
+          Copy-Item release-source/v0168_release_notes.md source-package/RELEASE_NOTES.md
+          Get-ChildItem source-package -Recurse -Directory | Where-Object { $_.Name -in @('bin','obj','debug') } | Remove-Item -Recurse -Force
+          Compress-Archive source-package/* out/MabiAuto_V0.1.68_Source.zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip verify -Force
+          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.68.0'){throw 'ZIP EXE version mismatch'}
+          foreach($required in @(
+            'release/FishingAutomation.exe',
+            'release/abyss/config/scenario.json',
+            'release/abyss/config/targets.json',
+            'release/dungeon/config/scenario.json',
+            'release/dungeon/config/targets.json',
+            'tools/ApplyUpdate.ps1',
+            'START.cmd',
+            'REPAIR_AUTO_UPDATE.cmd'
+          )){
+            if(-not(Test-Path (Join-Path verify $required))){throw "ZIP required file missing: $required"}
+          }
+          Write-Host "V0168_PACKAGE_OK SHA256=$hash"
+
+      - name: Publish V0.1.68
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo=$env:GITHUB_REPOSITORY
+          $tag='V0.1.68'
+
+          gh release view $tag --repo $repo *> $null
+          if($LASTEXITCODE-eq0){
+            gh release delete $tag --repo $repo --yes --cleanup-tag
+            if($LASTEXITCODE-ne0){throw 'existing V0.1.68 cleanup failed'}
+          } else {
+            $null=$LASTEXITCODE
+          }
+
+          gh release create $tag --repo $repo --target v0168-loot-telegram-stats --title 'Mabi Auto V0.1.68' --notes-file release-source/v0168_release_notes.md out/MabiAuto_V0.1.68_Windows_Lite.zip out/MabiAuto_V0.1.68_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.68_Source.zip
+          if($LASTEXITCODE-ne0){throw 'V0.1.68 release creation failed'}
+
+          $release=gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          $names=@($release.assets | ForEach-Object {$_.name})
+          foreach($required in @('MabiAuto_V0.1.68_Windows_Lite.zip','MabiAuto_V0.1.68_Windows_Lite.zip.sha256','MabiAuto_V0.1.68_Source.zip')){
+            if($required -notin $names){throw "release asset missing: $required"}
+          }
+          Write-Host "V0168_RELEASE_OK $($release.html_url)"
