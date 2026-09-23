@@ -1,4 +1,4 @@
-# V0.1.71 release trigger 2
+# V0.1.71 release trigger 3
 name: Release V0.1.71 Abyss Timeout Only
 
 on:
@@ -127,19 +127,31 @@ jobs:
           $repo=$env:GITHUB_REPOSITORY
           $tag='V0.1.71'
 
-          gh release view $tag --repo $repo *> $null
-          if($LASTEXITCODE-eq0){ throw 'Release already exists; refusing to overwrite it' }
+          $all = gh api "repos/$repo/releases?per_page=100" | ConvertFrom-Json
+          if($LASTEXITCODE-ne0){throw 'Release list query failed'}
+          $existing = @($all | Where-Object { $_.tag_name -eq $tag }) | Select-Object -First 1
+          if($null -ne $existing){
+            if(-not $existing.draft){
+              throw 'V0.1.71 is already published; refusing to overwrite it'
+            }
+            gh api -X DELETE "repos/$repo/releases/$($existing.id)"
+            if($LASTEXITCODE-ne0){throw 'Existing V0.1.71 draft cleanup failed'}
+            Write-Host "Removed stale V0.1.71 draft release id=$($existing.id)"
+          }
 
-          gh release create $tag --repo $repo --target $env:GITHUB_SHA --draft --title 'Mabi Auto V0.1.71' --notes-file release-source/v0171_release_notes.md out/MabiAuto_V0.1.71_Windows_Lite.zip out/MabiAuto_V0.1.71_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.71_Source.zip
-          if($LASTEXITCODE-ne0){throw 'V0.1.71 draft creation failed'}
+          gh release create $tag --repo $repo --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.71' --notes-file release-source/v0171_release_notes.md out/MabiAuto_V0.1.71_Windows_Lite.zip out/MabiAuto_V0.1.71_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.71_Source.zip
+          if($LASTEXITCODE-ne0){throw 'V0.1.71 release creation failed'}
 
           $release=gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          if($LASTEXITCODE-ne0){throw 'V0.1.71 release verification lookup failed'}
           $names=@($release.assets | ForEach-Object {$_.name})
           foreach($required in @('MabiAuto_V0.1.71_Windows_Lite.zip','MabiAuto_V0.1.71_Windows_Lite.zip.sha256','MabiAuto_V0.1.71_Source.zip')){
             if($required -notin $names){throw "release asset missing: $required"}
           }
-          gh release edit $tag --repo $repo --draft=false --latest
-          if($LASTEXITCODE-ne0){throw 'Stable release publication failed'}
+
+          gh release edit $tag --repo $repo --latest
+          if($LASTEXITCODE-ne0){throw 'Latest release marking failed'}
+
           $latest=gh api "repos/$repo/releases/latest" | ConvertFrom-Json
           if($latest.tag_name -ne $tag -or $latest.draft -or $latest.prerelease){throw 'Auto-update latest release mismatch'}
           Write-Host "V0171_RELEASE_OK $($release.html_url)"
