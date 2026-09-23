@@ -29,7 +29,7 @@ for rel, replacements in {
 after = snapshot()
 changed = {k for k in before.keys()|after.keys() if before.get(k)!=after.get(k)}
 assert changed <= allowed, f'Unexpected changes: {changed-allowed}'
-patched_engine = engine.read_text()
+patched_engine = engine.read_text(encoding='utf-8-sig')
 for start,end in [
     ('    private async Task<DetectionResult> WaitForAbyssTouchPromptAsync','    private async Task AdvanceAbyssClearScreenAsync'),
     ('    private async Task AdvanceAbyssClearScreenAsync','    private async Task WaitForAbyssHomeAfterNormalExitAsync'),
@@ -39,7 +39,7 @@ assert 'if (clearTitle.Found && touch.Found)' in patched_engine
 for p in (root/'FishingAutomation').rglob('*'):
     if p.suffix in ('.cs','.json'):
         assert not re.search(r'abyss_death|AbyssDeath|DeathTimeout|사망',p.read_text(encoding='utf-8-sig')), p
-scenario=json.loads((root/'FishingAutomation/abyss/config/scenario.json').read_text())
+scenario=json.loads((root/'FishingAutomation/abyss/config/scenario.json').read_text(encoding='utf-8-sig'))
 combat=next(s for s in scenario['Steps'] if s['Target']=='abyss_touch_screen')
 assert combat['TimeoutSeconds']==600
 print('PASS V0.1.71: only approved files changed; normal touch/result/retry/loot preserved; death logic removed')
