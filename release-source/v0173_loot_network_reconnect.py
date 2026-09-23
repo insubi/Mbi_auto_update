@@ -546,6 +546,21 @@ for old, new in (
     if old not in project:
         raise SystemExit(f"project version marker missing: {old}")
     project = project.replace(old, new, 1)
+
+# The existing project only publishes its known template set. Explicitly include
+# the new V0.1.73 loot subdirectory so auto-update ZIPs contain all 11 icons.
+loot_content_item = r'''  <ItemGroup>
+    <Content Include="abyss\templates\loot_v173\**\*.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+'''
+if 'abyss\\templates\\loot_v173\\**\\*.png' not in project:
+    if "</Project>" not in project:
+        raise SystemExit("csproj closing Project tag missing")
+    project = project.replace("</Project>", loot_content_item + "</Project>", 1)
+
 write(project_path, project)
 
 update = read(update_path)
@@ -562,6 +577,9 @@ retry_check = read(retry_path)
 network_check = read(network_path)
 targets_check = json.loads(read(targets_path))
 ids = {t.get("Id") for t in targets_check}
+project_check = read(project_path)
+if 'abyss\\templates\\loot_v173\\**\\*.png' not in project_check:
+    raise SystemExit("loot_v173 publish Content item missing")
 
 for name in template_files:
     p = template_dir / name

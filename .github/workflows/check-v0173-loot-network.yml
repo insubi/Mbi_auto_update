@@ -2,7 +2,7 @@ name: Check V0.1.73 Loot Network
 
 on:
   push:
-    branches: [fix/v0173-loot-network-reconnect]
+    branches: [fix/v0173-loot-network-reconnect, fix/v0173-publish-loot-templates]
     paths:
       - 'release-source/v0173_loot_network_reconnect.py'
       - 'release-source/v0173-template-payload/**'
@@ -98,3 +98,30 @@ jobs:
           dotnet build $watch -c Release
           if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
           Write-Host 'V0173_BUILD_OK'
+
+
+      - name: Verify publish contains all loot templates
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          dotnet publish $fish -c Release -r win-x64 --self-contained false -o stage/publish-check
+          if($LASTEXITCODE-ne0){throw 'publish check failed'}
+          $loot=Join-Path (Resolve-Path stage/publish-check).Path 'abyss/templates/loot_v173'
+          $expected=@(
+            'loot_mor_corsair_coat.png',
+            'loot_mor_corsair_gloves.png',
+            'loot_mor_corsair_boots.png',
+            'loot_mor_corsair_tricorne.png',
+            'loot_hallucination_stone.png',
+            'loot_devouring_stone.png',
+            'loot_abyss_stone.png',
+            'loot_rune_engraving_10.png',
+            'loot_rune_engraving_10_plus.png',
+            'loot_rune_binding_10.png',
+            'loot_rune_binding_10_plus.png'
+          )
+          foreach($name in $expected){
+            if(-not(Test-Path (Join-Path $loot $name))){throw "publish template missing: $name"}
+          }
+          Write-Host 'V0173_PUBLISH_TEMPLATES_OK'
