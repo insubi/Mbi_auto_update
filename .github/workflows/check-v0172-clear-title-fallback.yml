@@ -55,6 +55,7 @@ jobs:
           $ErrorActionPreference='Stop'
           $engine=Get-Content -Raw (Join-Path $env:SOURCE_ROOT 'FishingAutomation/dungeon/ScenarioEngine.cs')
           $timeout=Get-Content -Raw (Join-Path $env:SOURCE_ROOT 'FishingAutomation/dungeon/ScenarioEngine.AbyssTimeout.cs')
+          $retry=Get-Content -Raw (Join-Path $env:SOURCE_ROOT 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
           foreach($m in @(
             'V0172_ABYSS_CLEAR_TITLE_FALLBACK',
             'AbyssClearTitleFallbackMinScore = 0.68',
@@ -67,6 +68,6 @@ jobs:
             '클리어 타이틀 fallback 확정 -> 강제 퇴장 취소'
           )){if(-not $timeout.Contains($m)){throw "missing timeout marker: $m"}}
           if(-not $engine.Contains('if (clearTitle.Found && touch.Found)')){throw 'strict primary clear rule lost'}
-          if(-not $engine.Contains('LootStats.RecordRound')){throw 'loot counting lost'}
+          if(-not $retry.Contains('LootStats.RecordRound')){throw 'loot counting lost'}
           if($engine -match 'abyss_death|AbyssDeath|DeathTimeout|사망'){throw 'death logic returned'}
           Write-Host 'V0172_INVARIANTS_OK'
