@@ -1,0 +1,85 @@
+name: Check V0.1.74 Potion Retry Loot Single
+
+on:
+  push:
+    branches: [fix/v0174-potion-retry-loot-single]
+    paths:
+      - 'release-source/v0174_potion_retry_loot_single.py'
+      - 'release-source/v0174_release_notes.md'
+      - '.github/workflows/check-v0174-potion-loot.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.73 and apply V0.1.74
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.73 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.73_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.73 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.73_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          python release-source/v0174_potion_retry_loot_single.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.74 patch failed'}
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'V0174_PATCH_OK'
+
+      - name: Verify invariants
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          $engine=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs')
+          $retry=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          $network=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.NetworkRecovery.cs')
+          $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
+          $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+
+          foreach($m in @(
+            'V0174_POTION_ESC_RETRY',
+            '매크로 정지하지 않고 다음 감시 주기에 다시 시도'
+          )){if(-not $engine.Contains($m)){throw "potion marker missing: $m"}}
+
+          if($engine.Contains('회복 물약 팝업 ESC 1회 후 닫힘을 확인하지 못했습니다')){
+            throw 'old single-ESC fatal stop remains'
+          }
+
+          foreach($m in @(
+            'V0174_ABYSS_LOOT_SINGLE_WINNER',
+            '최종 1개 확정',
+            '동시 교차매칭'
+          )){if(-not $retry.Contains($m)){throw "loot marker missing: $m"}}
+
+          if(-not $network.Contains('V0173_NETWORK_RECONNECT')){throw 'network reconnect lost'}
+          if(-not $engine.Contains('V0172_ABYSS_CLEAR_TITLE_FALLBACK')){throw 'clear fallback lost'}
+          if(-not $project.Contains('<Version>0.1.74</Version>')){throw 'project version mismatch'}
+          if(-not $update.Contains('CurrentVersion = "V0.1.74"')){throw 'updater version mismatch'}
+
+          Write-Host 'V0174_INVARIANTS_OK'
+
+      - name: Build patched Windows app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $env:SOURCE_ROOT 'MacroWatchdog/MacroWatchdog.csproj'
+          dotnet build $fish -c Release -r win-x64
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          Write-Host 'V0174_BUILD_OK'
