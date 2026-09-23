@@ -1,0 +1,172 @@
+name: Release V0.1.73 Loot Network
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'release-source/v0173_loot_network_reconnect.py'
+      - 'release-source/v0173-template-payload/**'
+      - 'release-source/v0173_release_notes.md'
+      - '.github/workflows/release-v0173-loot-network.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v0173-loot-network
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.72 and apply V0.1.73
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.72 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.72_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.72 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.72_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          python release-source/v0173_loot_network_reconnect.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.73 patch failed'}
+
+          $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
+          $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+          if(-not $project.Contains('<Version>0.1.73</Version>')){throw 'project version mismatch'}
+          if(-not $update.Contains('CurrentVersion = "V0.1.73"')){throw 'updater version mismatch'}
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'V0173_SOURCE_PATCH_OK'
+
+      - name: Build and smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $env:SOURCE_ROOT 'MacroWatchdog/MacroWatchdog.csproj'
+
+          dotnet build $fish -c Release -r win-x64
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish $fish @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'app publish failed'}
+          dotnet publish $watch @pubArgs -o stage/watchdog
+          if($LASTEXITCODE-ne0){throw 'watchdog publish failed'}
+          Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe -Force
+
+          $exe=(Resolve-Path stage/release/FishingAutomation.exe).Path
+          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.73.0'){throw "EXE version mismatch: $((Get-Item $exe).VersionInfo.FileVersion)"}
+
+          $lootDir='stage/release/abyss/templates/loot_v173'
+          $expected=@(
+            'loot_mor_corsair_coat.png',
+            'loot_mor_corsair_gloves.png',
+            'loot_mor_corsair_boots.png',
+            'loot_mor_corsair_tricorne.png',
+            'loot_hallucination_stone.png',
+            'loot_devouring_stone.png',
+            'loot_abyss_stone.png',
+            'loot_rune_engraving_10.png',
+            'loot_rune_engraving_10_plus.png',
+            'loot_rune_binding_10.png',
+            'loot_rune_binding_10_plus.png'
+          )
+          foreach($name in $expected){
+            if(-not(Test-Path (Join-Path $lootDir $name))){throw "published loot template missing: $name"}
+          }
+
+          $targets=Get-Content -Raw stage/release/abyss/config/targets.json
+          foreach($m in @('network_unstable_title','network_retry_button','abyss_loot_hallucination_stone','abyss_loot_mor_corsair_coat')){
+            if(-not $targets.Contains($m)){throw "published targets marker missing: $m"}
+          }
+
+          $proc=Start-Process $exe -WorkingDirectory (Resolve-Path stage/release).Path -PassThru
+          Start-Sleep 5
+          $proc.Refresh()
+          if($proc.HasExited){throw "smoke test exit $($proc.ExitCode)"}
+          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Write-Host 'V0173_BUILD_SMOKE_OK'
+
+      - name: Package Windows and source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          New-Item package/release,package/tools,package/FishingAutomation,out,source-package -ItemType Directory -Force | Out-Null
+          Copy-Item stage/release/* package/release -Recurse -Force
+          Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1 -Force
+          Copy-Item (Join-Path $root 'START.cmd') package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') package/REPAIR_AUTO_UPDATE.cmd -Force
+          'Compatibility directory for legacy updater notification restore.' | Set-Content package/FishingAutomation/.update_compat -Encoding ASCII
+          'MABI AUTO V0.1.73 Windows Lite - loot image matching + network reconnect' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+
+          $zip='out/MabiAuto_V0.1.73_Windows_Lite.zip'
+          Compress-Archive package/* $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.73_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+
+          Copy-Item (Join-Path $root 'FishingAutomation') source-package/FishingAutomation -Recurse
+          Copy-Item (Join-Path $root 'MacroWatchdog') source-package/MacroWatchdog -Recurse
+          Copy-Item (Join-Path $root 'tools') source-package/tools -Recurse
+          Copy-Item (Join-Path $root 'START.cmd') source-package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') source-package/REPAIR_AUTO_UPDATE.cmd -Force
+          Copy-Item release-source/v0173_release_notes.md source-package/RELEASE_NOTES.md
+          Get-ChildItem source-package -Recurse -Directory | Where-Object { $_.Name -in @('bin','obj','debug') } | Remove-Item -Recurse -Force
+          Compress-Archive source-package/* out/MabiAuto_V0.1.73_Source.zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip verify -Force
+          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.73.0'){throw 'ZIP EXE version mismatch'}
+          if(-not(Test-Path verify/release/abyss/templates/loot_v173/loot_hallucination_stone.png)){throw 'ZIP loot templates missing'}
+          if(-not(Test-Path verify/release/abyss/templates/loot_v173/loot_mor_corsair_tricorne.png)){throw 'ZIP loot templates incomplete'}
+          $zipTargets=Get-Content -Raw verify/release/abyss/config/targets.json
+          if(-not $zipTargets.Contains('network_unstable_title')){throw 'ZIP network target missing'}
+          if(-not $zipTargets.Contains('abyss_loot_abyss_stone')){throw 'ZIP loot target missing'}
+
+          Write-Host "V0173_PACKAGE_OK SHA256=$hash"
+
+      - name: Publish V0.1.73
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo=$env:GITHUB_REPOSITORY
+          $tag='V0.1.73'
+
+          gh release view $tag --repo $repo *> $null
+          if($LASTEXITCODE-eq0){throw 'V0.1.73 already exists; refusing to overwrite it'}
+
+          gh release create $tag --repo $repo --target $env:GITHUB_SHA --title 'Mabi Auto V0.1.73' --notes-file release-source/v0173_release_notes.md out/MabiAuto_V0.1.73_Windows_Lite.zip out/MabiAuto_V0.1.73_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.73_Source.zip
+          if($LASTEXITCODE-ne0){throw 'V0.1.73 release creation failed'}
+
+          $release=gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          $names=@($release.assets | ForEach-Object {$_.name})
+          foreach($required in @('MabiAuto_V0.1.73_Windows_Lite.zip','MabiAuto_V0.1.73_Windows_Lite.zip.sha256','MabiAuto_V0.1.73_Source.zip')){
+            if($required -notin $names){throw "release asset missing: $required"}
+          }
+
+          gh release edit $tag --repo $repo --latest
+          if($LASTEXITCODE-ne0){throw 'latest release marking failed'}
+
+          $latest=gh api "repos/$repo/releases/latest" | ConvertFrom-Json
+          if($latest.tag_name-ne$tag -or $latest.draft -or $latest.prerelease){throw 'auto-update latest release mismatch'}
+          Write-Host "V0173_RELEASE_OK $($release.html_url)"
