@@ -1,0 +1,73 @@
+name: Check V0.1.72 Clear Title Fallback
+
+on:
+  push:
+    branches: [fix/v0172-clear-title-fallback]
+    paths:
+      - 'release-source/v0172_clear_title_fallback.py'
+      - 'release-source/v0172_release_notes.md'
+      - '.github/workflows/check-v0172-clear-title-fallback.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.71 source and apply V0.1.72
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.71 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.71_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.71 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.71_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+          python release-source/v0172_clear_title_fallback.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.72 patch failed'}
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'V0172_PATCH_OK'
+
+      - name: Build patched Windows app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $env:SOURCE_ROOT 'MacroWatchdog/MacroWatchdog.csproj'
+          dotnet build $fish -c Release -r win-x64
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          Write-Host 'V0172_BUILD_OK'
+
+      - name: Verify exact fallback invariants
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $engine=Get-Content -Raw (Join-Path $env:SOURCE_ROOT 'FishingAutomation/dungeon/ScenarioEngine.cs')
+          $timeout=Get-Content -Raw (Join-Path $env:SOURCE_ROOT 'FishingAutomation/dungeon/ScenarioEngine.AbyssTimeout.cs')
+          $retry=Get-Content -Raw (Join-Path $env:SOURCE_ROOT 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          foreach($m in @(
+            'V0172_ABYSS_CLEAR_TITLE_FALLBACK',
+            'AbyssClearTitleFallbackMinScore = 0.68',
+            'AbyssClearTitleFallbackRequiredFrames = 2',
+            'AbyssClearSafeTouch = new(360, 915, 80, 60)',
+            'clear_title_2x_safe_fallback'
+          )){if(-not $engine.Contains($m)){throw "missing engine marker: $m"}}
+          foreach($m in @(
+            '클리어 타이틀 후보 확인 중 -> 퇴장 입력 보류',
+            '클리어 타이틀 fallback 확정 -> 강제 퇴장 취소'
+          )){if(-not $timeout.Contains($m)){throw "missing timeout marker: $m"}}
+          if(-not $engine.Contains('if (clearTitle.Found && touch.Found)')){throw 'strict primary clear rule lost'}
+          if(-not $retry.Contains('LootStats.RecordRound')){throw 'loot counting lost'}
+          if($engine -match 'abyss_death|AbyssDeath|DeathTimeout|사망'){throw 'death logic returned'}
+          Write-Host 'V0172_INVARIANTS_OK'
