@@ -1,0 +1,37 @@
+name: Inspect V0.1.67 Loot Exact2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0167-loot-exact2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact methods
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item cur -ItemType Directory -Force | Out-Null
+          gh release download V0.1.67 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.67_Source.zip' --dir cur
+          Expand-Archive cur/MabiAuto_V0.1.67_Source.zip cur/src -Force
+          $root=(Resolve-Path cur/src).Path
+          $p=Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs'
+          $lines=Get-Content $p
+          $start=($lines | Select-String -Pattern 'private async Task RetryAbyssResultAsync').LineNumber
+          if(-not $start){ $start=($lines | Select-String -Pattern 'RetryAbyssResultAsync').LineNumber | Select-Object -Last 1 }
+          Write-Host '=== RETRY AROUND ==='
+          $from=[Math]::Max(1,$start-20); $to=[Math]::Min($lines.Count,$start+150)
+          for($i=$from;$i-le$to;$i++){ Write-Host ("{0:D4}: {1}" -f $i,$lines[$i-1]) }
+          Write-Host '=== FUZZY TEXT ==='
+          $f=Get-ChildItem (Join-Path $root 'FishingAutomation') -Recurse -Filter '*.cs' | Where-Object { Select-String -Path $_.FullName -Pattern 'class FuzzyText' -Quiet } | Select-Object -First 1
+          if($f){ Get-Content $f.FullName | Select-String -Pattern 'class FuzzyText' -Context 0,130 | ForEach-Object {$_.ToString()} }
