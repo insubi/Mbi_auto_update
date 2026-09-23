@@ -1,0 +1,35 @@
+name: Inspect V0.1.67 Loot Exact
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0167-loot-exact.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact source
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item cur -ItemType Directory -Force | Out-Null
+          gh release download V0.1.67 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.67_Source.zip' --dir cur
+          Expand-Archive cur/MabiAuto_V0.1.67_Source.zip cur/src -Force
+          $root=(Resolve-Path cur/src).Path
+          Write-Host '=== ABYSS RETRY FILE ==='
+          Get-Content (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          Write-Host '=== OCR RECOGNIZER FILE ==='
+          Get-Content (Join-Path $root 'FishingAutomation/dungeon/OcrRecognizer.cs')
+          Write-Host '=== TELEGRAM FILE ==='
+          Get-Content (Join-Path $root 'FishingAutomation/MainForm.Telegram.cs')
+          Write-Host '=== CSPROJ ==='
+          Get-Content (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')

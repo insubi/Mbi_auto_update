@@ -1,0 +1,181 @@
+name: Release V0.1.65 Death Recheck and Scene Guard
+# retry-after-static-fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/release-v0165-death-recheck-scene-guard.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-v0165-death-recheck-scene-guard
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2025
+    steps:
+      - name: Checkout V0.1.65 patch branch
+        uses: actions/checkout@v4
+        with:
+          ref: v0165-death-recheck-scene-guard
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.64 source and apply V0.1.65
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.64 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.64_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.64 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.64_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          python release-source/v0165_death_recheck_scene_guard.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.65 patch failed'}
+
+          $engine=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs')
+          foreach($marker in @(
+            'V0165_ABYSS_DEATH_VISUAL_FALLBACK',
+            'redRatio >= 0.050',
+            'orangeRatio >= 0.160',
+            'V0165_ABYSS_DEATH_POSTWAIT_RECHECK',
+            '5분 후 재확인:',
+            '던전 퇴장 취소, 현재 단계 정상 진행 재개',
+            '5분 후에도 사망 화면 유지 -> 던전 퇴장 시작',
+            'scene_skip 보류 -> 사망 화면 우선',
+            'scene_skip 2/2 이미지 연속 확인',
+            'Task.Delay(TimeSpan.FromMinutes(5), ct)',
+            '실제 결과 화면 후보 1/2',
+            '실제 결과 화면 2/2 확인',
+            '회복 물약 팝업 ESC 후 닫힘 2프레임 확인',
+            'V0164_ABYSS_CLEAR_LOG_SIMPLIFIED'
+          )){
+            if(-not $engine.Contains($marker)){throw "runtime marker missing: $marker"}
+          }
+          if($engine.Contains('클리어 후보 점수:')){throw 'old noisy clear candidate log still present'}
+
+          $targets=(Get-Content -Raw (Join-Path $root 'FishingAutomation/abyss/config/targets.json') | ConvertFrom-Json)
+          $scene=$targets | Where-Object { $_.Id -eq 'scene_skip' }
+          if($scene.Kind-ne'template'){throw 'scene_skip must be template-only'}
+          if([double]$scene.Threshold-lt0.74){throw 'scene_skip threshold too low'}
+
+          $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
+          $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+          if(-not $project.Contains('<Version>0.1.65</Version>')){throw 'project version mismatch'}
+          if(-not $update.Contains('CurrentVersion = "V0.1.65"')){throw 'updater version mismatch'}
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'V0165_SOURCE_PATCH_OK'
+
+      - name: Build and smoke test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $env:SOURCE_ROOT 'MacroWatchdog/MacroWatchdog.csproj'
+
+          dotnet build $fish -c Release -r win-x64
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+
+          $pubArgs=@('-c','Release','-r','win-x64','--self-contained','true','-p:PublishSingleFile=true','-p:IncludeNativeLibrariesForSelfExtract=true','-p:EnableCompressionInSingleFile=true','-p:PublishTrimmed=false','-p:PublishAot=false','-p:DebugType=None','-p:DebugSymbols=false')
+          dotnet publish $fish @pubArgs -o stage/release
+          if($LASTEXITCODE-ne0){throw 'app publish failed'}
+          dotnet publish $watch @pubArgs -o stage/watchdog
+          if($LASTEXITCODE-ne0){throw 'watchdog publish failed'}
+          Copy-Item stage/watchdog/MacroWatchdog.exe stage/release/MacroWatchdog.exe -Force
+
+          $exe=(Resolve-Path stage/release/FishingAutomation.exe).Path
+          if((Get-Item $exe).VersionInfo.FileVersion-ne'0.1.65.0'){throw "EXE version mismatch: $((Get-Item $exe).VersionInfo.FileVersion)"}
+
+          $proc=Start-Process $exe -WorkingDirectory (Resolve-Path stage/release).Path -PassThru
+          Start-Sleep 5
+          $proc.Refresh()
+          if($proc.HasExited){throw "smoke test exit $($proc.ExitCode)"}
+          Stop-Process $proc.Id -Force -ErrorAction SilentlyContinue
+          Get-Process MacroWatchdog -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+          Write-Host 'V0165_BUILD_SMOKE_OK'
+
+      - name: Package Windows and source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          New-Item package/release,package/tools,package/FishingAutomation,out,source-package -ItemType Directory -Force | Out-Null
+          Copy-Item stage/release/* package/release -Recurse -Force
+          Copy-Item (Join-Path $root 'tools/ApplyUpdate.ps1') package/tools/ApplyUpdate.ps1 -Force
+          Copy-Item (Join-Path $root 'START.cmd') package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') package/REPAIR_AUTO_UPDATE.cmd -Force
+          'Compatibility directory for legacy updater notification restore.' | Set-Content package/FishingAutomation/.update_compat -Encoding ASCII
+          'MABI AUTO V0.1.65 Windows Lite - death recheck and scene-skip guard' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+
+          $zip='out/MabiAuto_V0.1.65_Windows_Lite.zip'
+          Compress-Archive package/* $zip -CompressionLevel Optimal
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MabiAuto_V0.1.65_Windows_Lite.zip" | Set-Content "$zip.sha256" -Encoding ASCII
+
+          Copy-Item (Join-Path $root 'FishingAutomation') source-package/FishingAutomation -Recurse
+          Copy-Item (Join-Path $root 'MacroWatchdog') source-package/MacroWatchdog -Recurse
+          Copy-Item (Join-Path $root 'tools') source-package/tools -Recurse
+          Copy-Item (Join-Path $root 'START.cmd') source-package/START.cmd -Force
+          Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') source-package/REPAIR_AUTO_UPDATE.cmd -Force
+          Copy-Item release-source/v0165_release_notes.md source-package/RELEASE_NOTES.md
+          Get-ChildItem source-package -Recurse -Directory | Where-Object { $_.Name -in @('bin','obj','debug') } | Remove-Item -Recurse -Force
+          Compress-Archive source-package/* out/MabiAuto_V0.1.65_Source.zip -CompressionLevel Optimal
+
+          Remove-Item verify -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip verify -Force
+          if((Get-Item verify/release/FishingAutomation.exe).VersionInfo.FileVersion-ne'0.1.65.0'){throw 'ZIP EXE version mismatch'}
+          foreach($required in @(
+            'release/FishingAutomation.exe',
+            'release/abyss/config/scenario.json',
+            'release/abyss/config/targets.json',
+            'release/dungeon/config/scenario.json',
+            'release/dungeon/config/targets.json',
+            'tools/ApplyUpdate.ps1',
+            'START.cmd',
+            'REPAIR_AUTO_UPDATE.cmd'
+          )){
+            if(-not(Test-Path (Join-Path verify $required))){throw "ZIP required file missing: $required"}
+          }
+          Write-Host "V0165_PACKAGE_OK SHA256=$hash"
+
+      - name: Publish V0.1.65
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo=$env:GITHUB_REPOSITORY
+          $tag='V0.1.65'
+
+          gh release view $tag --repo $repo *> $null
+          if($LASTEXITCODE-eq0){
+            gh release delete $tag --repo $repo --yes --cleanup-tag
+            if($LASTEXITCODE-ne0){throw 'existing V0.1.65 cleanup failed'}
+          } else {
+            $null=$LASTEXITCODE
+          }
+
+          gh release create $tag --repo $repo --target v0165-death-recheck-scene-guard --title 'Mabi Auto V0.1.65' --notes-file release-source/v0165_release_notes.md out/MabiAuto_V0.1.65_Windows_Lite.zip out/MabiAuto_V0.1.65_Windows_Lite.zip.sha256 out/MabiAuto_V0.1.65_Source.zip
+          if($LASTEXITCODE-ne0){throw 'V0.1.65 release creation failed'}
+
+          $release=gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          $names=@($release.assets | ForEach-Object {$_.name})
+          foreach($required in @('MabiAuto_V0.1.65_Windows_Lite.zip','MabiAuto_V0.1.65_Windows_Lite.zip.sha256','MabiAuto_V0.1.65_Source.zip')){
+            if($required -notin $names){throw "release asset missing: $required"}
+          }
+          Write-Host "V0165_RELEASE_OK $($release.html_url)"

@@ -1,0 +1,40 @@
+name: Inspect V0.1.67 Stone Hooks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0167-stone-hooks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect source hooks
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item current -ItemType Directory -Force | Out-Null
+          gh release download V0.1.67 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.67_Source.zip' --dir current
+          Expand-Archive current/MabiAuto_V0.1.67_Source.zip current/src -Force
+          $root=(Resolve-Path current/src).Path
+          $engine=Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs'
+          $tg=Join-Path $root 'FishingAutomation/MainForm.Telegram.cs'
+          $det=Join-Path $root 'FishingAutomation/dungeon/TargetDetector.cs'
+          $targets=Join-Path $root 'FishingAutomation/abyss/config/targets.json'
+
+          Write-Host '=== RESULT FLOW ==='
+          Get-Content $engine | Select-String -Pattern '실제 결과 화면 후보 1/2|실제 결과 화면 2/2 확인|DetectAbyssResultRetryAsync|RetryClicked|ResultConfirmed' -Context 25,45 | ForEach-Object {$_.ToString()}
+          Write-Host '=== TELEGRAM ==='
+          Get-Content $tg | ForEach-Object {$_.ToString()}
+          Write-Host '=== TARGET DETECTOR TEMPLATE ==='
+          Get-Content $det | Select-String -Pattern 'TemplatePath|TemplateScaleMin|Kind|threshold|DetectAsync' -Context 12,35 | ForEach-Object {$_.ToString()}
+          Write-Host '=== ABYSS TARGETS RETRY ==='
+          Get-Content $targets | Select-String -Pattern '"Id": "retry"|"Id": "abyss_' -Context 0,20 | ForEach-Object {$_.ToString()}

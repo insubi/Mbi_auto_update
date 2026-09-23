@@ -1,0 +1,33 @@
+name: Inspect V0.1.64 Death Flow
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/inspect-v0164-death-flow.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect V0.1.64 engine
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item current -ItemType Directory -Force | Out-Null
+          gh release download V0.1.64 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.64_Source.zip' --dir current
+          Expand-Archive current/MabiAuto_V0.1.64_Source.zip current/src -Force
+          $e=Join-Path (Resolve-Path current/src).Path 'FishingAutomation/dungeon/ScenarioEngine.cs'
+          Write-Host '=== FIELDS ==='
+          Get-Content $e | Select-String -Pattern '_monitorLastAction|_monitorLastScan|_currentStepIndex|_resumeStepIndex' -Context 8,12 | ForEach-Object {$_.ToString()}
+          Write-Host '=== CHECK MONITORS ==='
+          Get-Content $e | Select-String -Pattern 'private async Task<bool> CheckMonitorsAsync' -Context 0,180 | ForEach-Object {$_.ToString()}
+          Write-Host '=== CLEAR CONFIRM ==='
+          Get-Content $e | Select-String -Pattern 'DetectAbyssConfirmedClearAsync' -Context 0,90 | ForEach-Object {$_.ToString()}
