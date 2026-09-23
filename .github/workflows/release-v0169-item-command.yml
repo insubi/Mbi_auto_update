@@ -46,7 +46,8 @@ jobs:
           $tg=Get-Content -Raw (Join-Path $root 'FishingAutomation/MainForm.Telegram.cs')
           if(-not $tg.Contains('case "/item":')){throw '/item command missing'}
           if($tg.Contains('case "/stone":')){throw 'old /stone command remains'}
-          if(-not $tg.Contains('case "/stonereset":')){throw '/stonereset command missing'}
+          if(-not $tg.Contains('case "/itemreset":')){throw '/itemreset command missing'}
+          if($tg.Contains('case "/stonereset":')){throw 'old /stonereset command remains'}
 
           $stats=Get-Content -Raw (Join-Path $root 'FishingAutomation/LootStats.cs')
           foreach($marker in @(
@@ -113,7 +114,7 @@ jobs:
           Copy-Item (Join-Path $root 'START.cmd') package/START.cmd -Force
           Copy-Item (Join-Path $root 'REPAIR_AUTO_UPDATE.cmd') package/REPAIR_AUTO_UPDATE.cmd -Force
           'Compatibility directory for legacy updater notification restore.' | Set-Content package/FishingAutomation/.update_compat -Encoding ASCII
-          'MABI AUTO V0.1.69 Windows Lite - Telegram item command rename' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
+          'MABI AUTO V0.1.69 Windows Lite - Telegram item/itemreset command rename' | Set-Content package/WINDOWS_LITE.txt -Encoding UTF8
 
           $zip='out/MabiAuto_V0.1.69_Windows_Lite.zip'
           Compress-Archive package/* $zip -CompressionLevel Optimal
