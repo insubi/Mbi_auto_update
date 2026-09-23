@@ -1,0 +1,100 @@
+name: Check V0.1.73 Loot Network
+
+on:
+  push:
+    branches: [fix/v0173-loot-network-reconnect]
+    paths:
+      - 'release-source/v0173_loot_network_reconnect.py'
+      - 'release-source/v0173-template-payload/**'
+      - 'release-source/v0173_release_notes.md'
+      - '.github/workflows/check-v0173-loot-network.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore V0.1.72 and apply V0.1.73
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item source -ItemType Directory -Force | Out-Null
+          gh release download V0.1.72 --repo $env:GITHUB_REPOSITORY --pattern 'MabiAuto_V0.1.72_Source.zip' --dir source
+          if($LASTEXITCODE-ne0){throw 'V0.1.72 source download failed'}
+          Expand-Archive source/MabiAuto_V0.1.72_Source.zip source/current -Force
+          $root=(Resolve-Path source/current).Path
+
+          python release-source/v0173_loot_network_reconnect.py $root
+          if($LASTEXITCODE-ne0){throw 'V0.1.73 patch failed'}
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host 'V0173_PATCH_OK'
+
+      - name: Verify templates and invariants
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=$env:SOURCE_ROOT
+          $templates=Join-Path $root 'FishingAutomation/abyss/templates/loot_v173'
+          $expected=@(
+            'loot_mor_corsair_coat.png',
+            'loot_mor_corsair_gloves.png',
+            'loot_mor_corsair_boots.png',
+            'loot_mor_corsair_tricorne.png',
+            'loot_hallucination_stone.png',
+            'loot_devouring_stone.png',
+            'loot_abyss_stone.png',
+            'loot_rune_engraving_10.png',
+            'loot_rune_engraving_10_plus.png',
+            'loot_rune_binding_10.png',
+            'loot_rune_binding_10_plus.png'
+          )
+          foreach($name in $expected){
+            $p=Join-Path $templates $name
+            if(-not(Test-Path $p)){throw "loot template missing: $name"}
+            if((Get-Item $p).Length-lt100){throw "loot template empty: $name"}
+          }
+
+          $retry=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.AbyssRetry.cs')
+          $network=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.NetworkRecovery.cs')
+          $engine=Get-Content -Raw (Join-Path $root 'FishingAutomation/dungeon/ScenarioEngine.cs')
+          $targets=Get-Content -Raw (Join-Path $root 'FishingAutomation/abyss/config/targets.json')
+          $tg=Get-Content -Raw (Join-Path $root 'FishingAutomation/MainForm.Telegram.cs')
+
+          foreach($m in @('V0173_ABYSS_LOOT_IMAGE_MATCH','DetectAbyssLootTemplateFrameAsync','[어비스 전리품 이미지] 2/2 확인','LootStats.RecordRound')){
+            if(-not $retry.Contains($m)){throw "loot marker missing: $m"}
+          }
+          foreach($m in @('V0173_NETWORK_RECONNECT','network_unstable_title','network_retry_button','_input.TapScanCode(0x39)','재접속 팝업 사라짐 3/3 확인')){
+            if(-not $network.Contains($m)){throw "network marker missing: $m"}
+          }
+          if(-not $engine.Contains('V0172_ABYSS_CLEAR_TITLE_FALLBACK')){throw 'V0.1.72 clear fallback lost'}
+          if(-not $tg.Contains('case "/item":') -or -not $tg.Contains('case "/itemreset":')){throw 'Telegram item commands lost'}
+          if($engine -match 'abyss_death|AbyssDeath|DeathTimeout|사망'){throw 'death logic returned'}
+
+          $project=Get-Content -Raw (Join-Path $root 'FishingAutomation/FishingAutomation.csproj')
+          $update=Get-Content -Raw (Join-Path $root 'FishingAutomation/UpdateManager.cs')
+          if(-not $project.Contains('<Version>0.1.73</Version>')){throw 'project version mismatch'}
+          if(-not $update.Contains('CurrentVersion = "V0.1.73"')){throw 'updater version mismatch'}
+          Write-Host 'V0173_INVARIANTS_OK'
+
+      - name: Build patched Windows app
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $fish=Join-Path $env:SOURCE_ROOT 'FishingAutomation/FishingAutomation.csproj'
+          $watch=Join-Path $env:SOURCE_ROOT 'MacroWatchdog/MacroWatchdog.csproj'
+          dotnet build $fish -c Release -r win-x64
+          if($LASTEXITCODE-ne0){throw 'FishingAutomation build failed'}
+          dotnet build $watch -c Release
+          if($LASTEXITCODE-ne0){throw 'MacroWatchdog build failed'}
+          Write-Host 'V0173_BUILD_OK'
