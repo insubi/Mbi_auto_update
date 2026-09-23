@@ -1,0 +1,35 @@
+name: Check Abyss Timeout Only
+on:
+  push:
+    branches: [fix/abyss-combat-timeout-only]
+  pull_request:
+    paths: ['release-source/v0171-overlay/**', 'tests/abyss-timeout/**']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore exact V0.1.70 and apply changes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download V0.1.70 --pattern MabiAuto_V0.1.70_Source.zip --dir baseline
+          if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+          if ((Get-FileHash baseline/MabiAuto_V0.1.70_Source.zip -Algorithm SHA256).Hash.ToLower() -ne 'b4c6d7a79f3cb52a20eca23c6c2e52b120877c22608416fc1a100626b41c4336') { throw 'Baseline mismatch' }
+          Expand-Archive baseline/MabiAuto_V0.1.70_Source.zip current
+          Copy-Item release-source/v0171-overlay/* current -Recurse -Force
+      - name: Build Windows application
+        run: dotnet build current/FishingAutomation/FishingAutomation.csproj -c Release
+      - name: Test actual timeout implementation
+        run: dotnet run --project tests/abyss-timeout/Regression.csproj -c Release
+      - name: Verify death removal
+        shell: pwsh
+        run: |
+          $matches = Get-ChildItem current/FishingAutomation -Recurse -File -Include *.cs,*.json | Select-String -Pattern 'abyss_death|AbyssDeath|DeathTimeout|사망'
+          if ($matches) { throw "Death logic remains: $matches" }
